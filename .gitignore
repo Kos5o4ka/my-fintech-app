@@ -1,0 +1,8 @@
+venv/
+__pycache__/
+*.pyc
+.env
+static/avatars/*
+!static/avatars/default_avatar.png
+migrations/
+instance/
