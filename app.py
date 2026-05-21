@@ -1,235 +1,217 @@
-import os
-from datetime import datetime
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
-from dotenv import load_dotenv
-from werkzeug.security import check_password_hash
-from werkzeug.utils import secure_filename 
-from flask_login import login_user, login_required, logout_user, current_user
-from apscheduler.schedulers.background import BackgroundScheduler # Планировщик для фоновых задач
+import csv
+from io import StringIO
+from datetime import datetime, date
+import requests
+from collections import defaultdict
+from flask import Flask, request, jsonify, render_template, abort, make_response
+from flask_cors import CORS
+from flask_login import login_user, logout_user, login_required, current_user
+from werkzeug.security import generate_password_hash, check_password_hash  # ИСПРАВЛЕННЫЙ ИМПОРТ
 
-# Импорты из твоих модулей
-from extensions import db, login_manager, cache, migrate
-from models import Visit, User, BondPortfolio
-from moex import get_moex_bond
-
-load_dotenv()
+from config import Config
+from extensions import db, login_manager, migrate
+from models import User, BondPortfolio, Visit
+from moex import get_moex_bond, get_bond_history_all, get_coupon_calendar
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'super-secret-key-change-me-later')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['UPLOAD_FOLDER'] = 'static/avatars'
+app.config.from_object(Config)
 
-# Настройка кэширования
-app.config['CACHE_TYPE'] = 'SimpleCache'
-app.config['CACHE_DEFAULT_TIMEOUT'] = 600
-
-# Инициализация расширений
 db.init_app(app)
 login_manager.init_app(app)
-cache.init_app(app)
-migrate.init_app(app, db) # Инициализация миграций 
+migrate.init_app(app, db)
 
-login_manager.login_view = 'index'
+CORS(app, supports_credentials=True,
+     origins=["http://127.0.0.1:5000", "http://localhost:5000", "http://194.50.94.45:5000"])
+
 
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-# --- ФОНОВАЯ ЗАДАЧА: ОБНОВЛЕНИЕ ЦЕН В БАЗЕ ---
-def update_bond_prices():
-    """Раз в 10 минут обновляет цены всех активных облигаций в БД"""
-    with app.app_context():
-        # Берем только те бумаги, которые еще не проданы
-        active_bonds = BondPortfolio.query.filter_by(is_sold=False).all()
-        unique_isins = {b.isin for b in active_bonds}
-        
-        for isin in unique_isins:
-            data = get_moex_bond(isin)
-            if data:
-                # Обновляем кэш цены в базе для всех записей с этим ISIN
-                BondPortfolio.query.filter_by(isin=isin, is_sold=False).update({
-                    'last_price': data['price'],
-                    'last_updated': datetime.now()
-                })
-        db.session.commit()
-        print(f"[{datetime.now()}] Цены в базе данных успешно обновлены из MOEX.")
 
-# Настройка и запуск планировщика 
-scheduler = BackgroundScheduler()
-scheduler.add_job(func=update_bond_prices, trigger="interval", minutes=10)
-scheduler.start()
+@app.errorhandler(400)
+@app.errorhandler(401)
+@app.errorhandler(403)
+@app.errorhandler(404)
+@app.errorhandler(500)
+def handle_api_errors(error):
+    if request.path.startswith('/api/') or request.headers.get('Content-Type') == 'application/json':
+        response = {
+            "status": "error",
+            "code": error.code if hasattr(error, 'code') else 500,
+            "message": error.description if hasattr(error, 'description') else "Внутренняя ошибка сервера"
+        }
+        return jsonify(response), response["code"]
+    return error
 
-# Вспомогательная функция для аватарок
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# ==========================================
-# API МАРШРУТЫ (JSON)
-# ==========================================
+@app.route('/')
+def index_page(): return render_template('index.html')
 
-@app.route('/api/portfolio_stats')
+
+@app.route('/portfolio')
+def portfolio_page(): return render_template('portfolio.html')
+
+
+@app.route('/api/init', methods=['GET'])
+def get_initial_data():
+    visit = Visit.query.first()
+    if not visit:
+        visit = Visit(count=1);
+        db.session.add(visit)
+    else:
+        visit.count += 1
+    db.session.commit()
+    return jsonify({"visits": visit.count, "is_authenticated": current_user.is_authenticated,
+                    "current_user": {"id": current_user.id, "username": current_user.username,
+                                     "is_admin": current_user.is_admin} if current_user.is_authenticated else None})
+
+
+@app.route('/api/portfolio', methods=['GET'])
 @login_required
-@cache.cached(timeout=600)
-def api_portfolio_stats():
-    bonds = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False).all()
-    grouped = {}
-    for b in bonds:
-        if b.isin not in grouped: grouped[b.isin] = {'amount': 0}
-        grouped[b.isin]['amount'] += b.amount
-    stats = []
-    for isin, g in grouped.items():
-        data = get_moex_bond(isin)
-        if data:
-            val = (data['price'] + data['nkd']) * g['amount']
-            stats.append({'name': data['name'], 'value': round(val, 2)})
-    return jsonify(stats)
+def get_portfolio():
+    active_bonds = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False).all()
+    portfolio_list = []
+    total_portfolio_value = 0.0
+    for bond in active_bonds:
+        current_price = float(bond.last_price) if bond.last_price is not None else float(bond.buy_price)
+        current_value = bond.amount * current_price
+        total_portfolio_value += current_value
+
+        moex_data = get_moex_bond(bond.isin) or {}
+        portfolio_list.append({
+            "id": bond.id, "isin": bond.isin, "name": bond.name or "Облигация",
+            "amount": bond.amount, "buy_price": float(bond.buy_price),
+            "last_price": float(bond.last_price) if bond.last_price else None,
+            "current_value": current_value, "purchase_date": bond.purchase_date.strftime('%Y-%m-%d'),
+            "nkd": moex_data.get('nkd', 0.0), "ytm": moex_data.get('ytm', 0.0)
+        })
+    return jsonify({"status": "success", "total_value": total_portfolio_value, "bonds": portfolio_list})
+
+
+@app.route('/api/add_bond', methods=['POST'])
+@login_required
+def add_bond():
+    data = request.get_json() or {}
+    isin = data.get('isin', '').upper().strip()
+    amount = data.get('amount')
+    buy_price = data.get('buy_price')
+    date_str = data.get('purchase_date', '').strip()
+
+    if not all([isin, amount, buy_price]):
+        return jsonify({"status": "error", "message": "Все поля формы обязательны к заполнению."}), 400
+
+    purchase_date = datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else date.today()
+
+    moex_data = get_moex_bond(isin)
+    if not moex_data:
+        return jsonify({"status": "error", "message": f"Облигация {isin} не найдена на Московской Бирже."}), 404
+
+    secid = moex_data['secid']
+    bond_title = moex_data.get('name', 'Облигация')
+
+    try:
+        url = f"https://iss.moex.com/iss/securities/{secid}.json"
+        res = requests.get(url, timeout=5).json()
+        if res.get('description') and res['description'].get('data'):
+            desc_data = res['description']['data']
+            issue_date, mat_date = None, None
+            for row in desc_data:
+                if row[0] == 'ISSUEDATE' and row[2]: issue_date = datetime.strptime(row[2], '%Y-%m-%d').date()
+                if row[0] == 'MATDATE' and row[2]: mat_date = datetime.strptime(row[2], '%Y-%m-%d').date()
+
+            if issue_date and purchase_date < issue_date:
+                return jsonify({"status": "error",
+                                "message": f"Ошибка валидации: облигация выпущена {issue_date}. Нельзя купить бумагу до эмиссии."}), 400
+            if mat_date and purchase_date > mat_date:
+                return jsonify({"status": "error",
+                                "message": f"Ошибка валидации: облигация погашена {mat_date}. Торги закрыты."}), 400
+    except Exception as e:
+        print(f"Ошибка проверки дат спецификации: {e}")
+
+    live_price = moex_data.get('price', float(buy_price))
+    new_bond = BondPortfolio(user_id=current_user.id, isin=isin, name=bond_title, amount=int(amount),
+                             buy_price=float(buy_price), last_price=live_price, purchase_date=purchase_date,
+                             is_sold=False)
+    db.session.add(new_bond)
+    db.session.commit()
+    return jsonify({"status": "success", "message": f"Бумага {bond_title} успешно добавлена!"}), 201
+
+
+@app.route('/api/bond_chart/<isin>', methods=['GET'])
+@login_required
+def get_bond_chart_data(isin):
+    moex_data = get_moex_bond(isin)
+    if not moex_data: return jsonify({"status": "error", "message": "Бумага не найдена"}), 404
+    return jsonify(get_bond_history_all(moex_data['secid']))
+
+
+@app.route('/api/portfolio/calendar', methods=['GET'])
+@login_required
+def get_portfolio_calendar():
+    active_bonds = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False).all()
+    events = []
+    for bond in active_bonds:
+        coupons = get_coupon_calendar(bond.isin)
+        for c in coupons:
+            events.append({"name": bond.name or bond.isin, "isin": bond.isin, "date": c["date"],
+                           "total_payout": round(c["value"] * bond.amount, 2)})
+    events.sort(key=lambda x: x["date"])
+    return jsonify(events[:10])
+
+
+@app.route('/api/portfolio/export', methods=['GET'])
+@login_required
+def export_portfolio_csv():
+    active_bonds = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False).all()
+    si = StringIO()
+    cw = csv.writer(si)
+    cw.writerow(['Название бумаги', 'ISIN код', 'Количество (шт)', 'Цена покупки (руб)', 'Дата сделки'])
+    for bond in active_bonds: cw.writerow([bond.name, bond.isin, bond.amount, bond.buy_price, bond.purchase_date])
+    response = make_response(si.getvalue())
+    response.headers['Content-Disposition'] = 'attachment; filename=portfolio_report.csv'
+    response.headers['Content-Type'] = 'text/csv; charset=utf-8'
+    return response
+
 
 @app.route('/api/sell_bond/<int:bond_id>', methods=['POST'])
 @login_required
 def sell_bond(bond_id):
-    """API для продажи облигации и фиксации прибыли """
     bond = BondPortfolio.query.get_or_404(bond_id)
-    if bond.user_id != current_user.id:
-        return jsonify({"error": "Доступ запрещен"}), 403
-    
-    data = request.json
-    try:
-        sell_price = float(data.get('sell_price'))
-        bond.is_sold = True
-        bond.sell_price = sell_price
-        bond.sell_date = datetime.now().date()
-        # Считаем реализованную прибыль
-        bond.realized_profit = (sell_price - bond.buy_price) * bond.amount
-        
-        db.session.commit()
-        return jsonify({"status": "success", "profit": round(bond.realized_profit, 2)})
-    except (TypeError, ValueError):
-        return jsonify({"error": "Некорректная цена"}), 400
-
-@app.route('/api/coupons/<secid>')
-@login_required
-def api_coupons(secid):
-    import requests
-    url = f"https://iss.moex.com/iss/securities/{secid}/bondization.json?limit=100"
-    try:
-        res = requests.get(url, timeout=5).json()
-        data, cols = res['coupons']['data'], res['coupons']['columns']
-        today = datetime.now().strftime('%Y-%m-%d')
-        coupons = [{'date': r[cols.index('coupondate')], 'value': r[cols.index('value')]} for r in data]
-        return jsonify({"past": [c for c in coupons if c['date'] < today], "future": [c for c in coupons if c['date'] >= today]})
-    except: return jsonify({"error": "Ошибка API MOEX"})
-
-# ==========================================
-# ОСНОВНЫЕ СТРАНИЦЫ (HTML)
-# ==========================================
-
-@app.route('/', methods=['GET', 'POST'])
-def index():
-    v = Visit.query.first()
-    if not v:
-        v = Visit(count=1); db.session.add(v)
-    else: v.count += 1
+    if bond.user_id != current_user.id: abort(403)
+    bond.is_sold = True;
     db.session.commit()
-    
-    if request.method == 'POST' and not current_user.is_authenticated:
-        user = User.query.filter_by(username=request.form.get('username')).first()
-        if user and check_password_hash(user.password_hash, request.form.get('password')):
-            login_user(user); return redirect(url_for('index'))
-        flash('Ошибка входа', 'danger')
-        
-    users = User.query.all() if current_user.is_authenticated and current_user.is_admin else []
-    return render_template('index.html', visits=v.count, users=users)
+    return jsonify({"status": "success", "message": f"Облигация {bond.name} переведена в архив продаж."})
 
-@app.route('/portfolio')
+
+@app.route('/api/portfolio_stats', methods=['GET'])
 @login_required
-def portfolio():
-    # Показываем только не проданные бумаги
-    bonds = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False).all()
-    grouped, total_invested, total_current = {}, 0, 0
-    
-    for b in bonds:
-        if b.isin not in grouped: 
-            grouped[b.isin] = {'isin': b.isin, 'total_amount': 0, 'total_invested': 0.0, 'transactions': []}
-        grouped[b.isin]['total_amount'] += b.amount
-        inv = b.buy_price * b.amount
-        grouped[b.isin]['total_invested'] += inv
-        total_invested += inv
-        grouped[b.isin]['transactions'].append(b)
-        
-    items = []
-    for isin, g in grouped.items():
-        moex = get_moex_bond(isin)
-        avg = g['total_invested'] / g['total_amount']
-        g['transactions'].sort(key=lambda x: x.purchase_date or datetime.min.date(), reverse=True)
-        
-        if moex:
-            val = (moex['price'] + moex['nkd']) * g['total_amount']
-            total_current += val
-            items.append({
-                'isin': isin, 'secid': moex['secid'], 'name': moex['name'], 
-                'amount': g['total_amount'], 'avg_buy_price': round(avg, 2), 
-                'current_price': moex['price'], 'nkd': moex['nkd'], 'coupon': moex['coupon'], 
-                'profit': round(val - g['total_invested'], 2), 'transactions': g['transactions']
-            })
-        else:
-            items.append({'isin': isin, 'name': 'Ошибка MOEX', 'amount': g['total_amount'], 'avg_buy_price': round(avg, 2), 'transactions': g['transactions']})
-            
-    return render_template('portfolio.html', items=items, 
-                           total_invested=round(total_invested, 2), 
-                           total_current=round(total_current, 2), 
-                           total_profit=round(total_current - total_invested, 2), 
-                           today_date=datetime.now().strftime('%Y-%m-%d'))
+def portfolio_stats():
+    closed_deals = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=True).all()
+    monthly_profit = defaultdict(float)
+    for bond in closed_deals:
+        if bond.last_price is not None: monthly_profit[bond.purchase_date.strftime('%Y-%m')] += (float(
+            bond.last_price) - float(bond.buy_price)) * bond.amount
+    sorted_months = sorted(monthly_profit.keys())
+    return jsonify({"labels": sorted_months, "datasets": [
+        {"label": "Чистая зафиксированная прибыль (₽)", "data": [monthly_profit[m] for m in sorted_months],
+         "backgroundColor": "rgba(40, 167, 69, 0.2)", "borderColor": "rgba(40, 167, 69, 1)", "borderWidth": 2,
+         "fill": True}]})
 
-@app.route('/profile', methods=['GET', 'POST'])
-@login_required
-def profile():
-    if request.method == 'POST' and 'avatar' in request.files:
-        file = request.files['avatar']
-        if file and allowed_file(file.filename):
-            fname = secure_filename(file.filename)
-            uname = f"user_{current_user.id}_{fname}"
-            file.save(os.path.join(app.config['UPLOAD_FOLDER'], uname))
-            current_user.avatar = uname
-            db.session.commit()
-            flash('Аватар обновлен', 'success')
-    return render_template('profile.html')
 
-@app.route('/add_bond', methods=['POST'])
-@login_required
-def add_bond():
-    isin = request.form.get('isin').strip().upper()
-    if get_moex_bond(isin):
-        new_b = BondPortfolio(
-            user_id=current_user.id, 
-            isin=isin, 
-            amount=int(request.form.get('amount')), 
-            buy_price=float(request.form.get('buy_price')), 
-            purchase_date=datetime.strptime(request.form.get('purchase_date'), '%Y-%m-%d').date()
-        )
-        db.session.add(new_b)
-        db.session.commit()
-        flash('Бумага успешно добавлена', 'success')
-    else:
-        flash('Бумага не найдена на MOEX', 'danger')
-    return redirect(url_for('portfolio'))
+@app.route('/api/auth/login', methods=['POST'])
+def api_login():
+    data = request.get_json() or {}
+    user = User.query.filter_by(username=data.get('username', '').strip()).first()
+    if not user or not check_password_hash(user.password_hash, data.get('password', '').strip()): return jsonify(
+        {"status": "error", "message": "Неверный логин или пароль."}), 401
+    login_user(user, remember=True)
+    return jsonify({"status": "success", "user": {"id": user.id, "username": user.username, "is_admin": user.is_admin}})
 
-@app.route('/delete_bond/<int:bond_id>')
-@login_required
-def delete_bond(bond_id):
-    b = BondPortfolio.query.get(bond_id)
-    if b and b.user_id == current_user.id:
-        db.session.delete(b)
-        db.session.commit()
-    return redirect(url_for('portfolio'))
 
-@app.route('/logout')
-def logout():
-    logout_user()
-    return redirect(url_for('index'))
+@app.route('/api/auth/logout', methods=['POST', 'GET'])
+def api_logout(): logout_user(); return jsonify({"status": "success", "message": "Вы успешно вышли из системы."})
+
 
 if __name__ == '__main__':
-    # В промышленной среде (через Gunicorn) этот блок не используется,
-    # но полезен для локальной отладки.
-    app.run(host='0.0.0.0')
+    app.run(debug=True, port=5000)

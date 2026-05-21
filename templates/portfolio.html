@@ -1,188 +1,119 @@
 <!DOCTYPE html>
-<html lang="ru">
-
+<html lang="ru" data-bs-theme="light">
 <head>
     <meta charset="UTF-8">
-    <title>Мой Портфель</title>
+    <title>Личный кабинет — Мой Портфель</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-</head>
 
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/portfolio.css') }}">
+</head>
 <body class="bg-light">
 
     <nav class="navbar navbar-dark bg-dark mb-4">
         <div class="container">
-            <a href="/" class="navbar-brand mb-0 h1">My Web App</a>
-            <div>
-                <a href="/" class="btn btn-outline-light btn-sm me-2">На главную</a>
-                <a href="/profile" class="btn btn-primary btn-sm me-2">Профиль</a> <a href="/logout"
-                    class="btn btn-danger btn-sm">Выйти</a>
+            <span class="navbar-brand mb-0 h1">Инвест-Трекер — Профессиональная Аналитика</span>
+            <div class="d-flex align-items-center">
+                <button class="btn btn-outline-light btn-sm me-3" onclick="toggleTheme()">🌓 Тема</button>
+                <a href="/api/portfolio/export" class="btn btn-outline-warning btn-sm me-3">📥 Экспорт CSV</a>
+                <a href="/" class="btn btn-outline-info btn-sm me-3">Главная</a>
+                <button onclick="handleLogout()" class="btn btn-danger btn-sm">Выйти</button>
             </div>
         </div>
     </nav>
 
-    <div class="container">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-        {% for category, message in messages %}
-        <div class="alert alert-{{ category }} alert-dismissible fade show">{{ message }}</div>
-        {% endfor %}
-        {% endif %}
-        {% endwith %}
-
-        <h2 class="mb-4 text-center">Инвестиционный портфель</h2>
-
-        <div class="row mb-4 text-center">
-            <div class="col-md-4">
-                <div class="card shadow-sm border-primary p-3">
-                    <h5>Вложено</h5>
-                    <h3>{{ total_invested }} ₽</h3>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="card shadow-sm border-info p-3">
-                    <h5>Оценка</h5>
-                    <h3>{{ total_current }} ₽</h3>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div
-                    class="card shadow-sm {% if total_profit >= 0 %}border-success{% else %}border-danger{% endif %} p-3">
-                    <h5>Прибыль</h5>
-                    <h3 class="{% if total_profit >= 0 %}text-success{% else %}text-danger{% endif %}">{{ total_profit
-                        }} ₽</h3>
-                </div>
-            </div>
-        </div>
-
-        <div class="row mb-5">
-            <div class="col-md-4">
-                <div class="card shadow-sm h-100">
-                    <div class="card-header bg-white fw-bold">Состав</div>
-                    <div class="card-body"><canvas id="pieChart"></canvas></div>
-                </div>
-            </div>
-            <div class="col-md-8">
-                <div class="card shadow-sm h-100">
-                    <div class="card-header bg-white fw-bold">Прогноз выплат</div>
-                    <div class="card-body"><canvas id="barChart"></canvas></div>
-                </div>
-            </div>
-        </div>
-
+    <div class="container mb-5">
         <div class="row">
-            <div class="col-md-3">
-                <div class="card shadow-sm p-3">
-                    <form method="POST" action="/add_bond">
-                        <input type="text" name="isin" class="form-control mb-2" placeholder="ISIN" required>
-                        <input type="number" name="amount" class="form-control mb-2" placeholder="Кол-во" required>
-                        <input type="number" step="0.01" name="buy_price" class="form-control mb-2" placeholder="Цена"
-                            required>
-                        <input type="date" name="purchase_date" class="form-control mb-3" value="{{ today_date }}"
-                            required>
-                        <button type="submit" class="btn btn-success w-100">Купить</button>
-                    </form>
+            <div class="col-md-4">
+                <div class="card shadow-sm border-success mb-4 text-center">
+                    <div class="card-body">
+                        <h6 class="text-muted text-uppercase small">Текущая стоимость портфеля</h6>
+                        <h2 class="text-success"><span id="total-portfolio-value">0.00</span> ₽</h2>
+                    </div>
+                </div>
+
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header bg-dark text-white">Добавить облигацию</div>
+                    <div class="card-body">
+                        <form id="addBondForm">
+                            <div class="mb-3"><label class="form-label">Код ISIN бумаги</label><input type="text" id="bondIsin" class="form-control" placeholder="RU000A1038V6" maxlength="12" required></div>
+                            <div class="mb-3"><label class="form-label">Количество (шт.)</label><input type="number" id="bondAmount" class="form-control" placeholder="10" min="1" required></div>
+                            <div class="mb-3"><label class="form-label">Цена покупки (₽)</label><input type="number" id="bondBuyPrice" class="form-control" placeholder="985.50" step="0.01" min="1" required></div>
+                            <div class="mb-3"><label class="form-label">Дата покупки</label><input type="date" id="bondDate" class="form-control"></div>
+                            <button type="submit" class="btn btn-success w-100">Добавить в портфель</button>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header bg-primary text-white font-weight-bold">📅 Предстоящие выплаты купонов</div>
+                    <div class="card-body p-0">
+                        <ul class="list-group list-group-flush" id="coupon-calendar-list">
+                            <li class="list-group-item text-center text-muted py-3">Нет предстоящих купонов.</li>
+                        </ul>
+                    </div>
                 </div>
             </div>
-            <div class="col-md-9">
-                <div class="card shadow-sm p-3">
-                    <table class="table table-hover align-middle">
-                        <thead>
-                            <tr>
-                                <th>Бумага</th>
-                                <th>Шт</th>
-                                <th>Ср. Цена</th>
-                                <th>Прибыль</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for item in items %}
-                            <tr data-bs-toggle="collapse" data-bs-target="#det-{{ loop.index }}"
-                                style="cursor:pointer;">
-                                <td><b>{{ item.name }}</b><br><small>{{ item.isin }}</small></td>
-                                <td>{{ item.amount }}</td>
-                                <td>{{ item.avg_buy_price }} ₽</td>
-                                <td
-                                    class="{% if item.profit >= 0 %}text-success{% else %}text-danger{% endif %} fw-bold">
-                                    {{ item.profit }} ₽</td>
-                                <td>▼</td>
-                            </tr>
-                            <tr>
-                                <td colspan="5" class="p-0 border-0">
-                                    <div class="collapse" id="det-{{ loop.index }}">
-                                        <div class="p-3 bg-light border-bottom">
-                                            <div class="row">
-                                                <div class="col-md-6 border-end">
-                                                    <h6 class="small fw-bold">ТРАНЗАКЦИИ</h6>
-                                                    {% for t in item.transactions %}
-                                                    <div class="small d-flex justify-content-between mb-1">
-                                                        <span>{{ t.purchase_date }}: {{ t.amount }} шт по {{ t.buy_price
-                                                            }} ₽</span>
-                                                        <a href="/delete_bond/{{ t.id }}" class="text-danger">×</a>
-                                                    </div>
-                                                    {% endfor %}
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <h6 class="small fw-bold">КУПОНЫ</h6>
-                                                    <div class="coupons-container" data-secid="{{ item.secid }}"
-                                                        data-amount="{{ item.amount }}">
-                                                        <div class="spinner-border spinner-border-sm text-primary">
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+
+            <div class="col-md-8">
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header bg-white font-weight-bold">Аналитика: Зафиксированная чистая прибыль (₽)</div>
+                    <div class="card-body" style="position: relative; height:220px;">
+                        <canvas id="profitChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <h5 class="card-title mb-3">Ваши активные бумаги</h5>
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>Название бумаги</th>
+                                        <th>ISIN бумаги</th>
+                                        <th>Кол-во</th>
+                                        <th>Цена покупки</th>
+                                        <th>Текущий НКД</th>
+                                        <th>Текущий YTM</th>
+                                        <th>Действие</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="bonds-table-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <script>
-        document.addEventListener("DOMContentLoaded", function () {
-            const monthlyCoupons = {};
-            const fetchPromises = [];
+    <div class="modal fade" id="bondChartModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title">История изменения цены: <span id="chartModalIsinTitle"></span></h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex justify-content-center btn-group mb-3" id="periodBtnGroup" role="group">
+                        <button type="button" class="btn btn-outline-dark btn-sm" onclick="applyChartScale('day')">День</button>
+                        <button type="button" class="btn btn-outline-dark btn-sm" onclick="applyChartScale('week')">Неделя</button>
+                        <button type="button" class="btn btn-outline-dark btn-sm active" data-period="month" onclick="applyChartScale('month')">Месяц</button>
+                        <button type="button" class="btn btn-outline-dark btn-sm" onclick="applyChartScale('year')">Год</button>
+                        <button type="button" class="btn btn-outline-dark btn-sm" onclick="applyChartScale('all')">Всё время</button>
+                    </div>
+                    <div class="text-center text-muted small mb-2">🖱️ Зажми левую кнопку мыши для перемещения по истории. Колесико — зум цены.</div>
+                    <div style="position: relative; height: 380px;">
+                        <canvas id="marketBondChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-            fetch('/api/portfolio_stats').then(res => res.json()).then(data => {
-                if (!data.length) return;
-                new Chart(document.getElementById('pieChart'), {
-                    type: 'doughnut',
-                    data: { labels: data.map(d => d.name), datasets: [{ data: data.map(d => d.value), backgroundColor: ['#0d6efd', '#198754', '#ffc107', '#dc3545', '#0dcaf0', '#6610f2'] }] },
-                    options: { responsive: true, maintainAspectRatio: false }
-                });
-            });
-
-            document.querySelectorAll('.coupons-container').forEach(cont => {
-                const secid = cont.dataset.secid, amount = parseInt(cont.dataset.amount);
-                if (!secid) return;
-                const p = fetch('/api/coupons/' + secid).then(res => res.json()).then(data => {
-                    if (data.error) return;
-                    data.future.forEach(c => { const m = c.date.substring(0, 7); monthlyCoupons[m] = (monthlyCoupons[m] || 0) + (c.value * amount); });
-                    cont.innerHTML = `<ul class="list-group list-group-flush small bg-transparent">
-                ${data.future.slice(0, 3).map(c => `<li class="list-group-item bg-transparent py-1 border-0 d-flex justify-content-between"><span>${c.date}</span><b class="text-success">+${c.value} ₽</b></li>`).join('')}
-            </ul>`;
-                });
-                fetchPromises.push(p);
-            });
-
-            Promise.all(fetchPromises).then(() => {
-                const sorted = Object.keys(monthlyCoupons).sort();
-                if (!sorted.length) return;
-                new Chart(document.getElementById('barChart'), {
-                    type: 'bar',
-                    data: { labels: sorted, datasets: [{ label: 'Выплаты (₽)', data: sorted.map(m => monthlyCoupons[m].toFixed(2)), backgroundColor: '#198754' }] },
-                    options: { responsive: true, maintainAspectRatio: false }
-                });
-            });
-        });
-    </script>
-</body>
-
-</html>
+    <div class="modal fade" id="statusModal" tabindex="-1" aria-hidden="true"><div class

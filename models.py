@@ -3,31 +3,27 @@ from extensions import db
 from flask_login import UserMixin
 
 class Visit(db.Model):
+    __tablename__ = 'visit'
     id = db.Column(db.Integer, primary_key=True)
-    count = db.Column(db.Integer, default=1)
+    count = db.Column(db.Integer, default=0)
 
 class User(db.Model, UserMixin):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    password_hash = db.Column(db.String(255), nullable=False)
+    username = db.Column(db.String(150), unique=True, nullable=False)
+    password_hash = db.Column(db.String(256), nullable=False)
+    avatar = db.Column(db.String(255), nullable=True)
     is_admin = db.Column(db.Boolean, default=False)
-    avatar = db.Column(db.String(255), default='default_avatar.png')
+    bonds = db.relationship('BondPortfolio', backref='user', lazy=True)
 
 class BondPortfolio(db.Model):
+    __tablename__ = 'bond_portfolio'
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    isin = db.Column(db.String(20), nullable=False)
+    isin = db.Column(db.String(12), nullable=False)
+    name = db.Column(db.String(100), nullable=True)
     amount = db.Column(db.Integer, nullable=False)
-    buy_price = db.Column(db.Float, nullable=False)
-    purchase_date = db.Column(db.Date, nullable=False)
-    
-    # --- НОВЫЕ ПОЛЯ ДЛЯ ПРОДАЖИ И ФОНОВЫХ ЗАДАЧ ---
+    buy_price = db.Column(db.Numeric(10, 2), nullable=False)
+    purchase_date = db.Column(db.Date, nullable=False, default=datetime.utcnow)
     is_sold = db.Column(db.Boolean, default=False)
-    sell_price = db.Column(db.Float, nullable=True)
-    sell_date = db.Column(db.Date, nullable=True)
-    realized_profit = db.Column(db.Float, default=0.0)
-    
-    # Поля для хранения цен из фонового обновления
-    last_price = db.Column(db.Float, nullable=True) 
-    last_updated = db.Column(db.DateTime, nullable=True)
+    last_price = db.Column(db.Numeric(10, 2), nullable=True)

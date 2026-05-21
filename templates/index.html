@@ -1,62 +1,38 @@
 <!DOCTYPE html>
 <html lang="ru">
-
 <head>
     <meta charset="UTF-8">
-    <title>Мой Сайт</title>
+    <title>Мой Сайт — Главная Панель</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </head>
-
 <body class="bg-light">
 
     <nav class="navbar navbar-dark bg-dark mb-4">
         <div class="container">
             <span class="navbar-brand mb-0 h1">My Web App</span>
-            <span class="text-info">Всего заходов на сайт: <b>{{ visits }}</b></span>
+            <span class="text-info">Всего заходов на сайт: <b id="global-visits">0</b></span>
 
-            {% if current_user.is_authenticated %}
-            <div class="d-flex align-items-center text-white">
-                {% if current_user.avatar %}
-                <img src="{{ url_for('static', filename='avatars/' + current_user.avatar) }}"
-                    class="rounded-circle me-2" style="width: 35px; height: 35px; object-fit: cover;">
-                {% else %}
-                <img src="https://ui-avatars.com/api/?name={{ current_user.username }}&background=random&color=fff&size=35"
-                    class="rounded-circle me-2">
-                {% endif %}
-
-                <span class="me-3">Привет, <b>{{ current_user.username }}</b>!</span>
+            <div id="auth-status-block" class="d-flex align-items-center text-white d-none">
+                <span class="me-3">Привет, <b id="navbar-username">User</b>!</span>
                 <a href="/portfolio" class="btn btn-success btn-sm me-2">Мой Портфель</a>
-                <a href="/profile" class="btn btn-primary btn-sm me-2">Профиль</a>
-                <a href="/logout" class="btn btn-outline-light btn-sm">Выйти</a>
+                <button onclick="handleLogout()" class="btn btn-outline-light btn-sm">Выйти</button>
             </div>
-            {% endif %}
         </div>
     </nav>
 
     <div class="container">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-        {% for category, message in messages %}
-        <div class="alert alert-{{ category }} alert-dismissible fade show">
-            {{ message }}
-        </div>
-        {% endfor %}
-        {% endif %}
-        {% endwith %}
-
-        {% if not current_user.is_authenticated %}
-        <div class="row justify-content-center mt-5">
+        <div id="login-container" class="row justify-content-center mt-5 d-none">
             <div class="col-md-4">
                 <div class="card shadow">
                     <div class="card-body">
                         <h3 class="card-title text-center mb-4">Авторизация</h3>
-                        <form method="POST" action="/">
+                        <form id="uiLoginForm">
                             <div class="mb-3">
-                                <input type="text" class="form-control" name="username" placeholder="Логин" required>
+                                <input type="text" id="loginUsername" class="form-control" placeholder="Логин" required>
                             </div>
                             <div class="mb-3">
-                                <input type="password" class="form-control" name="password" placeholder="Пароль"
-                                    required>
+                                <input type="password" id="loginPassword" class="form-control" placeholder="Пароль" required>
                             </div>
                             <button type="submit" class="btn btn-primary w-100">Войти</button>
                         </form>
@@ -65,82 +41,241 @@
             </div>
         </div>
 
-        {% else %}
+        <div id="authorized-content" class="d-none">
+            <div id="admin-panel" class="row d-none">
+                <div class="col-md-4 mb-4">
+                    <div class="card shadow-sm border-primary">
+                        <div class="card-header bg-primary text-white">Добавить пользователя</div>
+                        <div class="card-body">
+                            <form id="adminCreateUserForm">
+                                <div class="mb-3">
+                                    <input type="text" id="newUsername" class="form-control" placeholder="Новый логин" required>
+                                </div>
+                                <div class="mb-3">
+                                    <input type="password" id="newPassword" class="form-control" placeholder="Пароль" required>
+                                </div>
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input" type="checkbox" id="isAdminCheck">
+                                    <label class="form-check-label" for="isAdminCheck">Сделать администратором</label>
+                                </div>
+                                <button type="submit" class="btn btn-success w-100">Создать</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
 
-        {% if current_user.is_admin %}
-        <div class="row">
-            <div class="col-md-4 mb-4">
-                <div class="card shadow-sm border-primary">
-                    <div class="card-header bg-primary text-white">Добавить пользователя</div>
-                    <div class="card-body">
-                        <form method="POST" action="/add_user">
-                            <div class="mb-3"><input type="text" class="form-control" name="username"
-                                    placeholder="Новый логин" required></div>
-                            <div class="mb-3"><input type="password" class="form-control" name="password"
-                                    placeholder="Пароль" required></div>
-                            <div class="form-check mb-3">
-                                <input class="form-check-input" type="checkbox" name="is_admin" id="adminCheck">
-                                <label class="form-check-label" for="adminCheck">Сделать администратором</label>
-                            </div>
-                            <button type="submit" class="btn btn-success w-100">Создать</button>
-                        </form>
+                <div class="col-md-8">
+                    <div class="card shadow-sm">
+                        <div class="card-body">
+                            <h5 class="card-title mb-3">Список пользователей</h5>
+                            <table class="table table-striped align-middle">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Логин</th>
+                                        <th>Роль</th>
+                                        <th>Действия</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="admin-users-table"></tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <div class="col-md-8">
-                <div class="card shadow-sm">
-                    <div class="card-body">
-                        <h5 class="card-title mb-3">Список пользователей</h5>
-                        <table class="table table-striped align-middle">
-                            <thead class="table-dark">
-                                <tr>
-                                    <th>ID</th>
-                                    <th>Логин</th>
-                                    <th>Роль</th>
-                                    <th>Действия</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for u in users %}
-                                <tr>
-                                    <td>{{ u.id }}</td>
-                                    <td><b>{{ u.username }}</b></td>
-                                    <td>
-                                        {% if u.is_admin %}
-                                        <span class="badge bg-danger">Админ</span>
-                                        {% else %}
-                                        <span class="badge bg-secondary">Юзер</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        {% if u.id != current_user.id %}
-                                        <a href="/delete_user/{{ u.id }}" class="btn btn-sm btn-outline-danger"
-                                            onclick="return confirm('Удалить?');">Удалить</a>
-                                        {% endif %}
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
+            <div id="regular-user-msg" class="row justify-content-center mt-5 d-none">
+                <div class="col-md-6 text-center">
+                    <h1 class="display-5">Добро пожаловать!</h1>
+                    <p class="lead">Вы вошли как обычный пользователь. У вас нет доступа к управлению другими аккаунтами.</p>
                 </div>
             </div>
         </div>
-
-        {% else %}
-        <div class="row justify-content-center mt-5">
-            <div class="col-md-6 text-center">
-                <h1 class="display-5">Добро пожаловать!</h1>
-                <p class="lead">Вы вошли как обычный пользователь. У вас нет доступа к управлению другими аккаунтами.
-                </p>
-            </div>
-        </div>
-        {% endif %}
-
-        {% endif %}
     </div>
 
-</body>
+    <div class="modal fade" id="statusModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content text-center">
+                <div class="modal-header d-flex justify-content-center border-0 pt-4" id="modalHeaderBg">
+                    <div id="modalIconContainer" style="width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 28px;" class="text-white"></div>
+                </div>
+                <div class="modal-body py-3">
+                    <h4 class="mb-2" id="statusModalTitle"></h4>
+                    <p id="statusModalMessage" class="text-muted mb-0 px-3"></p>
+                </div>
+                <div class="modal-footer justify-content-center border-0 pb-4">
+                    <button type="button" class="btn btn-secondary px-4 btn-sm" data-bs-dismiss="modal">Ок</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
+    <div class="modal fade" id="confirmDeleteModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content text-center">
+                <div class="modal-header d-flex justify-content-center border-0 pt-4">
+                    <div class="text-white bg-danger" style="width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 28px;">✕</div>
+                </div>
+                <div class="modal-body py-2">
+                    <h4 class="text-danger mb-2">Удаление</h4>
+                    <p id="confirmDeleteMessage" class="text-muted mb-0 px-3"></p>
+                </div>
+                <div class="modal-footer justify-content-center border-0 pb-4">
+                    <button type="button" class="btn btn-light btn-sm px-3 me-2" data-bs-dismiss="modal">Отмена</button>
+                    <button type="button" id="confirmDeleteSubmitBtn" class="btn bg-danger text-white btn-sm px-4 shadow-sm">Да, удалить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentUser = null;
+        let bsModal = null;
+        let delModal = null;
+
+        function showSystemMessage(msg, isError = false) {
+            const icon = document.getElementById('modalIconContainer');
+            const title = document.getElementById('statusModalTitle');
+            icon.className = isError ? "text-white bg-danger" : "text-white bg-success";
+            icon.innerText = isError ? "✕" : "✓";
+            title.innerText = isError ? "Ошибка!" : "Успешно!";
+            title.className = isError ? "text-danger mb-2" : "text-success mb-2";
+            document.getElementById('statusModalMessage').innerText = msg;
+
+            if (!bsModal) bsModal = new bootstrap.Modal(document.getElementById('statusModal'));
+            bsModal.show();
+        }
+
+        function askDeleteConfirmation(msg, callback) {
+            document.getElementById('confirmDeleteMessage').innerText = msg;
+            if (!delModal) delModal = new bootstrap.Modal(document.getElementById('confirmDeleteModal'));
+
+            const submitBtn = document.getElementById('confirmDeleteSubmitBtn');
+            const newSubmitBtn = submitBtn.cloneNode(true);
+            submitBtn.parentNode.replaceChild(newSubmitBtn, submitBtn);
+
+            newSubmitBtn.addEventListener('click', () => {
+                delModal.hide();
+                callback();
+            });
+            delModal.show();
+        }
+
+        async function initApp() {
+            const response = await fetch('/api/init');
+            const data = await response.json();
+            document.getElementById('global-visits').innerText = data.visits;
+
+            if (data.is_authenticated) {
+                currentUser = data.current_user;
+                showAuthorizedUI();
+            } else {
+                showLoginUI();
+            }
+        }
+
+        function showLoginUI() {
+            document.getElementById('login-container').classList.remove('d-none');
+            document.getElementById('auth-status-block').classList.add('d-none');
+            document.getElementById('authorized-content').classList.add('d-none');
+        }
+
+        function showAuthorizedUI() {
+            document.getElementById('login-container').classList.add('d-none');
+            document.getElementById('auth-status-block').classList.remove('d-none');
+            document.getElementById('navbar-username').innerText = currentUser.username;
+            document.getElementById('authorized-content').classList.remove('d-none');
+
+            if (currentUser.is_admin) {
+                document.getElementById('admin-panel').classList.remove('d-none');
+                document.getElementById('regular-user-msg').classList.add('d-none');
+                loadUsersList();
+            } else {
+                document.getElementById('admin-panel').classList.add('d-none');
+                document.getElementById('regular-user-msg').classList.remove('d-none');
+            }
+        }
+
+        document.getElementById('uiLoginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('loginUsername').value;
+            const password = document.getElementById('loginPassword').value;
+
+            const response = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+            const data = await response.json();
+
+            if (response.ok && data.status === 'success') {
+                currentUser = data.user;
+                showAuthorizedUI();
+            } else {
+                showSystemMessage(data.message, true);
+            }
+        });
+
+        async function handleLogout() {
+            await fetch('/api/auth/logout', { method: 'POST' });
+            currentUser = null;
+            showLoginUI();
+        }
+
+        async function loadUsersList() {
+            const response = await fetch('/api/admin/users');
+            if (!response.ok) return;
+            const users = await response.json();
+            const tbody = document.getElementById('admin-users-table');
+            tbody.innerHTML = '';
+
+            users.forEach(u => {
+                const isSelf = u.id === currentUser.id;
+                tbody.innerHTML += `
+                    <tr>
+                        <td>${u.id}</td>
+                        <td><b>${u.username}</b></td>
+                        <td><span class="badge ${u.is_admin ? 'bg-danger' : 'bg-secondary'}">${u.is_admin ? 'Админ' : 'Юзер'}</span></td>
+                        <td>
+                            ${isSelf ? '—' : `<button class="btn btn-sm btn-outline-danger" onclick="deleteUserTrigger(${u.id}, '${u.username}')">Удалить</button>`}
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        document.getElementById('adminCreateUserForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('newUsername').value;
+            const password = document.getElementById('newPassword').value;
+            const is_admin = document.getElementById('isAdminCheck').checked;
+
+            const response = await fetch('/api/admin/add_user', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password, is_admin })
+            });
+            const data = await response.json();
+
+            if (response.ok) {
+                showSystemMessage(data.message, false);
+                document.getElementById('adminCreateUserForm').reset();
+                loadUsersList();
+            } else {
+                showSystemMessage(data.message, true);
+            }
+        });
+
+        function deleteUserTrigger(userId, name) {
+            askDeleteConfirmation(`Вы уверены, что хотите навсегда удалить аккаунт ${name}?`, async () => {
+                const response = await fetch(`/api/admin/delete_user/${userId}`, { method: 'DELETE' });
+                const data = await response.json();
+                showSystemMessage(data.message, false);
+                loadUsersList();
+            });
+        }
+
+        initApp();
+    </script>
+</body>
 </html>
