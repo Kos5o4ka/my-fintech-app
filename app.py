@@ -7,6 +7,8 @@ from flask import Flask, request, jsonify, render_template, abort, make_response
 from flask_cors import CORS
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash  # ИСПРАВЛЕННЫЙ ИМПОРТ
+import os
+from werkzeug.utils import secure_filename
 
 from config import Config
 from extensions import db, login_manager, migrate
@@ -49,8 +51,34 @@ def handle_api_errors(error):
 def index_page(): return render_template('index.html')
 
 
-@app.route('/portfolio')
-def portfolio_page(): return render_template('portfolio.html')
+@app.route('/profile', methods=['GET', 'POST'])
+@login_required
+def profile_page():
+    if request.method == 'POST':
+        if 'avatar' not in request.files:
+            return jsonify({"status": "error", "message": "Нет файла."}), 400
+
+        file = request.files['avatar']
+        if file.filename == '':
+            return jsonify({"status": "error", "message": "Файл не выбран."}), 400
+
+        if file:
+            filename = secure_filename(file.filename)
+            # Генерируем уникальное имя файла, чтобы избежать перезаписи
+            unique_filename = f"user_{current_user.id}_{filename}"
+
+            # Убеждаемся, что папка существует
+            avatars_dir = os.path.join(app.root_path, 'static', 'avatars')
+            os.makedirs(avatars_dir, exist_ok=True)
+
+            file_path = os.path.join(avatars_dir, unique_filename)
+            file.save(file_path)
+
+            # Обновляем базу данных
+            current_user.avatar = unique_filename
+            db.session.commit()
+
+    return render_template('profile.html')
 
 
 @app.route('/api/init', methods=['GET'])
@@ -212,6 +240,58 @@ def api_login():
 @app.route('/api/auth/logout', methods=['POST', 'GET'])
 def api_logout(): logout_user(); return jsonify({"status": "success", "message": "Вы успешно вышли из системы."})
 
+
+@app.route('/api/admin/users', methods=['GET'])
+@login_required
+def get_all_users():
+    if not current_user.is_admin:
+        abort(403)  # Доступ запрещен для обычных юзеров
+    users = User.query.all()
+    users_data = [{"id": u.id, "username": u.username, "is_admin": u.is_admin} for u in users]
+    return jsonify(users_data)
+
+
+@app.route('/api/admin/add_user', methods=['POST'])
+@login_required
+def admin_add_user():
+    if not current_user.is_admin:
+        abort(403)
+
+    data = request.get_json() or {}
+    username = data.get('username', '').strip()
+    password = data.get('password', '').strip()
+    is_admin = data.get('is_admin', False)
+
+    if not username or not password:
+        return jsonify({"status": "error", "message": "Логин и пароль обязательны."}), 400
+
+    if User.query.filter_by(username=username).first():
+        return jsonify({"status": "error", "message": "Пользователь с таким логином уже существует."}), 400
+
+    new_user = User(
+        username=username,
+        password_hash=generate_password_hash(password),
+        is_admin=is_admin
+    )
+    db.session.add(new_user)
+    db.session.commit()
+
+    return jsonify({"status": "success", "message": f"Пользователь {username} успешно создан!"}), 201
+
+
+@app.route('/api/admin/delete_user/<int:user_id>', methods=['DELETE'])
+@login_required
+def delete_user(user_id):
+    if not current_user.is_admin:
+        abort(403)
+
+    user_to_delete = User.query.get_or_404(user_id)
+    if user_to_delete.id == current_user.id:
+        return jsonify({"status": "error", "message": "Вы не можете удалить сами себя."}), 400
+
+    db.session.delete(user_to_delete)
+    db.session.commit()
+    return jsonify({"status": "success", "message": f"Пользователь {user_to_delete.username} удален."})
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

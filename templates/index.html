@@ -250,10 +250,10 @@
             const password = document.getElementById('newPassword').value;
             const is_admin = document.getElementById('isAdminCheck').checked;
 
-            const response = await fetch('/api/admin/add_user', {
+            const response = await fetch('/api/admin/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password, is_admin })
+                body: JSON.stringify({ username: username, password: password, is_admin: isAdmin })
             });
             const data = await response.json();
 
@@ -262,7 +262,8 @@
                 document.getElementById('adminCreateUserForm').reset();
                 loadUsersList();
             } else {
-                showSystemMessage(data.message, true);
+                const errorData = await response.json();
+                showSystemMessage(errorData.message || "Ошибка при создании", "error");
             }
         });
 
