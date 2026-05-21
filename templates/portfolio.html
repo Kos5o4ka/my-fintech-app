@@ -20,7 +20,7 @@
 
     <nav class="navbar navbar-dark bg-dark mb-4">
         <div class="container">
-            <span class="navbar-brand mb-0 h1">Инвест-Трекер — Профессиональная Аналитика</span>
+            <span class="navbar-brand mb-0 h1">📈 InvestTrack — Профессиональная Аналитика</span>
             <div class="d-flex align-items-center">
                 <button class="btn btn-outline-light btn-sm me-3" onclick="window.Common.toggleTheme()" aria-label="Переключить тему">🌓 Тема</button>
                 <a href="/api/portfolio/export" class="btn btn-outline-warning btn-sm me-3">📥 Экспорт CSV</a>
@@ -32,7 +32,9 @@
 
     <div class="container mb-5">
         <div class="row">
+            <!-- ── Left sidebar ─────────────────────────────────────────── -->
             <div class="col-md-4">
+                <!-- Portfolio value -->
                 <div class="card shadow-sm border-success mb-4 text-center">
                     <div class="card-body">
                         <h6 class="text-muted text-uppercase small">Текущая стоимость портфеля</h6>
@@ -40,19 +42,38 @@
                     </div>
                 </div>
 
+                <!-- Add bond form -->
                 <div class="card shadow-sm mb-4">
                     <div class="card-header bg-dark text-white">Добавить облигацию</div>
                     <div class="card-body">
                         <form id="addBondForm">
-                            <div class="mb-3"><label class="form-label">Код ISIN бумаги</label><input type="text" id="bondIsin" class="form-control" placeholder="RU000A1038V6" maxlength="12" required></div>
-                            <div class="mb-3"><label class="form-label">Количество (шт.)</label><input type="number" id="bondAmount" class="form-control" placeholder="10" min="1" required></div>
-                            <div class="mb-3"><label class="form-label">Цена покупки (₽)</label><input type="number" id="bondBuyPrice" class="form-control" placeholder="985.50" step="0.01" min="1" required></div>
-                            <div class="mb-3"><label class="form-label">Дата покупки</label><input type="date" id="bondDate" class="form-control"></div>
-                            <button type="submit" class="btn btn-success w-100">Добавить в портфель</button>
+                            <div class="mb-3 position-relative">
+                                <label class="form-label">Код ISIN или название бумаги</label>
+                                <input type="text" id="bondIsin" class="form-control"
+                                       placeholder="RU000A1038V6 или ОФЗ 26238"
+                                       maxlength="50" required autocomplete="off">
+                                <div id="isinDropdown" class="isin-dropdown" style="display:none;"></div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Количество (шт.)</label>
+                                <input type="number" id="bondAmount" class="form-control" placeholder="10" min="1" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Цена покупки (₽)</label>
+                                <input type="number" id="bondBuyPrice" class="form-control" placeholder="985.50" step="0.01" min="1" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Дата покупки</label>
+                                <input type="date" id="bondDate" class="form-control">
+                            </div>
+                            <button type="submit" class="btn btn-success w-100" id="addBondBtn">
+                                Добавить в портфель
+                            </button>
                         </form>
                     </div>
                 </div>
 
+                <!-- Coupon calendar -->
                 <div class="card shadow-sm mb-4">
                     <div class="card-header bg-primary text-white font-weight-bold">📅 Предстоящие выплаты купонов</div>
                     <div class="card-body p-0">
@@ -63,7 +84,9 @@
                 </div>
             </div>
 
+            <!-- ── Right column ─────────────────────────────────────────── -->
             <div class="col-md-8">
+                <!-- Profit chart -->
                 <div class="card shadow-sm mb-4">
                     <div class="card-header bg-white font-weight-bold">Аналитика: Зафиксированная чистая прибыль (₽)</div>
                     <div class="card-body" style="position: relative; height:220px;">
@@ -71,24 +94,77 @@
                     </div>
                 </div>
 
+                <!-- Tabs: Portfolio / History -->
                 <div class="card shadow-sm">
-                    <div class="card-body">
-                        <h5 class="card-title mb-3">Ваши активные бумаги</h5>
-                        <div class="table-responsive">
-                            <table class="table table-hover align-middle">
-                                <thead class="table-dark">
-                                    <tr>
-                                        <th>Название бумаги</th>
-                                        <th>ISIN бумаги</th>
-                                        <th>Кол-во</th>
-                                        <th>Цена покупки</th>
-                                        <th>Текущий НКД</th>
-                                        <th>Текущий YTM</th>
-                                        <th>Действие</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="bonds-table-body"></tbody>
-                            </table>
+                    <div class="card-body pb-0">
+                        <ul class="nav nav-tabs" id="portfolioTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="active-tab" data-bs-toggle="tab"
+                                        data-bs-target="#active-pane" type="button" role="tab">
+                                    📊 Активные позиции
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="history-tab" data-bs-toggle="tab"
+                                        data-bs-target="#history-pane" type="button" role="tab"
+                                        onclick="loadHistoryIfNeeded()">
+                                    🗂 История сделок
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="tab-content">
+                        <!-- Active positions tab -->
+                        <div class="tab-pane fade show active p-3" id="active-pane" role="tabpanel">
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle">
+                                    <thead class="table-dark">
+                                        <tr>
+                                            <th>Название</th>
+                                            <th>ISIN</th>
+                                            <th>Кол-во</th>
+                                            <th>Цена покупки</th>
+                                            <th>НКД</th>
+                                            <th>YTM</th>
+                                            <th title="Прибыль/убыток: (тек. цена − цена покупки) × кол-во">
+                                                P&amp;L ₽ <span class="badge bg-secondary text-white small ms-1" title="Нереализованная прибыль/убыток">?</span>
+                                            </th>
+                                            <th>Действие</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="bonds-table-body"></tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Trade history tab -->
+                        <div class="tab-pane fade p-3" id="history-pane" role="tabpanel">
+                            <div id="history-loading" class="text-center text-muted py-4" style="display:none;">
+                                <div class="spinner-border spinner-border-sm me-2" role="status"></div>Загрузка истории…
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle">
+                                    <thead class="table-dark">
+                                        <tr>
+                                            <th>Название</th>
+                                            <th>ISIN</th>
+                                            <th>Кол-во</th>
+                                            <th>Цена покупки</th>
+                                            <th>Цена продажи</th>
+                                            <th>P&amp;L ₽</th>
+                                            <th>P&amp;L %</th>
+                                            <th>Дата сделки</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="history-table-body">
+                                        <tr>
+                                            <td colspan="8" class="text-center text-muted py-4">
+                                                История сделок пуста.
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -96,6 +172,7 @@
         </div>
     </div>
 
+    <!-- Bond chart modal -->
     <div class="modal fade" id="bondChartModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-lg">
             <div class="modal-content">
@@ -120,6 +197,7 @@
         </div>
     </div>
 
+    <!-- Status modal -->
     <div class="modal fade" id="statusModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content text-center">
@@ -137,6 +215,7 @@
         </div>
     </div>
 
+    <!-- Confirm modal -->
     <div class="modal fade" id="confirmModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content text-center">

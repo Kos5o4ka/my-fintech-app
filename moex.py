@@ -95,3 +95,37 @@ def get_coupon_calendar(secid):
         return calendar[:6]
     except:
         return []
+
+
+def search_bonds(query: str, limit: int = 10) -> list:
+    """Search MOEX ISS for bonds by name or ISIN fragment."""
+    try:
+        url = (
+            "https://iss.moex.com/iss/securities.json"
+            f"?q={requests.utils.quote(query.strip())}"
+            "&group_by=group&group_by_filter=stock_bonds"
+            f"&limit={limit}"
+            "&securities.columns=secid,isin,shortname,name"
+        )
+        res = requests.get(url, timeout=5).json()
+        if not res.get("securities") or not res["securities"].get("data"):
+            return []
+        cols = res["securities"]["columns"]
+        results = []
+        for row in res["securities"]["data"]:
+            secid = row[cols.index("secid")] if "secid" in cols else ""
+            isin = row[cols.index("isin")] if "isin" in cols else ""
+            shortname = row[cols.index("shortname")] if "shortname" in cols else ""
+            name = row[cols.index("name")] if "name" in cols else ""
+            display_name = shortname or name or secid
+            if not isin:
+                continue
+            results.append({
+                "secid": secid,
+                "isin": isin,
+                "name": display_name,
+            })
+        return results
+    except Exception as e:
+        print(f"MOEX search error: {e}")
+        return []
