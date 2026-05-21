@@ -9,8 +9,20 @@ let currentBondNkd = [];
 let currentBondYtm = [];
 let historyLoaded = false;
 
+// Table sort state
+let bondsData = [];
+let sortKey = null;
+let sortDir = 1; // 1 = ascending, -1 = descending
+
 // Set today's date as default
 document.getElementById('bondDate').value = new Date().toISOString().split('T')[0];
+
+// Init Bootstrap tooltips
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+        new bootstrap.Tooltip(el);
+    });
+});
 
 // ── Bond chart ────────────────────────────────────────────────────────────────
 async function openBondChart(isin) {
@@ -61,12 +73,10 @@ async function loadBondChartData(period) {
             plugins: {
                 tooltip: {
                     callbacks: {
-                        label: function(context) {
-                            return `Цена бумаги: ${context.parsed.y} ₽`;
-                        },
-                        footer: function(tooltipItems) {
-                            const dataIndex = tooltipItems[0].dataIndex;
-                            return `НКД на дату: ${currentBondNkd[dataIndex]} ₽\nДоходность YTM: ${currentBondYtm[dataIndex]} %`;
+                        label: ctx => `Цена бумаги: ${ctx.parsed.y} ₽`,
+                        footer: items => {
+                            const i = items[0].dataIndex;
+                            return `НКД на дату: ${currentBondNkd[i]} ₽\nДоходность YTM: ${currentBondYtm[i]} %`;
                         }
                     }
                 },
@@ -81,7 +91,7 @@ async function loadBondChartData(period) {
 
 function applyChartScale(period, ev) {
     if (ev && ev.target && ev.target.classList.contains('btn')) {
-        document.querySelectorAll('#periodBtnGroup .btn').forEach(btn => btn.classList.remove('active'));
+        document.querySelectorAll('#periodBtnGroup .btn').forEach(b => b.classList.remove('active'));
         ev.target.classList.add('active');
     }
     loadBondChartData(period);
@@ -115,18 +125,46 @@ async function fetchCouponCalendar() {
     });
 }
 
+// ── Table sort ────────────────────────────────────────────────────────────────
+function sortTable(key) {
+    if (sortKey === key) sortDir = -sortDir;
+    else { sortKey = key; sortDir = 1; }
+    renderBondRows();
+    _updateSortIndicators();
+}
+
+function _updateSortIndicators() {
+    document.querySelectorAll('.sort-icon').forEach(el => {
+        const col = el.dataset.col;
+        el.textContent = col === sortKey ? (sortDir === 1 ? ' ↑' : ' ↓') : '';
+    });
+}
+
 // ── Active portfolio ──────────────────────────────────────────────────────────
 async function fetchActivePortfolio() {
+    const tbody = document.getElementById('bonds-table-body');
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Загрузка…</span>
+        </div>
+    </td></tr>`;
+
     const response = await fetch('/api/portfolio');
     if (response.status === 401) { window.location.href = '/'; return; }
     const data = await response.json();
+
     document.getElementById('total-portfolio-value').innerText =
         data.total_value.toLocaleString('ru-RU', { minimumFractionDigits: 2 });
 
+    bondsData = data.bonds || [];
+    renderBondRows();
+}
+
+function renderBondRows() {
     const tbody = document.getElementById('bonds-table-body');
     tbody.innerHTML = '';
 
-    if (!data.bonds || data.bonds.length === 0) {
+    if (!bondsData.length) {
         tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">
             Инвестиционный портфель пуст.<br>
             <small class="text-secondary">Добавьте первую облигацию с помощью формы слева.</small>
@@ -134,12 +172,22 @@ async function fetchActivePortfolio() {
         return;
     }
 
+    // Apply sort
+    let sorted = [...bondsData];
+    if (sortKey) {
+        sorted.sort((a, b) => {
+            let va = a[sortKey], vb = b[sortKey];
+            if (typeof va === 'string') { va = va.toLowerCase(); vb = (vb || '').toLowerCase(); }
+            return (va < vb ? -1 : va > vb ? 1 : 0) * sortDir;
+        });
+    }
+
     const esc = window.Common.escapeHtml;
-    data.bonds.forEach(bond => {
+    sorted.forEach(bond => {
         const pnl = bond.pnl ?? 0;
         const pnlPct = bond.pnl_pct ?? 0;
         const pnlClass = pnl >= 0 ? 'text-success' : 'text-danger';
-        const pnlSign = pnl >= 0 ? '+' : '';
+        const sign = pnl >= 0 ? '+' : '';
 
         tbody.innerHTML += `
             <tr>
@@ -151,8 +199,8 @@ async function fetchActivePortfolio() {
                 <td class="text-primary"><b>${(bond.nkd || 0).toFixed(2)} ₽</b></td>
                 <td class="text-info"><b>${(bond.ytm || 0).toFixed(2)} %</b></td>
                 <td class="${pnlClass}" title="Нереализованная прибыль/убыток">
-                    <b>${pnlSign}${pnl.toFixed(2)} ₽</b><br>
-                    <small>${pnlSign}${pnlPct.toFixed(2)}%</small>
+                    <b>${sign}${pnl.toFixed(2)} ₽</b><br>
+                    <small>${sign}${pnlPct.toFixed(2)}%</small>
                 </td>
                 <td><button
                     onclick="sellTrigger(parseInt(this.dataset.id), this.dataset.name, parseFloat(this.dataset.price))"
@@ -192,7 +240,7 @@ async function fetchTradeHistory() {
         const esc = window.Common.escapeHtml;
         data.trades.forEach(t => {
             const pnlClass = t.pnl >= 0 ? 'text-success' : 'text-danger';
-            const pnlSign = t.pnl >= 0 ? '+' : '';
+            const sign = t.pnl >= 0 ? '+' : '';
             tbody.innerHTML += `
                 <tr>
                     <td><b>${esc(t.name)}</b></td>
@@ -200,8 +248,8 @@ async function fetchTradeHistory() {
                     <td>${t.amount} шт.</td>
                     <td>${t.buy_price.toFixed(2)} ₽</td>
                     <td>${t.sell_price.toFixed(2)} ₽</td>
-                    <td class="${pnlClass}"><b>${pnlSign}${t.pnl.toFixed(2)} ₽</b></td>
-                    <td class="${pnlClass}"><b>${pnlSign}${t.pnl_pct.toFixed(2)}%</b></td>
+                    <td class="${pnlClass}"><b>${sign}${t.pnl.toFixed(2)} ₽</b></td>
+                    <td class="${pnlClass}"><b>${sign}${t.pnl_pct.toFixed(2)}%</b></td>
                     <td><small>${esc(t.sell_date || '—')}</small></td>
                 </tr>`;
         });
@@ -231,10 +279,10 @@ document.getElementById('addBondForm').addEventListener('submit', async (e) => {
         const data = await response.json();
 
         if (response.ok && data.status === 'success') {
-            window.Common.showSystemMessage(data.message, false);
+            window.Common.showToast(data.message);
             document.getElementById('addBondForm').reset();
             document.getElementById('bondDate').value = new Date().toISOString().split('T')[0];
-            historyLoaded = false; // force history reload next time
+            historyLoaded = false;
             await loadDashboard();
         } else {
             window.Common.showSystemMessage(data.message, true);
@@ -257,8 +305,8 @@ function sellTrigger(bondId, name, sellPrice) {
             });
             const data = await response.json();
             if (response.ok) {
-                window.Common.showSystemMessage(data.message, false);
-                historyLoaded = false; // force history reload next time
+                window.Common.showToast(data.message);
+                historyLoaded = false;
                 await loadDashboard();
             } else {
                 window.Common.showSystemMessage(data.message, true);
@@ -296,34 +344,26 @@ async function fetchChartAnalytics() {
     isinInput.addEventListener('input', () => {
         clearTimeout(debounceTimer);
         const q = isinInput.value.trim();
-        if (q.length < 2) {
-            dropdown.style.display = 'none';
-            return;
-        }
+        if (q.length < 2) { dropdown.style.display = 'none'; return; }
         debounceTimer = setTimeout(async () => {
             try {
                 const res = await fetch(`/api/search_bond?q=${encodeURIComponent(q)}`);
                 if (!res.ok) return;
-                const results = await res.json();
-                renderDropdown(results);
-            } catch (_) { /* network error — silently ignore */ }
+                renderDropdown(await res.json());
+            } catch (_) {}
         }, 300);
     });
 
     function renderDropdown(results) {
         dropdown.innerHTML = '';
-        if (!results || results.length === 0) {
-            dropdown.style.display = 'none';
-            return;
-        }
+        if (!results || !results.length) { dropdown.style.display = 'none'; return; }
         const esc = window.Common.escapeHtml;
         results.forEach(item => {
             const div = document.createElement('div');
             div.className = 'isin-dropdown-item';
             div.innerHTML = `<span class="fw-semibold">${esc(item.isin)}</span>
                              <span class="text-muted ms-2 small">${esc(item.name)}</span>`;
-            div.addEventListener('mousedown', (e) => {
-                // mousedown fires before blur, so we can set the value before the dropdown hides
+            div.addEventListener('mousedown', e => {
                 e.preventDefault();
                 isinInput.value = item.isin;
                 dropdown.style.display = 'none';
@@ -333,15 +373,12 @@ async function fetchChartAnalytics() {
         dropdown.style.display = 'block';
     }
 
-    // Hide on outside click
-    document.addEventListener('click', (e) => {
-        if (!isinInput.contains(e.target) && !dropdown.contains(e.target)) {
+    document.addEventListener('click', e => {
+        if (!isinInput.contains(e.target) && !dropdown.contains(e.target))
             dropdown.style.display = 'none';
-        }
     });
 
-    // Hide on Escape
-    isinInput.addEventListener('keydown', (e) => {
+    isinInput.addEventListener('keydown', e => {
         if (e.key === 'Escape') dropdown.style.display = 'none';
     });
 })();

@@ -31,6 +31,20 @@ body {
     color: #9ecbff;
 }
 
+/* ── Sortable table headers ─────────────────────────────────────────────────── */
+.sortable-col {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+.sortable-col:hover {
+    opacity: 0.85;
+}
+.sort-icon {
+    font-size: 0.75em;
+    opacity: 0.8;
+}
+
 /* ── Bond search autocomplete dropdown ─────────────────────────────────────── */
 .isin-dropdown {
     position: absolute;

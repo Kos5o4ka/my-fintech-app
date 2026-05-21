@@ -16,7 +16,7 @@
 
     <nav class="navbar navbar-dark bg-dark mb-4">
         <div class="container">
-            <a href="/" class="navbar-brand mb-0 h1">InvestTrack</a>
+            <a href="/" class="navbar-brand mb-0 h1">📈 InvestTrack</a>
             <div class="d-flex align-items-center gap-2">
                 <button class="btn btn-outline-light btn-sm" onclick="window.Common.toggleTheme()" aria-label="Переключить тему">🌓</button>
                 <a href="/" class="btn btn-outline-light btn-sm">На главную</a>
@@ -25,7 +25,7 @@
         </div>
     </nav>
 
-    <div class="container">
+    <div class="container pb-5">
         {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
         {% for category, message in messages %}
@@ -34,7 +34,8 @@
         {% endif %}
         {% endwith %}
 
-        <div class="row justify-content-center">
+        <div class="row justify-content-center g-4">
+            <!-- ── Avatar card ────────────────────────────────────────── -->
             <div class="col-md-6">
                 <div class="card shadow">
                     <div class="card-body text-center">
@@ -44,12 +45,13 @@
                         <img src="{{ url_for('static', filename='avatars/' + current_user.avatar) }}"
                             class="rounded-circle mb-3"
                             alt="Аватар пользователя {{ current_user.username }}"
-                            loading="lazy"
-                            decoding="async"
-                            style="width: 150px; height: 150px; object-fit: cover; border: 3px solid #0d6efd;">
+                            loading="lazy" decoding="async"
+                            style="width:150px;height:150px;object-fit:cover;border:3px solid #0d6efd;">
                         {% else %}
                         <img src="https://ui-avatars.com/api/?name={{ current_user.username }}&background=0d6efd&color=fff&size=150"
-                            class="rounded-circle mb-3 shadow" alt="Аватар {{ current_user.username }}" loading="lazy" decoding="async">
+                            class="rounded-circle mb-3 shadow"
+                            alt="Аватар {{ current_user.username }}"
+                            loading="lazy" decoding="async">
                         {% endif %}
 
                         <h4 class="mb-1">{{ current_user.username }}</h4>
@@ -67,7 +69,8 @@
                             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                             <div class="mb-3">
                                 <label class="form-label fw-bold">Обновить аватарку</label>
-                                <input class="form-control" type="file" name="avatar" accept="image/*" aria-label="Загрузить аватар" required>
+                                <input class="form-control" type="file" name="avatar"
+                                       accept="image/*" aria-label="Загрузить аватар" required>
                                 <div class="form-text">Форматы: PNG, JPG, GIF, WEBP. Максимум 5 МБ.</div>
                             </div>
                             <button type="submit" class="btn btn-primary w-100">Загрузить</button>
@@ -75,11 +78,90 @@
                     </div>
                 </div>
             </div>
+
+            <!-- ── Change password card ───────────────────────────────── -->
+            <div class="col-md-6">
+                <div class="card shadow">
+                    <div class="card-header bg-dark text-white">🔑 Смена пароля</div>
+                    <div class="card-body">
+                        <form id="changePasswordForm">
+                            <div class="mb-3">
+                                <label class="form-label">Текущий пароль</label>
+                                <input type="password" id="oldPassword" class="form-control"
+                                       placeholder="Введите текущий пароль" required autocomplete="current-password">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Новый пароль</label>
+                                <input type="password" id="newPassword" class="form-control"
+                                       placeholder="Минимум 8 символов" required minlength="8" autocomplete="new-password">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Подтверждение нового пароля</label>
+                                <input type="password" id="confirmPassword" class="form-control"
+                                       placeholder="Повторите новый пароль" required autocomplete="new-password">
+                            </div>
+                            <button type="submit" class="btn btn-warning w-100" id="changePwBtn">
+                                Изменить пароль
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast container -->
+    <div id="toastContainer" class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index:1100;"></div>
+
+    <!-- Status modal (for errors without toast) -->
+    <div class="modal fade" id="statusModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content text-center">
+                <div class="modal-header d-flex justify-content-center border-0 pt-4" role="dialog" aria-modal="true" aria-labelledby="statusModalTitle">
+                    <div id="modalIconContainer" style="width:60px;height:60px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:28px;" class="text-white"></div>
+                </div>
+                <div class="modal-body py-3">
+                    <h4 class="mb-2" id="statusModalTitle"></h4>
+                    <p id="statusModalMessage" class="text-muted mb-0 px-3"></p>
+                </div>
+                <div class="modal-footer justify-content-center border-0 pb-4">
+                    <button type="button" class="btn btn-secondary px-4 btn-sm" data-bs-dismiss="modal">Ок</button>
+                </div>
+            </div>
         </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" defer></script>
     <script src="{{ url_for('static', filename='js/common.min.js') }}" defer></script>
+    <script defer>
+        document.getElementById('changePasswordForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('changePwBtn');
+            btn.disabled = true;
+            btn.textContent = 'Сохранение…';
+            try {
+                const res = await window.Common.csrfFetch('/api/auth/change_password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        old_password: document.getElementById('oldPassword').value,
+                        new_password: document.getElementById('newPassword').value,
+                        confirm_password: document.getElementById('confirmPassword').value
+                    })
+                });
+                const data = await res.json();
+                if (res.ok && data.status === 'success') {
+                    window.Common.showToast(data.message);
+                    document.getElementById('changePasswordForm').reset();
+                } else {
+                    window.Common.showSystemMessage(data.message, true);
+                }
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Изменить пароль';
+            }
+        });
+    </script>
 
 </body>
 

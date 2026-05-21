@@ -92,7 +92,31 @@ window.Common = (function(){
         return fetch(url, { ...options, headers, credentials: 'same-origin' });
     }
 
+    function showToast(msg, isError = false) {
+        const container = document.getElementById('toastContainer');
+        if (!container) { showSystemMessage(msg, isError); return; }
+
+        const toast = document.createElement('div');
+        toast.className = [
+            'toast align-items-center text-white border-0',
+            isError ? 'bg-danger' : 'bg-success'
+        ].join(' ');
+        toast.setAttribute('role', isError ? 'alert' : 'status');
+        toast.setAttribute('aria-live', isError ? 'assertive' : 'polite');
+        toast.setAttribute('aria-atomic', 'true');
+        toast.innerHTML = `
+            <div class="d-flex">
+                <div class="toast-body fw-semibold">${escapeHtml(msg)}</div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto"
+                        data-bs-dismiss="toast" aria-label="Закрыть"></button>
+            </div>`;
+        container.appendChild(toast);
+        const bsToast = new bootstrap.Toast(toast, { delay: isError ? 6000 : 3000 });
+        bsToast.show();
+        toast.addEventListener('hidden.bs.toast', () => toast.remove());
+    }
+
     initTheme();
 
-    return { showSystemMessage, askConfirmation, csrfFetch, escapeHtml, setTheme, initTheme, toggleTheme };
+    return { showSystemMessage, askConfirmation, csrfFetch, escapeHtml, setTheme, initTheme, toggleTheme, showToast };
 })();

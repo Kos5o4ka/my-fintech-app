@@ -16,6 +16,22 @@ from moex import get_moex_bond, get_bond_history_all, get_coupon_calendar, searc
 logger = logging.getLogger(__name__)
 portfolio_bp = Blueprint("portfolio", __name__)
 
+_MOEX_CACHE_TTL = 900  # 15 minutes
+
+
+def _get_moex_cached(isin: str) -> dict | None:
+    """Thin wrapper around get_moex_bond() with 15-minute Flask-Cache."""
+    key = f"moex_bond:{isin}"
+    result = cache.get(key)
+    if result is None:
+        result = get_moex_bond(isin)
+        if result is not None:
+            try:
+                cache.set(key, result, timeout=_MOEX_CACHE_TTL)
+            except Exception:
+                pass
+    return result
+
 
 # ── Page ──────────────────────────────────────────────────────────────────────
 
@@ -46,7 +62,7 @@ def get_portfolio():
         pnl = (last_p - buy_p) * bond.amount
         pnl_pct = ((last_p - buy_p) / buy_p * 100) if buy_p else 0.0
 
-        moex_data = get_moex_bond(bond.isin) or {}
+        moex_data = _get_moex_cached(bond.isin) or {}
         portfolio_list.append({
             "id": bond.id,
             "isin": bond.isin,

@@ -120,19 +120,41 @@
                                 <table class="table table-hover align-middle">
                                     <thead class="table-dark">
                                         <tr>
-                                            <th>Название</th>
+                                            <th class="sortable-col" onclick="sortTable('name')" title="Сортировать по названию">
+                                                Название <span class="sort-icon" data-col="name"></span>
+                                            </th>
                                             <th>ISIN</th>
-                                            <th>Кол-во</th>
-                                            <th>Цена покупки</th>
-                                            <th>НКД</th>
-                                            <th>YTM</th>
-                                            <th title="Прибыль/убыток: (тек. цена − цена покупки) × кол-во">
-                                                P&amp;L ₽ <span class="badge bg-secondary text-white small ms-1" title="Нереализованная прибыль/убыток">?</span>
+                                            <th class="sortable-col" onclick="sortTable('amount')" title="Сортировать по количеству">
+                                                Кол-во <span class="sort-icon" data-col="amount"></span>
+                                            </th>
+                                            <th class="sortable-col" onclick="sortTable('buy_price')" title="Сортировать по цене покупки">
+                                                Цена покупки <span class="sort-icon" data-col="buy_price"></span>
+                                            </th>
+                                            <th class="sortable-col" onclick="sortTable('nkd')" title="Накопленный купонный доход. Сортировать.">
+                                                НКД <span class="sort-icon" data-col="nkd"></span>
+                                                <span class="badge bg-secondary ms-1 small" style="font-size:.65em"
+                                                      data-bs-toggle="tooltip" title="Накопленный купонный доход — начисленный, но ещё не выплаченный купон">?</span>
+                                            </th>
+                                            <th class="sortable-col" onclick="sortTable('ytm')" title="Доходность к погашению. Сортировать.">
+                                                YTM <span class="sort-icon" data-col="ytm"></span>
+                                                <span class="badge bg-secondary ms-1 small" style="font-size:.65em"
+                                                      data-bs-toggle="tooltip" title="Yield to Maturity — эффективная доходность к погашению, % годовых">?</span>
+                                            </th>
+                                            <th class="sortable-col" onclick="sortTable('pnl')" title="Нереализованная прибыль/убыток. Сортировать.">
+                                                P&amp;L ₽ <span class="sort-icon" data-col="pnl"></span>
                                             </th>
                                             <th>Действие</th>
                                         </tr>
                                     </thead>
-                                    <tbody id="bonds-table-body"></tbody>
+                                    <tbody id="bonds-table-body">
+                                        <tr>
+                                            <td colspan="8" class="text-center py-4">
+                                                <div class="spinner-border text-primary" role="status">
+                                                    <span class="visually-hidden">Загрузка...</span>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </tbody>
                                 </table>
                             </div>
                         </div>
@@ -153,13 +175,13 @@
                                             <th>Цена продажи</th>
                                             <th>P&amp;L ₽</th>
                                             <th>P&amp;L %</th>
-                                            <th>Дата сделки</th>
+                                            <th>Дата продажи</th>
                                         </tr>
                                     </thead>
                                     <tbody id="history-table-body">
                                         <tr>
                                             <td colspan="8" class="text-center text-muted py-4">
-                                                История сделок пуста.
+                                                Нажмите на вкладку, чтобы загрузить историю.
                                             </td>
                                         </tr>
                                     </tbody>
@@ -197,7 +219,7 @@
         </div>
     </div>
 
-    <!-- Status modal -->
+    <!-- Status modal (errors only) -->
     <div class="modal fade" id="statusModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content text-center">
@@ -233,6 +255,9 @@
             </div>
         </div>
     </div>
+
+    <!-- Toast container (bottom-right) -->
+    <div id="toastContainer" class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1100;"></div>
 
     <script src="{{ url_for('static', filename='js/common.min.js') }}" defer></script>
     <script src="{{ url_for('static', filename='js/portfolio.min.js') }}" defer></script>
