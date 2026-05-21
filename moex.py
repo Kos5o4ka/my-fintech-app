@@ -37,6 +37,7 @@ def get_moex_bond(isin_code):
             'secid': secid,
             'name': get_val(sec_data, sec_cols, 'SHORTNAME'),
             'price': round(price_rub, 2),
+            'facevalue': facevalue,
             'nkd': round(get_val(sec_data, sec_cols, 'ACCRUEDINT') or 0, 2),
             'ytm': round(get_val(mkt_data, mkt_cols, 'DURATION_MUTATION_YIELD') or get_val(sec_data, sec_cols,
                                                                                            'YIELDTOOFFER') or 0, 2)
@@ -46,12 +47,11 @@ def get_moex_bond(isin_code):
         return None
 
 
-def get_bond_history_all(secid):
-    """Сквозная выгрузка всей исторической ретроспективы торгов облигации"""
+def get_bond_history_all(secid, facevalue=1000):
     labels, prices, nkd_history, ytm_history = [], [], [], []
     start_offset = 0
     try:
-        while start_offset < 1000:  # Лимит 10 страниц (~4 года торгов) во избежание перегрузки памяти
+        while start_offset < 1000:
             url = f"https://iss.moex.com/iss/history/engines/stock/markets/bonds/securities/{secid}.json" \
                   f"?history_shares.columns=TRADEDATE,CLOSE,ACCINT,YIELDCLOSE&start={start_offset}"
             res = requests.get(url, timeout=5).json()
@@ -71,7 +71,7 @@ def get_bond_history_all(secid):
             for row in page_data:
                 if row[close_idx] is not None:
                     labels.append(row[date_idx])
-                    prices.append(round((float(row[close_idx]) / 100) * 1000, 2))
+                    prices.append(round((float(row[close_idx]) / 100) * facevalue, 2))
                     nkd_history.append(round(float(row[accint_idx]) if row[accint_idx] else 0, 2))
                     ytm_history.append(round(float(row[yield_idx]) if row[yield_idx] else 0, 2))
 

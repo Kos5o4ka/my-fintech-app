@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date
 from extensions import db
 from flask_login import UserMixin
 
@@ -18,12 +18,20 @@ class User(db.Model, UserMixin):
 
 class BondPortfolio(db.Model):
     __tablename__ = 'bond_portfolio'
+    __table_args__ = (
+        db.Index('ix_bp_user_id', 'user_id'),
+        db.Index('ix_bp_is_sold', 'is_sold'),
+        db.Index('ix_bp_user_sold', 'user_id', 'is_sold'),
+    )
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     isin = db.Column(db.String(12), nullable=False)
+    secid = db.Column(db.String(50), nullable=True)
     name = db.Column(db.String(100), nullable=True)
     amount = db.Column(db.Integer, nullable=False)
     buy_price = db.Column(db.Numeric(10, 2), nullable=False)
-    purchase_date = db.Column(db.Date, nullable=False, default=datetime.utcnow)
+    purchase_date = db.Column(db.Date, nullable=False, default=date.today)
     is_sold = db.Column(db.Boolean, default=False)
     last_price = db.Column(db.Numeric(10, 2), nullable=True)
+    sell_price = db.Column(db.Numeric(10, 2), nullable=True)
+    sell_date = db.Column(db.Date, nullable=True)

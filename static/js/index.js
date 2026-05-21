@@ -1,0 +1,132 @@
+let currentUser = null;
+
+function showLoginUI() {
+    document.getElementById('login-container').classList.remove('d-none');
+    document.getElementById('auth-status-block').classList.add('d-none');
+    document.getElementById('authorized-content').classList.add('d-none');
+}
+
+function showAuthorizedUI() {
+    document.getElementById('login-container').classList.add('d-none');
+    document.getElementById('auth-status-block').classList.remove('d-none');
+    if (document.getElementById('navbar-username')) document.getElementById('navbar-username').innerText = currentUser.username;
+    document.getElementById('authorized-content').classList.remove('d-none');
+
+    if (currentUser.is_admin) {
+        document.getElementById('admin-panel').classList.remove('d-none');
+        document.getElementById('regular-user-msg').classList.add('d-none');
+        loadUsersList();
+    } else {
+        document.getElementById('admin-panel').classList.add('d-none');
+        document.getElementById('regular-user-msg').classList.remove('d-none');
+    }
+}
+
+async function initApp() {
+    try {
+        const response = await fetch('/api/init');
+        const data = await response.json();
+        const visitsEl = document.getElementById('global-visits');
+        if (visitsEl) visitsEl.innerText = data.visits;
+
+        if (data.is_authenticated) {
+            currentUser = data.current_user;
+            showAuthorizedUI();
+        } else {
+            showLoginUI();
+        }
+    } catch (e) {
+        console.error('Init error', e);
+    }
+}
+
+async function handleLogout() {
+    await window.Common.csrfFetch('/api/auth/logout', { method: 'POST' });
+    currentUser = null;
+    showLoginUI();
+}
+
+async function loadUsersList() {
+    const response = await window.Common.csrfFetch('/api/admin/users');
+    if (!response.ok) return;
+    const users = await response.json();
+    const tbody = document.getElementById('admin-users-table');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    const esc = window.Common.escapeHtml;
+    users.forEach(u => {
+        const isSelf = u.id === currentUser.id;
+        tbody.innerHTML += `
+            <tr>
+                <td>${u.id}</td>
+                <td><b>${esc(u.username)}</b></td>
+                <td><span class="badge ${u.is_admin ? 'bg-danger' : 'bg-secondary'}">${u.is_admin ? 'Админ' : 'Юзер'}</span></td>
+                <td>
+                    ${isSelf ? '—' : `<button class="btn btn-sm btn-outline-danger" data-user-id="${u.id}" data-username="${esc(u.username)}" onclick="deleteUserTrigger(parseInt(this.dataset.userId), this.dataset.username)">Удалить</button>`}
+                </td>
+            </tr>
+        `;
+    });
+}
+
+function deleteUserTrigger(userId, name) {
+    window.Common.askConfirmation(`Вы уверены, что хотите навсегда удалить аккаунт ${name}?`, async () => {
+        const response = await window.Common.csrfFetch(`/api/admin/delete_user/${userId}`, { method: 'DELETE' });
+        const data = await response.json();
+        window.Common.showSystemMessage(data.message, !response.ok);
+        loadUsersList();
+    });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const loginForm = document.getElementById('uiLoginForm');
+    if (loginForm) {
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('loginUsername').value;
+            const password = document.getElementById('loginPassword').value;
+
+            const response = await window.Common.csrfFetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+            const data = await response.json();
+
+            if (response.ok && data.status === 'success') {
+                currentUser = data.user;
+                showAuthorizedUI();
+            } else {
+                window.Common.showSystemMessage(data.message, true);
+            }
+        });
+    }
+
+    const adminForm = document.getElementById('adminCreateUserForm');
+    if (adminForm) {
+        adminForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('newUsername').value;
+            const password = document.getElementById('newPassword').value;
+            const is_admin = document.getElementById('isAdminCheck').checked;
+
+            const response = await window.Common.csrfFetch('/api/admin/add_user', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: username, password: password, is_admin: is_admin })
+            });
+            const data = await response.json();
+
+            if (response.ok) {
+                window.Common.showSystemMessage(data.message, false);
+                document.getElementById('adminCreateUserForm').reset();
+                loadUsersList();
+            } else {
+                window.Common.showSystemMessage(data.message || "Ошибка при создании", true);
+            }
+        });
+    }
+
+    initApp();
+});

@@ -1,22 +1,30 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-bs-theme="light">
 <head>
     <meta charset="UTF-8">
-    <title>Мой Сайт — Главная Панель</title>
+    <script>(function(){var t=localStorage.getItem('portfolioTheme');if(t==='dark')document.documentElement.setAttribute('data-bs-theme','dark');})()</script>
+    <title>InvestTrack — Главная</title>
+    <meta name="description" content="InvestTrack — персональный трекер облигационного портфеля с данными Московской Биржи">
+    <meta name="theme-color" content="#212529">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/variables.min.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" defer></script>
 </head>
-<body class="bg-light">
+<body>
 
     <nav class="navbar navbar-dark bg-dark mb-4">
         <div class="container">
-            <span class="navbar-brand mb-0 h1">My Web App</span>
-            <span class="text-info">Всего заходов на сайт: <b id="global-visits">0</b></span>
-
-            <div id="auth-status-block" class="d-flex align-items-center text-white d-none">
-                <span class="me-3">Привет, <b id="navbar-username">User</b>!</span>
-                <a href="/portfolio" class="btn btn-success btn-sm me-2">Мой Портфель</a>
-                <button onclick="handleLogout()" class="btn btn-outline-light btn-sm">Выйти</button>
+            <span class="navbar-brand mb-0 h1">InvestTrack</span>
+            <div class="d-flex align-items-center gap-3">
+                <span class="text-info small">Заходов: <b id="global-visits">0</b></span>
+                <button class="btn btn-outline-light btn-sm" onclick="window.Common.toggleTheme()" aria-label="Переключить тему">🌓</button>
+                <div id="auth-status-block" class="d-flex align-items-center text-white d-none">
+                    <span class="me-3">Привет, <b id="navbar-username">User</b>!</span>
+                    <a href="/portfolio" class="btn btn-success btn-sm me-2">Мой Портфель</a>
+                    <button onclick="handleLogout()" class="btn btn-outline-light btn-sm" aria-label="Выйти из аккаунта">Выйти</button>
+                </div>
             </div>
         </div>
     </nav>
@@ -29,10 +37,10 @@
                         <h3 class="card-title text-center mb-4">Авторизация</h3>
                         <form id="uiLoginForm">
                             <div class="mb-3">
-                                <input type="text" id="loginUsername" class="form-control" placeholder="Логин" required>
+                                <input type="text" id="loginUsername" class="form-control" placeholder="Логин" aria-label="Логин" required>
                             </div>
                             <div class="mb-3">
-                                <input type="password" id="loginPassword" class="form-control" placeholder="Пароль" required>
+                                <input type="password" id="loginPassword" class="form-control" placeholder="Пароль" aria-label="Пароль" required>
                             </div>
                             <button type="submit" class="btn btn-primary w-100">Войти</button>
                         </form>
@@ -49,10 +57,10 @@
                         <div class="card-body">
                             <form id="adminCreateUserForm">
                                 <div class="mb-3">
-                                    <input type="text" id="newUsername" class="form-control" placeholder="Новый логин" required>
+                                        <input type="text" id="newUsername" class="form-control" placeholder="Новый логин" aria-label="Новый логин" required>
                                 </div>
                                 <div class="mb-3">
-                                    <input type="password" id="newPassword" class="form-control" placeholder="Пароль" required>
+                                        <input type="password" id="newPassword" class="form-control" placeholder="Пароль" aria-label="Пароль" required>
                                 </div>
                                 <div class="form-check mb-3">
                                     <input class="form-check-input" type="checkbox" id="isAdminCheck">
@@ -88,12 +96,13 @@
                 <div class="col-md-6 text-center">
                     <h1 class="display-5">Добро пожаловать!</h1>
                     <p class="lead">Вы вошли как обычный пользователь. У вас нет доступа к управлению другими аккаунтами.</p>
+                    <a href="/portfolio" class="btn btn-primary btn-lg mt-2">Перейти в портфель →</a>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="modal fade" id="statusModal" tabindex="-1" aria-hidden="true">
+    <div class="modal fade" id="statusModal" tabindex="-1" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="statusModalTitle" aria-describedby="statusModalMessage">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content text-center">
                 <div class="modal-header d-flex justify-content-center border-0 pt-4" id="modalHeaderBg">
@@ -104,20 +113,20 @@
                     <p id="statusModalMessage" class="text-muted mb-0 px-3"></p>
                 </div>
                 <div class="modal-footer justify-content-center border-0 pb-4">
-                    <button type="button" class="btn btn-secondary px-4 btn-sm" data-bs-dismiss="modal">Ок</button>
+                    <button type="button" class="btn btn-secondary px-4 btn-sm" data-bs-dismiss="modal" aria-label="Закрыть сообщение">Ок</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="modal fade" id="confirmDeleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal fade" id="confirmDeleteModal" tabindex="-1" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="confirmDeleteTitle" aria-describedby="confirmDeleteMessage">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content text-center">
                 <div class="modal-header d-flex justify-content-center border-0 pt-4">
                     <div class="text-white bg-danger" style="width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 28px;">✕</div>
                 </div>
                 <div class="modal-body py-2">
-                    <h4 class="text-danger mb-2">Удаление</h4>
+                    <h4 id="confirmDeleteTitle" class="text-danger mb-2">Удаление</h4>
                     <p id="confirmDeleteMessage" class="text-muted mb-0 px-3"></p>
                 </div>
                 <div class="modal-footer justify-content-center border-0 pb-4">
@@ -128,155 +137,7 @@
         </div>
     </div>
 
-    <script>
-        let currentUser = null;
-        let bsModal = null;
-        let delModal = null;
-
-        function showSystemMessage(msg, isError = false) {
-            const icon = document.getElementById('modalIconContainer');
-            const title = document.getElementById('statusModalTitle');
-            icon.className = isError ? "text-white bg-danger" : "text-white bg-success";
-            icon.innerText = isError ? "✕" : "✓";
-            title.innerText = isError ? "Ошибка!" : "Успешно!";
-            title.className = isError ? "text-danger mb-2" : "text-success mb-2";
-            document.getElementById('statusModalMessage').innerText = msg;
-
-            if (!bsModal) bsModal = new bootstrap.Modal(document.getElementById('statusModal'));
-            bsModal.show();
-        }
-
-        function askDeleteConfirmation(msg, callback) {
-            document.getElementById('confirmDeleteMessage').innerText = msg;
-            if (!delModal) delModal = new bootstrap.Modal(document.getElementById('confirmDeleteModal'));
-
-            const submitBtn = document.getElementById('confirmDeleteSubmitBtn');
-            const newSubmitBtn = submitBtn.cloneNode(true);
-            submitBtn.parentNode.replaceChild(newSubmitBtn, submitBtn);
-
-            newSubmitBtn.addEventListener('click', () => {
-                delModal.hide();
-                callback();
-            });
-            delModal.show();
-        }
-
-        async function initApp() {
-            const response = await fetch('/api/init');
-            const data = await response.json();
-            document.getElementById('global-visits').innerText = data.visits;
-
-            if (data.is_authenticated) {
-                currentUser = data.current_user;
-                showAuthorizedUI();
-            } else {
-                showLoginUI();
-            }
-        }
-
-        function showLoginUI() {
-            document.getElementById('login-container').classList.remove('d-none');
-            document.getElementById('auth-status-block').classList.add('d-none');
-            document.getElementById('authorized-content').classList.add('d-none');
-        }
-
-        function showAuthorizedUI() {
-            document.getElementById('login-container').classList.add('d-none');
-            document.getElementById('auth-status-block').classList.remove('d-none');
-            document.getElementById('navbar-username').innerText = currentUser.username;
-            document.getElementById('authorized-content').classList.remove('d-none');
-
-            if (currentUser.is_admin) {
-                document.getElementById('admin-panel').classList.remove('d-none');
-                document.getElementById('regular-user-msg').classList.add('d-none');
-                loadUsersList();
-            } else {
-                document.getElementById('admin-panel').classList.add('d-none');
-                document.getElementById('regular-user-msg').classList.remove('d-none');
-            }
-        }
-
-        document.getElementById('uiLoginForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const username = document.getElementById('loginUsername').value;
-            const password = document.getElementById('loginPassword').value;
-
-            const response = await fetch('/api/auth/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password })
-            });
-            const data = await response.json();
-
-            if (response.ok && data.status === 'success') {
-                currentUser = data.user;
-                showAuthorizedUI();
-            } else {
-                showSystemMessage(data.message, true);
-            }
-        });
-
-        async function handleLogout() {
-            await fetch('/api/auth/logout', { method: 'POST' });
-            currentUser = null;
-            showLoginUI();
-        }
-
-        async function loadUsersList() {
-            const response = await fetch('/api/admin/users');
-            if (!response.ok) return;
-            const users = await response.json();
-            const tbody = document.getElementById('admin-users-table');
-            tbody.innerHTML = '';
-
-            users.forEach(u => {
-                const isSelf = u.id === currentUser.id;
-                tbody.innerHTML += `
-                    <tr>
-                        <td>${u.id}</td>
-                        <td><b>${u.username}</b></td>
-                        <td><span class="badge ${u.is_admin ? 'bg-danger' : 'bg-secondary'}">${u.is_admin ? 'Админ' : 'Юзер'}</span></td>
-                        <td>
-                            ${isSelf ? '—' : `<button class="btn btn-sm btn-outline-danger" onclick="deleteUserTrigger(${u.id}, '${u.username}')">Удалить</button>`}
-                        </td>
-                    </tr>
-                `;
-            });
-        }
-
-        document.getElementById('adminCreateUserForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const username = document.getElementById('newUsername').value;
-            const password = document.getElementById('newPassword').value;
-            const is_admin = document.getElementById('isAdminCheck').checked;
-
-            const response = await fetch('/api/admin/register', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: username, password: password, is_admin: isAdmin })
-            });
-            const data = await response.json();
-
-            if (response.ok) {
-                showSystemMessage(data.message, false);
-                document.getElementById('adminCreateUserForm').reset();
-                loadUsersList();
-            } else {
-                const errorData = await response.json();
-                showSystemMessage(errorData.message || "Ошибка при создании", "error");
-            }
-        });
-
-        function deleteUserTrigger(userId, name) {
-            askDeleteConfirmation(`Вы уверены, что хотите навсегда удалить аккаунт ${name}?`, async () => {
-                const response = await fetch(`/api/admin/delete_user/${userId}`, { method: 'DELETE' });
-                const data = await response.json();
-                showSystemMessage(data.message, false);
-                loadUsersList();
-            });
-        }
-
-        initApp();
-    </script>
+    <script src="{{ url_for('static', filename='js/common.min.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/index.min.js') }}" defer></script>
 </body>
 </html>

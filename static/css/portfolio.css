@@ -1,7 +1,7 @@
 .isin-link {
     cursor: pointer;
     text-decoration: underline;
-    color: #0d6efd;
+    color: var(--text-primary);
     font-weight: bold;
 }
 .isin-link:hover {
@@ -10,23 +10,23 @@
 /* Адаптивное скругление углов карточек интерфейса */
 .card {
     border-radius: 10px;
-    transition: background-color 0.3s ease, color 0.3s ease;
+    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+    background-color: var(--card-bg);
+    border-color: var(--card-border);
+    box-shadow: var(--shadow);
 }
-/* Плавные CSS-свойства инверсии цветов для Тёмной Темы Bootstrap 5 */
-[data-bs-theme="dark"] body {
-    background-color: #121212 !important;
-    color: #f8f9fa !important;
+body {
+    background-color: var(--body-bg);
+    color: var(--body-color);
 }
-[data-bs-theme="dark"] .card {
-    background-color: #1e1e1e !important;
-    border-color: #2d2d2d !important;
+.modal-content {
+    background-color: var(--modal-bg);
 }
-[data-bs-theme="dark"] .modal-content {
-    background-color: #1e1e1e !important;
-    color: #fff !important;
+.list-group-item {
+    background-color: var(--surface-bg);
+    color: var(--body-color);
+    border-color: var(--surface-border);
 }
-[data-bs-theme="dark"] .list-group-item {
-    background-color: #1e1e1e !important;
-    color: #fff !important;
-    border-color: #2d2d2d !important;
+[data-bs-theme="dark"] .isin-link:hover {
+    color: #9ecbff;
 }

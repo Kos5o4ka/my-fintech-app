@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(\\(Get-Item \"C:\\\\Users\\\\Kos5o4ka\\\\PycharmProjects\\\\my-fintech-app\\\\.claude\\\\worktrees\\\\gallant-dubinsky-0b6361\\\\templates\\\\portfolio.html\"\\).Length)",
+      "PowerShell($content = [System.IO.File]::ReadAllText\\(\"C:\\\\Users\\\\Kos5o4ka\\\\PycharmProjects\\\\my-fintech-app\\\\.claude\\\\worktrees\\\\gallant-dubinsky-0b6361\\\\templates\\\\portfolio.html\", [System.Text.Encoding]::UTF8\\); $content.Length; $content[-200..-1] -join '')",
+      "WebFetch(domain:raw.githubusercontent.com)"
+    ]
+  }
+}

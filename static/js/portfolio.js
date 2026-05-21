@@ -3,82 +3,38 @@ let marketChartInstance = null;
 let infoModal = null;
 let confirmModal = null;
 let chartModal = null;
-
-// Глобальные массивы хранения полной истории MOEX в памяти сессии браузера
-let globalLabels = [];
-let globalPrices = [];
-let globalNkd = [];
-let globalYtm = [];
+let currentBondIsin = null;
+let currentBondLabels = [];
+let currentBondPrices = [];
+let currentBondNkd = [];
+let currentBondYtm = [];
 
 document.getElementById('bondDate').value = new Date().toISOString().split('T')[0];
 
-function toggleTheme() {
-    const html = document.documentElement;
-    const currentTheme = html.getAttribute('data-bs-theme');
-    html.setAttribute('data-bs-theme', currentTheme === 'dark' ? 'light' : 'dark');
-}
-
-function showSystemMessage(msg, isError = false) {
-    const icon = document.getElementById('modalIconContainer');
-    const title = document.getElementById('statusModalTitle');
-    icon.className = isError ? "text-white bg-danger" : "text-white bg-success";
-    icon.innerText = isError ? "✕" : "✓";
-    title.innerText = isError ? "Ошибка!" : "Успешно!";
-    title.className = isError ? "text-danger mb-2" : "text-success mb-2";
-    document.getElementById('statusModalMessage').innerText = msg;
-    if (!infoModal) infoModal = new bootstrap.Modal(document.getElementById('statusModal'));
-    infoModal.show();
-}
-
-function askConfirmation(msg, callback) {
-    document.getElementById('confirmModalMessage').innerText = msg;
-    if (!confirmModal) confirmModal = new bootstrap.Modal(document.getElementById('confirmModal'));
-    const submitBtn = document.getElementById('confirmModalSubmitBtn');
-    const newSubmitBtn = submitBtn.cloneNode(true);
-    submitBtn.parentNode.replaceChild(newSubmitBtn, submitBtn);
-    newSubmitBtn.addEventListener('click', () => { confirmModal.hide(); callback(); });
-    confirmModal.show();
-}
-
 async function openBondChart(isin) {
+    currentBondIsin = isin;
     document.getElementById('chartModalIsinTitle').innerText = isin;
     if (!chartModal) chartModal = new bootstrap.Modal(document.getElementById('bondChartModal'));
     chartModal.show();
 
-    // Загружаем ВСЮ пагинированную историю с бэкенда ОДНИМ запросом
-    const response = await fetch(`/api/bond_chart/${isin}`);
-    if (!response.ok) return;
-    const resData = await response.json();
-
-    globalLabels = resData.labels;
-    globalPrices = resData.data;
-    globalNkd = resData.nkd;
-    globalYtm = resData.ytm;
-
-    // Сбрасываем кнопки на интервал по умолчанию (Месяц)
+    await loadBondChartData('month');
     const buttons = document.querySelectorAll('#periodBtnGroup .btn');
     buttons.forEach(btn => btn.classList.remove('active'));
-    document.querySelector('#periodBtnGroup [data-period="month"]').classList.add('active');
-
-    applyChartScale('month');
+    const defaultBtn = document.querySelector('#periodBtnGroup [data-period="month"]');
+    if (defaultBtn) defaultBtn.classList.add('active');
 }
 
-function applyChartScale(period) {
-    if (event && event.target && event.target.classList.contains('btn')) {
-        const buttons = document.querySelectorAll('#periodBtnGroup .btn');
-        buttons.forEach(btn => btn.classList.remove('active'));
-        event.target.classList.add('active');
-    }
+async function loadBondChartData(period) {
+    if (!currentBondIsin) return;
 
-    const totalPoints = globalLabels.length;
-    if (totalPoints === 0) return;
+    const response = await fetch(`/api/bond_chart/${currentBondIsin}?range=${period}`);
+    if (!response.ok) return;
 
-    // Вычисляем левую видимую границу X-окна. Сами данные остаются в памяти для перетаскивания (Pan)
-    let minIndex = 0;
-    if (period === 'day') minIndex = Math.max(0, totalPoints - 2);
-    else if (period === 'week') minIndex = Math.max(0, totalPoints - 7);
-    else if (period === 'month') minIndex = Math.max(0, totalPoints - 30);
-    else if (period === 'year') minIndex = Math.max(0, totalPoints - 252); // ~252 рабочих сессии в году
+    const resData = await response.json();
+    currentBondLabels = resData.labels || [];
+    currentBondPrices = resData.data || [];
+    currentBondNkd = resData.nkd || [];
+    currentBondYtm = resData.ytm || [];
 
     const ctx = document.getElementById('marketBondChart').getContext('2d');
     if (marketChartInstance) marketChartInstance.destroy();
@@ -86,30 +42,21 @@ function applyChartScale(period) {
     marketChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
-            labels: globalLabels,
+            labels: currentBondLabels,
             datasets: [{
                 label: 'Рыночная стоимость (₽)',
-                data: globalPrices,
+                data: currentBondPrices,
                 borderColor: '#0d6efd',
                 backgroundColor: 'rgba(13, 110, 253, 0.04)',
                 borderWidth: 2,
                 fill: true,
-                // Для "Всё время" отключаем кружки на точках ради колоссального прироста производительности
                 pointRadius: period === 'all' ? 0 : (period === 'day' || period === 'week' ? 5 : 2)
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            scales: {
-                x: {
-                    // Умное масштабирование окна: загружено всё, но фокус на выбранном периоде!
-                    min: period === 'all' ? globalLabels[0] : globalLabels[minIndex],
-                    max: globalLabels[totalPoints - 1]
-                }
-            },
             plugins: {
-                // КАСТОМНЫЙ ТУЛТИП: выводим одновременно Цену, НКД и YTM на выбранную дату
                 tooltip: {
                     callbacks: {
                         label: function(context) {
@@ -117,11 +64,10 @@ function applyChartScale(period) {
                         },
                         footer: function(tooltipItems) {
                             const dataIndex = tooltipItems[0].dataIndex;
-                            return `НКД на дату: ${globalNkd[dataIndex]} ₽\nДоходность YTM: ${globalYtm[dataIndex]} %`;
+                            return `НКД на дату: ${currentBondNkd[dataIndex]} ₽\nДоходность YTM: ${currentBondYtm[dataIndex]} %`;
                         }
                     }
                 },
-                // Инициализация свободного перетаскивания (зажатая кнопка мыши) и скролла зума
                 zoom: {
                     pan: { enabled: true, mode: 'x' },
                     zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
@@ -129,6 +75,16 @@ function applyChartScale(period) {
             }
         }
     });
+}
+
+function applyChartScale(period, ev) {
+    if (ev && ev.target && ev.target.classList.contains('btn')) {
+        const buttons = document.querySelectorAll('#periodBtnGroup .btn');
+        buttons.forEach(btn => btn.classList.remove('active'));
+        ev.target.classList.add('active');
+    }
+
+    loadBondChartData(period);
 }
 
 async function loadDashboard() {
@@ -147,11 +103,12 @@ async function fetchCouponCalendar() {
         list.innerHTML = '<li class="list-group-item text-center text-muted py-3">Нет предстоящих купонов.</li>';
         return;
     }
+    const esc = window.Common.escapeHtml;
     events.forEach(e => {
         list.innerHTML += `
             <li class="list-group-item d-flex justify-content-between align-items-center">
-                <div><b>${e.name}</b><br><small class="text-muted">${e.date}</small></div>
-                <span class="badge bg-success font-monospace">+ ${e.total_payout} ₽</span>
+                <div><b>${esc(e.name)}</b><br><small class="text-muted">${esc(e.date)}</small></div>
+                <span class="badge bg-success font-monospace">+ ${parseFloat(e.total_payout).toFixed(2)} ₽</span>
             </li>`;
     });
 }
@@ -170,14 +127,22 @@ async function fetchActivePortfolio() {
         return;
     }
 
+    const esc = window.Common.escapeHtml;
     data.bonds.forEach(bond => {
         tbody.innerHTML += `
             <tr>
-                <td><b>${bond.name}</b></td> <td><b class="isin-link" onclick="openBondChart('${bond.isin}')">${bond.isin}</b></td> <td>${bond.amount} шт.</td>
+                <td><b>${esc(bond.name)}</b></td>
+                <td><b class="isin-link" onclick="openBondChart(this.dataset.isin)" data-isin="${esc(bond.isin)}">${esc(bond.isin)}</b></td>
+                <td>${bond.amount} шт.</td>
                 <td>${bond.buy_price.toFixed(2)} ₽</td>
                 <td class="text-primary"><b>${bond.nkd.toFixed(2)} ₽</b></td>
                 <td class="text-info"><b>${bond.ytm.toFixed(2)} %</b></td>
-                <td><button onclick="sellTrigger(${bond.id}, '${bond.name}')" class="btn btn-sm btn-outline-success">Продать</button></td>
+                <td><button
+                    onclick="sellTrigger(parseInt(this.dataset.id), this.dataset.name, parseFloat(this.dataset.price))"
+                    data-id="${bond.id}"
+                    data-name="${esc(bond.name)}"
+                    data-price="${bond.last_price || bond.buy_price}"
+                    class="btn btn-sm btn-outline-success">Продать</button></td>
             </tr>`;
     });
 }
@@ -189,7 +154,7 @@ document.getElementById('addBondForm').addEventListener('submit', async (e) => {
     const buy_price = document.getElementById('bondBuyPrice').value;
     const purchase_date = document.getElementById('bondDate').value;
 
-    const response = await fetch('/api/add_bond', {
+    const response = await window.Common.csrfFetch('/api/add_bond', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isin, amount, buy_price, purchase_date })
@@ -197,27 +162,30 @@ document.getElementById('addBondForm').addEventListener('submit', async (e) => {
     const data = await response.json();
 
     if (response.ok && data.status === "success") {
-        showSystemMessage(data.message, false);
+        window.Common.showSystemMessage(data.message, false);
         document.getElementById('addBondForm').reset();
         document.getElementById('bondDate').value = new Date().toISOString().split('T')[0];
         await loadDashboard();
     } else {
-        // Ошибка: Показываем модалку, но инпуты формы НЕ СБРАСЫВАЕМ
-        showSystemMessage(data.message, true);
+        window.Common.showSystemMessage(data.message, true);
     }
 });
 
-function sellTrigger(bondId, name) {
-    askConfirmation(`Вы действительно хотите зафиксировать продажу облигации ${name} и перевести её в архив сделок?`, async () => {
-        const response = await fetch(`/api/sell_bond/${bondId}`, { method: 'POST' });
+function sellTrigger(bondId, name, sellPrice) {
+    window.Common.askConfirmation(`Вы действительно хотите зафиксировать продажу облигации ${name} и перевести её в архив сделок?`, async () => {
+        const response = await window.Common.csrfFetch(`/api/sell_bond/${bondId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sell_price: sellPrice })
+        });
         const data = await response.json();
-        if (response.ok) { showSystemMessage(data.message, false); await loadDashboard(); }
-        else { showSystemMessage(data.message, true); }
+        if (response.ok) { window.Common.showSystemMessage(data.message, false); await loadDashboard(); }
+        else { window.Common.showSystemMessage(data.message, true); }
     });
 }
 
 async function handleLogout() {
-    await fetch('/api/auth/logout', { method: 'POST' });
+    await window.Common.csrfFetch('/api/auth/logout', { method: 'POST' });
     window.location.href = '/';
 }
 

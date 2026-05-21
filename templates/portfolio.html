@@ -2,23 +2,27 @@
 <html lang="ru" data-bs-theme="light">
 <head>
     <meta charset="UTF-8">
-    <title>Личный кабинет — Мой Портфель</title>
+    <script>(function(){var t=localStorage.getItem('portfolioTheme');if(t==='dark')document.documentElement.setAttribute('data-bs-theme','dark');})()</script>
+    <title>Мой Портфель | InvestTrack</title>
+    <meta name="description" content="Инвестиционный портфель облигаций — аналитика и управление позициями">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js" defer></script>
 
-    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
-
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/portfolio.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/variables.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/portfolio.min.css') }}">
 </head>
-<body class="bg-light">
+<body>
 
     <nav class="navbar navbar-dark bg-dark mb-4">
         <div class="container">
             <span class="navbar-brand mb-0 h1">Инвест-Трекер — Профессиональная Аналитика</span>
             <div class="d-flex align-items-center">
-                <button class="btn btn-outline-light btn-sm me-3" onclick="toggleTheme()">🌓 Тема</button>
+                <button class="btn btn-outline-light btn-sm me-3" onclick="window.Common.toggleTheme()" aria-label="Переключить тему">🌓 Тема</button>
                 <a href="/api/portfolio/export" class="btn btn-outline-warning btn-sm me-3">📥 Экспорт CSV</a>
                 <a href="/" class="btn btn-outline-info btn-sm me-3">Главная</a>
                 <button onclick="handleLogout()" class="btn btn-danger btn-sm">Выйти</button>
@@ -95,17 +99,17 @@
     <div class="modal fade" id="bondChartModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-lg">
             <div class="modal-content">
-                <div class="modal-header bg-dark text-white">
-                    <h5 class="modal-title">История изменения цены: <span id="chartModalIsinTitle"></span></h5>
+                <div class="modal-header bg-dark text-white" role="dialog" aria-modal="true" aria-labelledby="bondChartModalTitle">
+                    <h5 id="bondChartModalTitle" class="modal-title">История изменения цены: <span id="chartModalIsinTitle"></span></h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <div class="d-flex justify-content-center btn-group mb-3" id="periodBtnGroup" role="group">
-                        <button type="button" class="btn btn-outline-dark btn-sm" onclick="applyChartScale('day')">День</button>
-                        <button type="button" class="btn btn-outline-dark btn-sm" onclick="applyChartScale('week')">Неделя</button>
-                        <button type="button" class="btn btn-outline-dark btn-sm active" data-period="month" onclick="applyChartScale('month')">Месяц</button>
-                        <button type="button" class="btn btn-outline-dark btn-sm" onclick="applyChartScale('year')">Год</button>
-                        <button type="button" class="btn btn-outline-dark btn-sm" onclick="applyChartScale('all')">Всё время</button>
+                        <button type="button" class="btn btn-outline-dark btn-sm" onclick="applyChartScale('day', event)">День</button>
+                        <button type="button" class="btn btn-outline-dark btn-sm" onclick="applyChartScale('week', event)">Неделя</button>
+                        <button type="button" class="btn btn-outline-dark btn-sm active" data-period="month" onclick="applyChartScale('month', event)">Месяц</button>
+                        <button type="button" class="btn btn-outline-dark btn-sm" onclick="applyChartScale('year', event)">Год</button>
+                        <button type="button" class="btn btn-outline-dark btn-sm" onclick="applyChartScale('all', event)">Всё время</button>
                     </div>
                     <div class="text-center text-muted small mb-2">🖱️ Зажми левую кнопку мыши для перемещения по истории. Колесико — зум цены.</div>
                     <div style="position: relative; height: 380px;">
@@ -116,4 +120,42 @@
         </div>
     </div>
 
-    <div class="modal fade" id="statusModal" tabindex="-1" aria-hidden="true"><div class
+    <div class="modal fade" id="statusModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content text-center">
+                <div class="modal-header d-flex justify-content-center border-0 pt-4" role="dialog" aria-modal="true" aria-labelledby="statusModalTitle" aria-describedby="statusModalMessage">
+                    <div id="modalIconContainer" style="width:60px;height:60px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:28px;" class="text-white"></div>
+                </div>
+                <div class="modal-body py-3">
+                    <h4 class="mb-2" id="statusModalTitle"></h4>
+                    <p id="statusModalMessage" class="text-muted mb-0 px-3"></p>
+                </div>
+                <div class="modal-footer justify-content-center border-0 pb-4">
+                    <button type="button" class="btn btn-secondary px-4 btn-sm" data-bs-dismiss="modal">Ок</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="confirmModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content text-center">
+                <div class="modal-header d-flex justify-content-center border-0 pt-4">
+                    <div class="text-white bg-warning" style="width:60px;height:60px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:28px;">?</div>
+                </div>
+                <div class="modal-body py-2">
+                    <h4 id="confirmModalTitle" class="mb-2">Подтверждение</h4>
+                    <p id="confirmModalMessage" class="text-muted mb-0 px-3"></p>
+                </div>
+                <div class="modal-footer justify-content-center border-0 pb-4">
+                    <button type="button" class="btn btn-light btn-sm px-3 me-2" data-bs-dismiss="modal">Отмена</button>
+                    <button type="button" id="confirmModalSubmitBtn" class="btn btn-success btn-sm px-4">Подтвердить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/common.min.js') }}" defer></script>
+    <script src="{{ url_for('static', filename='js/portfolio.min.js') }}" defer></script>
+</body>
+</html>
