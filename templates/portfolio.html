@@ -700,14 +700,17 @@
           <input type="number" id="sellPriceInput" class="form-control form-control-sm"
                  step="0.01" min="0" required>
         </div>
-        <div>
+        <div class="mb-3">
           <label class="form-label small fw-semibold">
             Комиссия брокера (₽)
             <span style="color:var(--text-tertiary);font-weight:400">— необязательно</span>
           </label>
           <input type="number" id="sellCommissionInput" class="form-control form-control-sm"
                  step="0.01" min="0" placeholder="0.00">
-          <div class="form-text small">Вычитается из P&amp;L в истории сделок</div>
+        </div>
+        <div style="background:var(--surface-1);border-radius:var(--radius-sm);padding:.75rem 1rem;text-align:center">
+          <div style="font-size:.72rem;font-weight:600;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.3rem">P&amp;L прогноз</div>
+          <div id="sellPnlPreview" style="font-size:1.15rem;font-weight:800;font-variant-numeric:tabular-nums;transition:color var(--dur-base)">—</div>
         </div>
       </div>
       <div class="modal-footer border-0 pt-0 gap-2">

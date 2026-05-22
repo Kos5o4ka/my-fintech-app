@@ -119,6 +119,20 @@ window.Common = (function(){
         toast.addEventListener('hidden.bs.toast', () => toast.remove());
     }
 
+    function countUp(el, end, {decimals = 0, suffix = '', prefix = '', duration = 650} = {}) {
+        if (!el) return;
+        const fmt = v => prefix + v.toLocaleString('ru-RU', {minimumFractionDigits: decimals, maximumFractionDigits: decimals}) + suffix;
+        const startTime = performance.now();
+        function step(now) {
+            const p = Math.min((now - startTime) / duration, 1);
+            const ease = p === 1 ? 1 : 1 - Math.pow(2, -10 * p);
+            el.textContent = fmt(end * ease);
+            if (p < 1) requestAnimationFrame(step);
+            else el.textContent = fmt(end);
+        }
+        requestAnimationFrame(step);
+    }
+
     async function handleLogout() {
         await csrfFetch('/api/auth/logout', { method: 'POST' });
         window.location.href = '/';
@@ -126,5 +140,5 @@ window.Common = (function(){
 
     initTheme();
 
-    return { showSystemMessage, askConfirmation, csrfFetch, escapeHtml, setTheme, initTheme, toggleTheme, showToast, handleLogout };
+    return { showSystemMessage, askConfirmation, csrfFetch, escapeHtml, setTheme, initTheme, toggleTheme, showToast, handleLogout, countUp };
 })();

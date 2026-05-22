@@ -221,14 +221,19 @@ async function loadDashboard() {
         ]);
 
         const bonds = portfolio.bonds || [];
+        const cu = window.Common.countUp;
 
         // Total value
-        document.getElementById('d-total-value').textContent = fmt(portfolio.total_value);
+        cu(document.getElementById('d-total-value'), portfolio.total_value || 0, {decimals: 2});
         document.getElementById('d-count-delta').textContent = bonds.length + ' позиций';
 
         // YTM
         const ytmEl = document.getElementById('d-ytm');
-        ytmEl.textContent = portfolio.portfolio_ytm ? portfolio.portfolio_ytm.toFixed(2) + ' %' : '—';
+        if (portfolio.portfolio_ytm) {
+            cu(ytmEl, portfolio.portfolio_ytm, {decimals: 2, suffix: ' %'});
+        } else {
+            ytmEl.textContent = '—';
+        }
 
         // Count
         document.getElementById('d-count').textContent = bonds.length;
@@ -238,13 +243,14 @@ async function loadDashboard() {
         const realized   = (history.trades || []).reduce((s, t) => s + (t.pnl || 0), 0);
         const totalPnl   = unrealized + realized;
         const pnlEl = document.getElementById('d-total-pnl');
-        pnlEl.textContent = sign(totalPnl) + fmt(totalPnl) + ' ₽';
+        const pnlSign = totalPnl >= 0 ? '+' : '';
         pnlEl.style.color = totalPnl >= 0 ? 'var(--text-success)' : 'var(--text-danger)';
+        cu(pnlEl, Math.abs(totalPnl), {decimals: 2, prefix: pnlSign + (totalPnl < 0 ? '−' : ''), suffix: ' ₽'});
 
         // Income
-        document.getElementById('d-income30').textContent  = fmt(income['30d']);
-        document.getElementById('d-income90').textContent  = fmt(income['90d']) + ' ₽';
-        document.getElementById('d-income365').textContent = fmt(income['365d']) + ' ₽';
+        cu(document.getElementById('d-income30'), income['30d'] || 0, {decimals: 2});
+        cu(document.getElementById('d-income90'), income['90d'] || 0, {decimals: 2, suffix: ' ₽'});
+        cu(document.getElementById('d-income365'), income['365d'] || 0, {decimals: 2, suffix: ' ₽'});
 
         // Best / Worst
         if (bonds.length) {

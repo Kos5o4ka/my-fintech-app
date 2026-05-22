@@ -226,10 +226,12 @@ function renderBondRows() {
                     <small>${sign}${pnlPct.toFixed(2)}%</small>
                 </td>
                 <td><button
-                    onclick="sellTrigger(parseInt(this.dataset.id), this.dataset.name, parseFloat(this.dataset.price))"
+                    onclick="sellTrigger(parseInt(this.dataset.id), this.dataset.name, parseFloat(this.dataset.price), parseFloat(this.dataset.buyPrice), parseInt(this.dataset.amount))"
                     data-id="${bond.id}"
                     data-name="${esc(bond.name)}"
                     data-price="${bond.last_price || bond.buy_price}"
+                    data-buy-price="${bond.buy_price}"
+                    data-amount="${bond.amount}"
                     class="btn btn-sm btn-outline-success">Продать</button></td>
             </tr>`;
     });
@@ -520,13 +522,30 @@ function showIncome(period, btn) {
 }
 
 // ── Sell modal ────────────────────────────────────────────────────────────────
-function sellTrigger(bondId, name, sellPrice) {
-    const nameEl = document.getElementById('sellModalBondName');
+function sellTrigger(bondId, name, sellPrice, buyPrice, amount) {
+    const nameEl  = document.getElementById('sellModalBondName');
     const priceEl = document.getElementById('sellPriceInput');
     const commEl  = document.getElementById('sellCommissionInput');
-    if (nameEl) nameEl.textContent = name;
+    if (nameEl)  nameEl.textContent = name;
     if (priceEl) priceEl.value = sellPrice.toFixed(2);
     if (commEl)  commEl.value = '';
+
+    function updatePnlPreview() {
+        const sp = parseFloat(priceEl?.value) || 0;
+        const comm = parseFloat(commEl?.value) || 0;
+        const qty = amount || 1;
+        const pnl = (sp - (buyPrice || sp)) * qty - comm;
+        const pct = buyPrice ? ((sp - buyPrice) / buyPrice * 100) : 0;
+        const el = document.getElementById('sellPnlPreview');
+        if (!el) return;
+        const sign = pnl >= 0 ? '+' : '';
+        el.textContent = `${sign}${pnl.toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})} ₽ (${sign}${pct.toFixed(2)}%)`;
+        el.style.color = pnl >= 0 ? 'var(--text-success)' : 'var(--text-danger)';
+    }
+
+    priceEl?.addEventListener('input', updatePnlPreview);
+    commEl?.addEventListener('input', updatePnlPreview);
+    updatePnlPreview();
 
     if (!sellModal) sellModal = new bootstrap.Modal(document.getElementById('sellModal'));
 
