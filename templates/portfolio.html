@@ -183,6 +183,55 @@
 .pf-table tbody tr:hover { background: rgba(var(--accent-rgb),.04); }
 .pf-table tbody td { padding: .7rem .85rem; vertical-align: middle; color: var(--text-primary); }
 
+/* ── Mobile card-view ────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  .pf-table-wrap { overflow-x: visible; }
+  .pf-table thead { display: none; }
+  .pf-table, .pf-table tbody { display: block; }
+  .pf-table tbody tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: .1rem .5rem;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border) !important;
+    border-radius: var(--radius);
+    padding: .85rem 1rem;
+    margin-bottom: .6rem;
+  }
+  .pf-table tbody tr:hover { background: var(--card-bg); }
+  .pf-table tbody td {
+    display: flex;
+    flex-direction: column;
+    padding: .25rem 0;
+    border: none;
+    font-size: .82rem;
+  }
+  .pf-table tbody td::before {
+    content: attr(data-label);
+    font-size: .64rem;
+    font-weight: 700;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    margin-bottom: .1rem;
+  }
+  .pf-table tbody td:first-child {
+    grid-column: 1 / -1;
+    padding-bottom: .4rem;
+    border-bottom: 1px solid var(--border-subtle);
+    margin-bottom: .2rem;
+  }
+  .pf-table tbody td:last-child {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    align-items: center;
+    padding-top: .4rem;
+    border-top: 1px solid var(--border-subtle);
+    margin-top: .2rem;
+  }
+  .pf-table tbody td:last-child::before { display: none; }
+}
+
 /* ── Drawer (Add Bond) ───────────────────────────────────────────── */
 .drawer-overlay {
   position: fixed;

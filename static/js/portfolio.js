@@ -213,15 +213,15 @@ function renderBondRows() {
         const sign = pnl >= 0 ? '+' : '';
 
         tbody.innerHTML += `
-            <tr>
-                <td><b>${esc(bond.name)}</b></td>
-                <td><b class="isin-link" onclick="openBondChart(this.dataset.isin)"
+            <tr data-name="${esc(bond.name)}" data-isin="${esc(bond.isin)}">
+                <td data-label="Название"><b>${esc(bond.name)}</b></td>
+                <td data-label="ISIN"><b class="isin-link" onclick="openBondChart(this.dataset.isin)"
                         data-isin="${esc(bond.isin)}">${esc(bond.isin)}</b></td>
-                <td>${bond.amount} шт.</td>
-                <td>${bond.buy_price.toFixed(2)} ₽</td>
-                <td class="text-primary"><b>${(bond.nkd || 0).toFixed(2)} ₽</b></td>
-                <td class="text-info"><b>${(bond.ytm || 0).toFixed(2)} %</b></td>
-                <td class="${pnlClass}" title="Нереализованная прибыль/убыток">
+                <td data-label="Кол-во">${bond.amount} шт.</td>
+                <td data-label="Цена покупки">${bond.buy_price.toFixed(2)} ₽</td>
+                <td data-label="НКД" class="text-primary"><b>${(bond.nkd || 0).toFixed(2)} ₽</b></td>
+                <td data-label="YTM" class="text-info"><b>${(bond.ytm || 0).toFixed(2)} %</b></td>
+                <td data-label="P&L" class="${pnlClass}" title="Нереализованная прибыль/убыток">
                     <b>${sign}${pnl.toFixed(2)} ₽</b><br>
                     <small>${sign}${pnlPct.toFixed(2)}%</small>
                 </td>
@@ -232,7 +232,7 @@ function renderBondRows() {
                     data-price="${bond.last_price || bond.buy_price}"
                     data-buy-price="${bond.buy_price}"
                     data-amount="${bond.amount}"
-                    class="btn btn-sm btn-outline-success">Продать</button></td>
+                    class="btn btn-sm btn-outline-success w-100">Продать</button></td>
             </tr>`;
     });
 }
