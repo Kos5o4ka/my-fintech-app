@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Мой Портфель | InvestTrack{% endblock %}
+{% block title %}Портфель | InvestTrack{% endblock %}
 {% block description %}Инвестиционный портфель облигаций — аналитика и управление позициями{% endblock %}
 
 {% block head_extra %}
@@ -8,385 +8,752 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js" defer></script>
-{% endblock %}
+<style>
+/* ── Page layout ─────────────────────────────────────────────────── */
+.pf-wrap { padding: 1.5rem 1.75rem 2.5rem; }
 
-{% block navbar_extra %}
-<a href="/api/portfolio/export" class="btn btn-outline-warning btn-sm">📥 CSV</a>
-<a href="/api/portfolio/export/xlsx" class="btn btn-outline-success btn-sm">📊 Excel</a>
+.pf-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+
+.pf-title { font-size: 1.15rem; font-weight: 700; letter-spacing: -.02em; margin: 0; }
+.pf-title small { font-size: .78rem; font-weight: 400; color: var(--text-tertiary); display: block; margin-top: .1rem; }
+
+.pf-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+
+/* ── Stats strip ─────────────────────────────────────────────────── */
+.pf-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+@media(max-width:900px){ .pf-stats { grid-template-columns: repeat(2,1fr); } }
+@media(max-width:480px){ .pf-stats { grid-template-columns: 1fr 1fr; gap:.65rem; } }
+
+.pf-stat {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  padding: .9rem 1.1rem;
+  box-shadow: var(--shadow-xs);
+}
+.pf-stat-label { font-size: .65rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: .25rem; }
+.pf-stat-value { font-size: 1.35rem; font-weight: 800; letter-spacing: -.025em; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.pf-stat-sub   { font-size: .72rem; color: var(--text-tertiary); margin-top: .2rem; }
+
+/* ── Income period tabs (inline underline style) ─────────────────── */
+.income-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border-subtle); margin-bottom: .5rem; }
+.income-tab {
+  padding: .4rem .75rem;
+  font-size: .78rem;
+  font-weight: 600;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color var(--dur-fast), border-color var(--dur-fast);
+}
+.income-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.income-tab:hover:not(.active) { color: var(--text-primary); }
+
+/* ── Charts row ──────────────────────────────────────────────────── */
+.pf-charts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+@media(max-width:700px){ .pf-charts { grid-template-columns: 1fr; } }
+
+/* ── Tab bar (portfolio tabs) ────────────────────────────────────── */
+.pf-tab-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.pf-tab-bar::-webkit-scrollbar { display: none; }
+
+.pf-tab {
+  padding: .65rem 1.1rem;
+  font-size: .82rem;
+  font-weight: 600;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  white-space: nowrap;
+  transition: color var(--dur-fast), border-color var(--dur-fast);
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+}
+.pf-tab.active { color: var(--text-primary); border-bottom-color: var(--accent); }
+.pf-tab:hover:not(.active) { color: var(--text-primary); }
+.pf-tab svg { width: 13px; height: 13px; }
+
+/* ── Main card ───────────────────────────────────────────────────── */
+.pf-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+/* ── Table toolbar ───────────────────────────────────────────────── */
+.pf-toolbar {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  padding: .75rem 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
+}
+
+.pf-search-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 160px;
+}
+.pf-search-wrap svg {
+  position: absolute;
+  left: .65rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 14px; height: 14px;
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+.pf-search {
+  width: 100%;
+  padding: .42rem .75rem .42rem 2.1rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  font-size: .83rem;
+  color: var(--text-primary);
+  outline: none;
+  font-family: inherit;
+  transition: border-color var(--dur-base), box-shadow var(--dur-base);
+}
+.pf-search:focus {
+  border-color: var(--blue-500);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb),.12);
+  background: var(--card-bg);
+}
+.pf-search::placeholder { color: var(--text-tertiary); }
+
+/* Sticky table header */
+.pf-table-wrap { overflow-x: auto; }
+.pf-table { width: 100%; border-collapse: collapse; font-size: .83rem; }
+.pf-table thead { position: sticky; top: 0; z-index: 2; }
+.pf-table thead th {
+  background: var(--surface-2);
+  backdrop-filter: blur(8px);
+  font-size: .67rem;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  padding: .6rem .85rem;
+  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
+  cursor: default;
+}
+.pf-table thead th.sortable-col { cursor: pointer; user-select: none; }
+.pf-table thead th.sortable-col:hover { color: var(--text-primary); }
+.pf-table tbody tr {
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background var(--dur-fast);
+}
+.pf-table tbody tr:last-child { border-bottom: none; }
+.pf-table tbody tr:hover { background: rgba(var(--accent-rgb),.04); }
+.pf-table tbody td { padding: .7rem .85rem; vertical-align: middle; color: var(--text-primary); }
+
+/* ── Drawer (Add Bond) ───────────────────────────────────────────── */
+.drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.45);
+  z-index: 1040;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-slow) var(--ease-base);
+  backdrop-filter: blur(2px);
+}
+.drawer-overlay.open { opacity: 1; pointer-events: all; }
+
+.drawer {
+  position: fixed;
+  top: 0; right: 0;
+  width: 400px;
+  max-width: 100vw;
+  height: 100vh;
+  background: var(--card-bg);
+  border-left: 1px solid var(--card-border);
+  z-index: 1045;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform var(--dur-slow) var(--ease-base);
+  box-shadow: var(--shadow-xl);
+}
+.drawer.open { transform: translateX(0); }
+
+.drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.1rem 1.25rem;
+  border-bottom: 1px solid var(--card-border);
+  flex-shrink: 0;
+}
+.drawer-title { font-size: .95rem; font-weight: 700; margin: 0; }
+.drawer-close {
+  width: 28px; height: 28px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: none;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-secondary);
+  transition: background var(--dur-fast), color var(--dur-fast);
+}
+.drawer-close:hover { background: var(--surface-3); color: var(--text-primary); }
+.drawer-close svg { width: 14px; height: 14px; }
+
+.drawer-body { flex: 1; overflow-y: auto; padding: 1.25rem; }
+.drawer-footer {
+  padding: 1rem 1.25rem;
+  border-top: 1px solid var(--card-border);
+  flex-shrink: 0;
+}
+
+/* ── FAB (Floating Add Button) ───────────────────────────────────── */
+.fab-add {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.75rem;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  background: linear-gradient(135deg, var(--blue-700), var(--blue-500));
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-full);
+  padding: .65rem 1.25rem .65rem .9rem;
+  font-size: .875rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(var(--accent-rgb),.4);
+  transition: all var(--dur-base) var(--ease-base);
+  z-index: 100;
+  font-family: inherit;
+}
+.fab-add:hover { box-shadow: 0 6px 28px rgba(var(--accent-rgb),.55); transform: translateY(-2px); }
+.fab-add:active { transform: scale(.97); }
+.fab-add svg { width: 16px; height: 16px; }
+
+@media(max-width:767.98px){ .fab-add { bottom: 80px; right: 1rem; } }
+
+/* ── Empty state ─────────────────────────────────────────────────── */
+.empty-state { text-align: center; padding: 3.5rem 1rem; }
+.empty-state-icon {
+  width: 52px; height: 52px;
+  border-radius: var(--radius-xl);
+  background: var(--surface-2);
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 1rem;
+}
+.empty-state-icon svg { width: 22px; height: 22px; color: var(--text-tertiary); }
+.empty-state h6 { font-weight: 600; margin-bottom: .35rem; }
+.empty-state p { font-size: .85rem; color: var(--text-tertiary); margin: 0; }
+</style>
 {% endblock %}
 
 {% block content %}
-<div class="container mb-5">
-    <div class="row">
-        <!-- ── Left sidebar ─────────────────────────────────────────── -->
-        <div class="col-md-4">
-            <!-- Portfolio value + YTM -->
-            <div class="card shadow-sm border-success mb-4 text-center">
-                <div class="card-body pb-2">
-                    <h6 class="text-muted text-uppercase small">Текущая стоимость портфеля</h6>
-                    <h2 class="text-success mb-2"><span id="total-portfolio-value">0.00</span> ₽</h2>
-                    <div class="border-top pt-2 d-flex justify-content-center gap-4">
-                        <div>
-                            <div class="text-muted" style="font-size:.65rem;text-transform:uppercase;">Средний YTM</div>
-                            <span id="portfolio-ytm" class="text-info fw-bold">—</span>
-                        </div>
-                        <div>
-                            <div class="text-muted" style="font-size:.65rem;text-transform:uppercase;">Позиций</div>
-                            <span id="portfolio-count" class="fw-bold">—</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
+<div class="pf-wrap">
 
-            <!-- Coupon income widget -->
-            <div class="card shadow-sm mb-4">
-                <div class="card-header bg-success bg-opacity-75 text-white py-2">💵 Купонный доход</div>
-                <div class="card-body text-center py-3">
-                    <div class="btn-group btn-group-sm mb-3" id="incomeGroup" role="group" aria-label="Период">
-                        <button class="btn btn-outline-secondary active" onclick="showIncome('30d',this)">30 дней</button>
-                        <button class="btn btn-outline-secondary" onclick="showIncome('90d',this)">90 дней</button>
-                        <button class="btn btn-outline-secondary" onclick="showIncome('365d',this)">1 год</button>
-                    </div>
-                    <div id="incomeValue" class="fs-4 fw-bold text-success">—</div>
-                    <small class="text-muted" id="incomeHint">загрузка…</small>
-                </div>
-            </div>
-
-            <!-- Add bond form -->
-            <div class="card shadow-sm mb-4">
-                <div class="card-header bg-dark text-white">Добавить облигацию</div>
-                <div class="card-body">
-                    <form id="addBondForm">
-                        <div class="mb-3 position-relative">
-                            <label class="form-label">Код ISIN или название бумаги</label>
-                            <input type="text" id="bondIsin" class="form-control"
-                                   placeholder="RU000A1038V6 или ОФЗ 26238"
-                                   maxlength="50" required autocomplete="off">
-                            <div id="isinDropdown" class="isin-dropdown" style="display:none;"></div>
-                            <!-- Live bond preview -->
-                            <div id="bondPreview" class="bond-preview-card" style="display:none;">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <div class="preview-name" id="previewName"></div>
-                                    <button type="button" class="btn-close btn-sm ms-2 flex-shrink-0"
-                                            onclick="hideBondPreview()" aria-label="Закрыть превью"></button>
-                                </div>
-                                <div class="preview-row">
-                                    <div>💰 Цена: <span id="previewPrice"></span></div>
-                                    <div>📈 YTM: <span id="previewYtm"></span></div>
-                                    <div>🗓 Погашение: <span id="previewMatdate"></span></div>
-                                    <div>🎫 Купон: <span id="previewCoupon"></span></div>
-                                    <div>НКД: <span id="previewNkd"></span></div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Количество (шт.)</label>
-                            <input type="number" id="bondAmount" class="form-control" placeholder="10" min="1" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Цена покупки (₽)</label>
-                            <input type="number" id="bondBuyPrice" class="form-control" placeholder="985.50" step="0.01" min="1" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Дата покупки</label>
-                            <input type="date" id="bondDate" class="form-control">
-                        </div>
-                        <button type="submit" class="btn btn-success w-100" id="addBondBtn">
-                            Добавить в портфель
-                        </button>
-                    </form>
-                </div>
-            </div>
-
-            <!-- Coupon calendar -->
-            <div class="card shadow-sm mb-4">
-                <div class="card-header bg-primary text-white font-weight-bold">📅 Предстоящие выплаты купонов</div>
-                <div class="card-body p-0">
-                    <ul class="list-group list-group-flush" id="coupon-calendar-list">
-                        <li class="list-group-item text-center text-muted py-3">Нет предстоящих купонов.</li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-
-        <!-- ── Right column ─────────────────────────────────────────── -->
-        <div class="col-md-8">
-            <!-- Charts row -->
-            <div class="row g-3 mb-4">
-                <div class="col-md-6">
-                    <div class="card shadow-sm h-100">
-                        <div class="card-header py-2 small fw-semibold">📊 Зафиксированная прибыль (₽)</div>
-                        <div class="card-body p-2" style="position:relative;height:200px;">
-                            <canvas id="profitChart"></canvas>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="card shadow-sm h-100">
-                        <div class="card-header py-2 small fw-semibold">🥧 Распределение портфеля</div>
-                        <div class="card-body p-2" style="position:relative;height:200px;">
-                            <canvas id="allocationChart"></canvas>
-                            <div id="allocationEmpty" class="position-absolute top-50 start-50 translate-middle text-muted small text-center" style="display:none;">
-                                Добавьте облигации,<br>чтобы увидеть диаграмму
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Tabs: Portfolio / History -->
-            <div class="card shadow-sm">
-                <div class="card-body pb-0">
-                    <ul class="nav nav-tabs" id="portfolioTabs" role="tablist">
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link active" id="active-tab" data-bs-toggle="tab"
-                                    data-bs-target="#active-pane" type="button" role="tab">
-                                📊 Активные позиции
-                            </button>
-                        </li>
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link" id="history-tab" data-bs-toggle="tab"
-                                    data-bs-target="#history-pane" type="button" role="tab"
-                                    onclick="loadHistoryIfNeeded()">
-                                🗂 История сделок
-                            </button>
-                        </li>
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link" id="watchlist-tab" data-bs-toggle="tab"
-                                    data-bs-target="#watchlist-pane" type="button" role="tab"
-                                    onclick="loadWatchlistIfNeeded()">
-                                ⭐ Избранное
-                            </button>
-                        </li>
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link" id="screener-tab" data-bs-toggle="tab"
-                                    data-bs-target="#screener-pane" type="button" role="tab">
-                                🔍 Скринер
-                            </button>
-                        </li>
-                    </ul>
-                </div>
-                <div class="tab-content">
-                    <!-- Active positions tab -->
-                    <div class="tab-pane fade show active p-3" id="active-pane" role="tabpanel">
-                        <div class="table-responsive">
-                            <table class="table table-hover align-middle">
-                                <thead class="table-dark">
-                                    <tr>
-                                        <th class="sortable-col" onclick="sortTable('name')" title="Сортировать по названию">
-                                            Название <span class="sort-icon" data-col="name"></span>
-                                        </th>
-                                        <th>ISIN</th>
-                                        <th class="sortable-col" onclick="sortTable('amount')" title="Сортировать по количеству">
-                                            Кол-во <span class="sort-icon" data-col="amount"></span>
-                                        </th>
-                                        <th class="sortable-col" onclick="sortTable('buy_price')" title="Сортировать по цене покупки">
-                                            Цена покупки <span class="sort-icon" data-col="buy_price"></span>
-                                        </th>
-                                        <th class="sortable-col" onclick="sortTable('nkd')" title="Накопленный купонный доход">
-                                            НКД <span class="sort-icon" data-col="nkd"></span>
-                                            <span class="badge bg-secondary ms-1 small" style="font-size:.65em"
-                                                  data-bs-toggle="tooltip" title="Накопленный купонный доход — начисленный, но ещё не выплаченный купон">?</span>
-                                        </th>
-                                        <th class="sortable-col" onclick="sortTable('ytm')" title="Доходность к погашению">
-                                            YTM <span class="sort-icon" data-col="ytm"></span>
-                                            <span class="badge bg-secondary ms-1 small" style="font-size:.65em"
-                                                  data-bs-toggle="tooltip" title="Yield to Maturity — эффективная доходность к погашению, % годовых">?</span>
-                                        </th>
-                                        <th class="sortable-col" onclick="sortTable('pnl')" title="Нереализованная прибыль/убыток">
-                                            P&amp;L ₽ <span class="sort-icon" data-col="pnl"></span>
-                                        </th>
-                                        <th>Действие</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="bonds-table-body"></tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    <!-- Trade history tab -->
-                    <div class="tab-pane fade p-3" id="history-pane" role="tabpanel">
-                        <!-- Date filter -->
-                        <div class="d-flex align-items-center gap-2 flex-wrap mb-3">
-                            <span class="small fw-semibold text-muted">Период:</span>
-                            <input type="date" id="historyDateFrom" class="form-control form-control-sm"
-                                   style="width:148px" onchange="applyHistoryFilter()" aria-label="Дата от">
-                            <span class="small text-muted">—</span>
-                            <input type="date" id="historyDateTo" class="form-control form-control-sm"
-                                   style="width:148px" onchange="applyHistoryFilter()" aria-label="Дата до">
-                            <button class="btn btn-outline-secondary btn-sm" onclick="clearHistoryFilter()">✕ Сбросить</button>
-                        </div>
-                        <div id="history-loading" class="text-center text-muted py-4" style="display:none;">
-                            <div class="spinner-border spinner-border-sm me-2" role="status"></div>Загрузка истории…
-                        </div>
-                        <div class="table-responsive">
-                            <table class="table table-hover align-middle">
-                                <thead class="table-dark">
-                                    <tr>
-                                        <th>Название</th>
-                                        <th>ISIN</th>
-                                        <th>Кол-во</th>
-                                        <th>Цена покупки</th>
-                                        <th>Цена продажи</th>
-                                        <th>P&amp;L ₽</th>
-                                        <th>P&amp;L %</th>
-                                        <th>Дата продажи</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="history-table-body">
-                                    <tr>
-                                        <td colspan="8" class="text-center text-muted py-4">
-                                            Нажмите на вкладку, чтобы загрузить историю.
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    <!-- Watchlist tab -->
-                    <div class="tab-pane fade p-3" id="watchlist-pane" role="tabpanel">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <span class="small text-muted">Облигации под наблюдением — без добавления в портфель.</span>
-                            <button class="btn btn-outline-success btn-sm" onclick="promptAddWatchlist()">+ Добавить</button>
-                        </div>
-                        <div class="table-responsive">
-                            <table class="table table-hover align-middle">
-                                <thead class="table-dark">
-                                    <tr>
-                                        <th>Название</th>
-                                        <th>ISIN</th>
-                                        <th>Цена (₽)</th>
-                                        <th>YTM %</th>
-                                        <th>НКД</th>
-                                        <th>Добавлено</th>
-                                        <th></th>
-                                    </tr>
-                                </thead>
-                                <tbody id="watchlist-table-body">
-                                    <tr>
-                                        <td colspan="7" class="text-center text-muted py-4">
-                                            Нажмите на вкладку, чтобы загрузить список.
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    <!-- Screener tab -->
-                    <div class="tab-pane fade p-3" id="screener-pane" role="tabpanel">
-                        <!-- Filters -->
-                        <div class="row g-2 mb-3 align-items-end">
-                            <div class="col-6 col-md-2">
-                                <label class="form-label small mb-1">YTM от (%)</label>
-                                <input type="number" id="screenerMinYtm" class="form-control form-control-sm" placeholder="0" step="0.1" min="0">
-                            </div>
-                            <div class="col-6 col-md-2">
-                                <label class="form-label small mb-1">YTM до (%)</label>
-                                <input type="number" id="screenerMaxYtm" class="form-control form-control-sm" placeholder="50" step="0.1" min="0">
-                            </div>
-                            <div class="col-6 col-md-2">
-                                <label class="form-label small mb-1">Погашение от</label>
-                                <input type="date" id="screenerMatFrom" class="form-control form-control-sm">
-                            </div>
-                            <div class="col-6 col-md-2">
-                                <label class="form-label small mb-1">Погашение до</label>
-                                <input type="date" id="screenerMatTo" class="form-control form-control-sm">
-                            </div>
-                            <div class="col-12 col-md-4 d-flex gap-2">
-                                <button class="btn btn-success btn-sm flex-fill" onclick="runScreener()">🔍 Найти</button>
-                                <button class="btn btn-outline-secondary btn-sm" onclick="clearScreener()">✕</button>
-                            </div>
-                        </div>
-                        <div id="screener-loading" class="text-center text-muted py-3" style="display:none;">
-                            <div class="spinner-border spinner-border-sm me-2" role="status"></div>Поиск…
-                        </div>
-                        <div class="table-responsive">
-                            <table class="table table-hover align-middle table-sm">
-                                <thead class="table-dark">
-                                    <tr>
-                                        <th>Название</th>
-                                        <th>ISIN</th>
-                                        <th>YTM %</th>
-                                        <th>Погашение</th>
-                                        <th>Купон (₽)</th>
-                                        <th></th>
-                                    </tr>
-                                </thead>
-                                <tbody id="screener-table-body">
-                                    <tr>
-                                        <td colspan="6" class="text-center text-muted py-4">
-                                            Задайте фильтры и нажмите «Найти».
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+  {# ── Page header ──────────────────────────────────────────────── #}
+  <div class="pf-header">
+    <div>
+      <h4 class="pf-title">
+        Мой портфель
+        <small>Управление позициями и аналитика</small>
+      </h4>
     </div>
+    <div class="pf-actions">
+      <a href="/api/portfolio/export" class="btn btn-sm btn-outline-secondary">
+        <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="margin-right:.3rem">
+          <path d="M2 10v2h10v-2M7 2v7M4 6l3 3 3-3"/>
+        </svg>CSV
+      </a>
+      <a href="/api/portfolio/export/xlsx" class="btn btn-sm btn-outline-secondary">
+        <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="margin-right:.3rem">
+          <path d="M2 10v2h10v-2M7 2v7M4 6l3 3 3-3"/>
+        </svg>Excel
+      </a>
+      <button class="btn btn-sm btn-primary" onclick="openDrawer()">
+        <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="margin-right:.3rem">
+          <line x1="7" y1="2" x2="7" y2="12"/><line x1="2" y1="7" x2="12" y2="7"/>
+        </svg>Добавить облигацию
+      </button>
+    </div>
+  </div>
+
+  {# ── Stats strip ──────────────────────────────────────────────── #}
+  <div class="pf-stats">
+    <div class="pf-stat">
+      <div class="pf-stat-label">Стоимость портфеля</div>
+      <div class="pf-stat-value text-success"><span id="total-portfolio-value">—</span> ₽</div>
+    </div>
+    <div class="pf-stat">
+      <div class="pf-stat-label">Средний YTM</div>
+      <div class="pf-stat-value" style="color:var(--text-info)" id="portfolio-ytm">—</div>
+    </div>
+    <div class="pf-stat">
+      <div class="pf-stat-label">Активных позиций</div>
+      <div class="pf-stat-value" id="portfolio-count">—</div>
+    </div>
+    <div class="pf-stat">
+      <div class="pf-stat-label">
+        Купонный доход
+        <span class="income-tabs" id="incomeGroup" role="group" aria-label="Период" style="display:inline-flex;border:none;gap:.2rem;margin-left:.5rem;">
+          <button class="income-tab active" onclick="showIncome('30d',this)">30д</button>
+          <button class="income-tab" onclick="showIncome('90d',this)">90д</button>
+          <button class="income-tab" onclick="showIncome('365d',this)">1г</button>
+        </span>
+      </div>
+      <div class="pf-stat-value text-success" id="incomeValue">—</div>
+      <div class="pf-stat-sub" id="incomeHint">загрузка…</div>
+    </div>
+  </div>
+
+  {# ── Charts ───────────────────────────────────────────────────── #}
+  <div class="pf-charts">
+    <div class="pf-card">
+      <div style="padding:.75rem 1rem;border-bottom:1px solid var(--card-border);font-size:.78rem;font-weight:600;color:var(--text-secondary)">
+        Зафиксированная прибыль (₽)
+      </div>
+      <div style="position:relative;height:180px;padding:.5rem">
+        <canvas id="profitChart"></canvas>
+      </div>
+    </div>
+    <div class="pf-card">
+      <div style="padding:.75rem 1rem;border-bottom:1px solid var(--card-border);font-size:.78rem;font-weight:600;color:var(--text-secondary)">
+        Распределение портфеля
+      </div>
+      <div style="position:relative;height:180px;padding:.5rem">
+        <canvas id="allocationChart"></canvas>
+        <div id="allocationEmpty" class="position-absolute top-50 start-50 translate-middle text-center" style="display:none;width:90%">
+          <small style="color:var(--text-tertiary)">Добавьте облигации,<br>чтобы увидеть диаграмму</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ── Main card with tabs ───────────────────────────────────────── #}
+  <div class="pf-card">
+
+    {# Tab bar #}
+    <div class="pf-tab-bar" id="portfolioTabs" role="tablist">
+      <button class="pf-tab active" id="active-tab"
+              data-bs-toggle="tab" data-bs-target="#active-pane"
+              type="button" role="tab" aria-selected="true">
+        <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+          <polyline points="1,10 4,6 7,8 10,3 13,5"/>
+        </svg>
+        Активные позиции
+      </button>
+      <button class="pf-tab" id="history-tab"
+              data-bs-toggle="tab" data-bs-target="#history-pane"
+              type="button" role="tab" onclick="loadHistoryIfNeeded()">
+        <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+          <circle cx="7" cy="7" r="5"/><polyline points="7,4 7,7 9,9"/>
+        </svg>
+        История сделок
+      </button>
+      <button class="pf-tab" id="watchlist-tab"
+              data-bs-toggle="tab" data-bs-target="#watchlist-pane"
+              type="button" role="tab" onclick="loadWatchlistIfNeeded()">
+        <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+          <path d="M7 1.5l1.6 3.2 3.5.5-2.55 2.5.6 3.5L7 9.5l-3.15 1.7.6-3.5L2 5.2l3.5-.5z"/>
+        </svg>
+        Избранное
+      </button>
+      <button class="pf-tab" id="screener-tab"
+              data-bs-toggle="tab" data-bs-target="#screener-pane"
+              type="button" role="tab">
+        <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+          <circle cx="6" cy="6" r="4"/><line x1="9.5" y1="9.5" x2="13" y2="13"/>
+        </svg>
+        Скринер
+      </button>
+    </div>
+
+    {# Tab content #}
+    <div class="tab-content">
+
+      {# ── Active positions ───────────────────────────────────────── #}
+      <div class="tab-pane fade show active" id="active-pane" role="tabpanel">
+        <div class="pf-toolbar">
+          <div class="pf-search-wrap">
+            <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+              <circle cx="6" cy="6" r="4"/><line x1="9.5" y1="9.5" x2="13" y2="13"/>
+            </svg>
+            <input type="text" class="pf-search" id="bondSearchFilter"
+                   placeholder="Поиск по названию или ISIN…"
+                   oninput="filterBondsTable(this.value)">
+          </div>
+        </div>
+        <div class="pf-table-wrap">
+          <table class="pf-table" id="bonds-table">
+            <thead>
+              <tr>
+                <th class="sortable-col" onclick="sortTable('name')">
+                  Название <span class="sort-icon" data-col="name"></span>
+                </th>
+                <th>ISIN</th>
+                <th class="sortable-col" onclick="sortTable('amount')">
+                  Кол-во <span class="sort-icon" data-col="amount"></span>
+                </th>
+                <th class="sortable-col" onclick="sortTable('buy_price')">
+                  Цена покупки <span class="sort-icon" data-col="buy_price"></span>
+                </th>
+                <th class="sortable-col" onclick="sortTable('nkd')">
+                  НКД <span class="sort-icon" data-col="nkd"></span>
+                </th>
+                <th class="sortable-col" onclick="sortTable('ytm')">
+                  YTM <span class="sort-icon" data-col="ytm"></span>
+                </th>
+                <th class="sortable-col" onclick="sortTable('pnl')">
+                  P&amp;L ₽ <span class="sort-icon" data-col="pnl"></span>
+                </th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="bonds-table-body">
+              {# Skeleton rows #}
+              {% for _ in range(3) %}
+              <tr>
+                {% for _ in range(8) %}
+                <td><span class="skeleton-cell" style="height:13px;width:80%"></span></td>
+                {% endfor %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {# ── Trade history ──────────────────────────────────────────── #}
+      <div class="tab-pane fade" id="history-pane" role="tabpanel">
+        <div class="pf-toolbar">
+          <span class="small fw-semibold" style="color:var(--text-tertiary)">Период:</span>
+          <input type="date" id="historyDateFrom" class="form-control form-control-sm"
+                 style="width:148px" onchange="applyHistoryFilter()" aria-label="Дата от">
+          <span class="small" style="color:var(--text-tertiary)">—</span>
+          <input type="date" id="historyDateTo" class="form-control form-control-sm"
+                 style="width:148px" onchange="applyHistoryFilter()" aria-label="Дата до">
+          <button class="btn btn-outline-secondary btn-sm" onclick="clearHistoryFilter()">✕</button>
+        </div>
+        <div id="history-loading" class="text-center py-4" style="display:none;color:var(--text-tertiary)">
+          <div class="spinner-border spinner-border-sm me-2" role="status"></div>Загрузка…
+        </div>
+        <div class="pf-table-wrap">
+          <table class="pf-table">
+            <thead>
+              <tr>
+                <th>Название</th><th>ISIN</th><th>Кол-во</th>
+                <th>Цена покупки</th><th>Цена продажи</th>
+                <th>P&amp;L ₽</th><th>P&amp;L %</th><th>Дата продажи</th>
+              </tr>
+            </thead>
+            <tbody id="history-table-body">
+              <tr><td colspan="8" class="text-center py-4" style="color:var(--text-tertiary)">
+                Нажмите на вкладку, чтобы загрузить историю.
+              </td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {# ── Watchlist ─────────────────────────────────────────────── #}
+      <div class="tab-pane fade" id="watchlist-pane" role="tabpanel">
+        <div class="pf-toolbar">
+          <span class="small" style="color:var(--text-tertiary)">Облигации под наблюдением — без добавления в портфель.</span>
+          <button class="btn btn-outline-success btn-sm ms-auto" onclick="promptAddWatchlist()">
+            + Добавить
+          </button>
+        </div>
+        <div class="pf-table-wrap">
+          <table class="pf-table">
+            <thead>
+              <tr>
+                <th>Название</th><th>ISIN</th><th>Цена (₽)</th>
+                <th>YTM %</th><th>НКД</th><th>Добавлено</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="watchlist-table-body">
+              <tr><td colspan="7" class="text-center py-4" style="color:var(--text-tertiary)">
+                Нажмите на вкладку, чтобы загрузить список.
+              </td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {# ── Screener ──────────────────────────────────────────────── #}
+      <div class="tab-pane fade" id="screener-pane" role="tabpanel">
+        <div class="pf-toolbar" style="gap:.5rem">
+          <div style="display:flex;gap:.5rem;flex-wrap:wrap;flex:1;align-items:flex-end">
+            <div>
+              <div class="small mb-1" style="color:var(--text-tertiary)">YTM от (%)</div>
+              <input type="number" id="screenerMinYtm" class="form-control form-control-sm"
+                     placeholder="0" step="0.1" min="0" style="width:90px">
+            </div>
+            <div>
+              <div class="small mb-1" style="color:var(--text-tertiary)">до (%)</div>
+              <input type="number" id="screenerMaxYtm" class="form-control form-control-sm"
+                     placeholder="50" step="0.1" min="0" style="width:90px">
+            </div>
+            <div>
+              <div class="small mb-1" style="color:var(--text-tertiary)">Погашение от</div>
+              <input type="date" id="screenerMatFrom" class="form-control form-control-sm" style="width:148px">
+            </div>
+            <div>
+              <div class="small mb-1" style="color:var(--text-tertiary)">до</div>
+              <input type="date" id="screenerMatTo" class="form-control form-control-sm" style="width:148px">
+            </div>
+          </div>
+          <div style="display:flex;gap:.4rem;margin-top:1.2rem">
+            <button class="btn btn-primary btn-sm" onclick="runScreener()">Найти</button>
+            <button class="btn btn-outline-secondary btn-sm" onclick="clearScreener()">✕</button>
+          </div>
+        </div>
+        <div id="screener-loading" class="text-center py-3" style="display:none;color:var(--text-tertiary)">
+          <div class="spinner-border spinner-border-sm me-2" role="status"></div>Поиск…
+        </div>
+        <div class="pf-table-wrap">
+          <table class="pf-table">
+            <thead>
+              <tr>
+                <th>Название</th><th>ISIN</th><th>YTM %</th>
+                <th>Погашение</th><th>Купон (₽)</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="screener-table-body">
+              <tr><td colspan="6" class="text-center py-4" style="color:var(--text-tertiary)">
+                Задайте фильтры и нажмите «Найти».
+              </td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>{# /tab-content #}
+  </div>{# /pf-card #}
+
+</div>{# /pf-wrap #}
+
+{# ── Drawer overlay ───────────────────────────────────────────────── #}
+<div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
+
+{# ── Add Bond Drawer ───────────────────────────────────────────────── #}
+<div class="drawer" id="bondDrawer" role="dialog" aria-modal="true" aria-label="Добавить облигацию">
+  <div class="drawer-header">
+    <span class="drawer-title">Добавить облигацию</span>
+    <button class="drawer-close" onclick="closeDrawer()" aria-label="Закрыть">
+      <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+        <line x1="2" y1="2" x2="10" y2="10"/><line x1="10" y1="2" x2="2" y2="10"/>
+      </svg>
+    </button>
+  </div>
+  <div class="drawer-body">
+
+    {# Coupon income preview (hidden, kept for coupon calendar below) #}
+    <div class="mb-4" id="coupon-calendar-wrap">
+      <div style="font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-tertiary);margin-bottom:.65rem">
+        Предстоящие купоны
+      </div>
+      <ul class="list-group list-group-flush" id="coupon-calendar-list"
+          style="border-radius:var(--radius);overflow:hidden;border:1px solid var(--card-border)">
+        <li class="list-group-item text-center py-2" style="font-size:.82rem;color:var(--text-tertiary)">
+          Нет предстоящих купонов.
+        </li>
+      </ul>
+    </div>
+
+    <div style="height:1px;background:var(--border-subtle);margin-bottom:1.25rem"></div>
+
+    <form id="addBondForm">
+      <div class="mb-3 position-relative">
+        <label class="form-label small fw-semibold">Код ISIN или название бумаги</label>
+        <input type="text" id="bondIsin" class="form-control form-control-sm"
+               placeholder="RU000A1038V6 или ОФЗ 26238"
+               maxlength="50" required autocomplete="off">
+        <div id="isinDropdown" class="isin-dropdown" style="display:none;"></div>
+        <div id="bondPreview" class="bond-preview-card" style="display:none;">
+          <div class="d-flex justify-content-between align-items-center">
+            <div class="preview-name" id="previewName"></div>
+            <button type="button" class="btn-close btn-sm ms-2 flex-shrink-0"
+                    onclick="hideBondPreview()" aria-label="Закрыть превью"></button>
+          </div>
+          <div class="preview-row">
+            <div>Цена: <span id="previewPrice"></span></div>
+            <div>YTM: <span id="previewYtm"></span></div>
+            <div>Погашение: <span id="previewMatdate"></span></div>
+            <div>Купон: <span id="previewCoupon"></span></div>
+            <div>НКД: <span id="previewNkd"></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="mb-3">
+        <label class="form-label small fw-semibold">Количество (шт.)</label>
+        <input type="number" id="bondAmount" class="form-control form-control-sm"
+               placeholder="10" min="1" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label small fw-semibold">Цена покупки (₽)</label>
+        <input type="number" id="bondBuyPrice" class="form-control form-control-sm"
+               placeholder="985.50" step="0.01" min="1" required>
+      </div>
+      <div class="mb-0">
+        <label class="form-label small fw-semibold">Дата покупки</label>
+        <input type="date" id="bondDate" class="form-control form-control-sm">
+      </div>
+    </form>
+  </div>
+  <div class="drawer-footer">
+    <button type="button" id="addBondBtn" class="btn btn-primary w-100"
+            onclick="document.getElementById('addBondForm').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))">
+      Добавить в портфель
+    </button>
+  </div>
 </div>
 
-<!-- Bond chart modal -->
+{# ── FAB add button (mobile) ──────────────────────────────────────── #}
+<button class="fab-add d-md-none" onclick="openDrawer()" aria-label="Добавить облигацию">
+  <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+    <line x1="7" y1="2" x2="7" y2="12"/><line x1="2" y1="7" x2="12" y2="7"/>
+  </svg>
+  Добавить
+</button>
+
+{# ── Bond chart modal ─────────────────────────────────────────────── #}
 <div class="modal fade" id="bondChartModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
-        <div class="modal-content">
-            <div class="modal-header bg-dark text-white" role="dialog" aria-modal="true" aria-labelledby="bondChartModalTitle">
-                <h5 id="bondChartModalTitle" class="modal-title">История изменения цены: <span id="chartModalIsinTitle"></span></h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div class="d-flex justify-content-center btn-group mb-3" id="periodBtnGroup" role="group">
-                    <button type="button" class="btn btn-outline-dark btn-sm" onclick="applyChartScale('day', event)">День</button>
-                    <button type="button" class="btn btn-outline-dark btn-sm" onclick="applyChartScale('week', event)">Неделя</button>
-                    <button type="button" class="btn btn-outline-dark btn-sm active" data-period="month" onclick="applyChartScale('month', event)">Месяц</button>
-                    <button type="button" class="btn btn-outline-dark btn-sm" onclick="applyChartScale('year', event)">Год</button>
-                    <button type="button" class="btn btn-outline-dark btn-sm" onclick="applyChartScale('all', event)">Всё время</button>
-                </div>
-                <div class="text-center text-muted small mb-2">🖱️ Зажми левую кнопку мыши для перемещения. Колесико — зум.</div>
-                <div style="position: relative; height: 380px;">
-                    <canvas id="marketBondChart"></canvas>
-                </div>
-            </div>
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header" style="background:var(--slate-800);color:#fff"
+           role="dialog" aria-modal="true" aria-labelledby="bondChartModalTitle">
+        <h5 id="bondChartModalTitle" class="modal-title" style="font-size:.95rem">
+          История цены: <span id="chartModalIsinTitle"></span>
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+      </div>
+      <div class="modal-body">
+        <div class="d-flex justify-content-center mb-3">
+          <div class="btn-group btn-group-sm" id="periodBtnGroup" role="group">
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="applyChartScale('day',event)">День</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="applyChartScale('week',event)">Неделя</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm active" data-period="month" onclick="applyChartScale('month',event)">Месяц</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="applyChartScale('year',event)">Год</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="applyChartScale('all',event)">Всё время</button>
+          </div>
         </div>
+        <p class="text-center text-muted small mb-2">Зажми левую кнопку мыши для перемещения. Колесико — зум.</p>
+        <div style="position:relative;height:360px">
+          <canvas id="marketBondChart"></canvas>
+        </div>
+      </div>
     </div>
+  </div>
 </div>
 
-<!-- Sell modal -->
+{# ── Sell modal ───────────────────────────────────────────────────── #}
 <div class="modal fade" id="sellModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header bg-success text-white">
-                <h5 class="modal-title">Зафиксировать продажу</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Закрыть"></button>
-            </div>
-            <div class="modal-body">
-                <p class="text-muted small mb-3">Позиция: <strong id="sellModalBondName"></strong></p>
-                <div class="mb-3">
-                    <label class="form-label fw-semibold">Цена продажи (₽)</label>
-                    <input type="number" id="sellPriceInput" class="form-control" step="0.01" min="0" required>
-                </div>
-                <div class="mb-1">
-                    <label class="form-label fw-semibold">
-                        Комиссия брокера (₽)
-                        <span class="text-muted fw-normal small">— необязательно</span>
-                    </label>
-                    <input type="number" id="sellCommissionInput" class="form-control" step="0.01" min="0" placeholder="0.00">
-                    <div class="form-text">Вычитается из P&amp;L в истории сделок</div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary btn-sm px-3" data-bs-dismiss="modal">Отмена</button>
-                <button type="button" id="sellModalConfirmBtn" class="btn btn-success btn-sm px-4">Продать</button>
-            </div>
+  <div class="modal-dialog modal-dialog-centered" style="max-width:380px">
+    <div class="modal-content">
+      <div class="modal-header" style="background:var(--emerald-600);color:#fff">
+        <h5 class="modal-title" style="font-size:.9rem">Зафиксировать продажу</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+      </div>
+      <div class="modal-body py-3">
+        <p style="font-size:.82rem;color:var(--text-tertiary)" class="mb-3">
+          Позиция: <strong id="sellModalBondName"></strong>
+        </p>
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">Цена продажи (₽)</label>
+          <input type="number" id="sellPriceInput" class="form-control form-control-sm"
+                 step="0.01" min="0" required>
         </div>
+        <div>
+          <label class="form-label small fw-semibold">
+            Комиссия брокера (₽)
+            <span style="color:var(--text-tertiary);font-weight:400">— необязательно</span>
+          </label>
+          <input type="number" id="sellCommissionInput" class="form-control form-control-sm"
+                 step="0.01" min="0" placeholder="0.00">
+          <div class="form-text small">Вычитается из P&amp;L в истории сделок</div>
+        </div>
+      </div>
+      <div class="modal-footer border-0 pt-0 gap-2">
+        <button type="button" class="btn btn-sm px-3"
+                style="background:var(--surface-2);border:1px solid var(--border-default);color:var(--text-primary)"
+                data-bs-dismiss="modal">Отмена</button>
+        <button type="button" id="sellModalConfirmBtn" class="btn btn-success btn-sm px-4">Продать</button>
+      </div>
     </div>
+  </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
+<script>
+// Teleport drawer & overlay out of .page-enter so position:fixed works correctly
+document.addEventListener('DOMContentLoaded', () => {
+  ['bondDrawer','drawerOverlay'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) document.body.appendChild(el);
+  });
+});
+
+function openDrawer() {
+  document.getElementById('bondDrawer').classList.add('open');
+  document.getElementById('drawerOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  setTimeout(() => document.getElementById('bondIsin')?.focus(), 350);
+}
+function closeDrawer() {
+  document.getElementById('bondDrawer').classList.remove('open');
+  document.getElementById('drawerOverlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+
+function filterBondsTable(q) {
+  const rows = document.querySelectorAll('#bonds-table-body tr[data-name]');
+  const s = q.toLowerCase();
+  rows.forEach(r => {
+    const show = !s || r.dataset.name?.toLowerCase().includes(s) || r.dataset.isin?.toLowerCase().includes(s);
+    r.style.display = show ? '' : 'none';
+  });
+}
+
+// Make income tabs work with existing showIncome function
+</script>
 <script src="{{ url_for('static', filename='js/portfolio.min.js') }}" defer></script>
 {% endblock %}
