@@ -1,9 +1,11 @@
 import atexit
 import logging
 import os
+from datetime import datetime, timezone
 
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, session
 from flask_cors import CORS
+from flask_login import current_user, logout_user
 from flask_wtf import CSRFProtect
 from flask_wtf.csrf import generate_csrf
 from werkzeug.exceptions import RequestEntityTooLarge
@@ -56,12 +58,43 @@ from blueprints.auth import auth_bp
 from blueprints.admin import admin_bp
 from blueprints.profile import profile_bp
 from blueprints.portfolio import portfolio_bp
+from blueprints.telegram_bot import telegram_bp
 
 app.register_blueprint(main_bp)
 app.register_blueprint(auth_bp)
 app.register_blueprint(admin_bp)
 app.register_blueprint(profile_bp)
 app.register_blueprint(portfolio_bp)
+app.register_blueprint(telegram_bp)
+
+# Освобождаем webhook от CSRF-защиты (Telegram Bot API не отправляет CSRF)
+csrf.exempt(telegram_bp)
+
+
+# ── Idle timeout: сбрасываем сессию после 30 мин бездействия ─────────────────
+@app.before_request
+def enforce_idle_timeout():
+    """Разлогиниваем пользователя если он не активен дольше IDLE_TIMEOUT_SECONDS."""
+    if not current_user.is_authenticated:
+        return
+
+    idle_timeout = app.config.get("IDLE_TIMEOUT_SECONDS", 1800)
+    now = datetime.now(timezone.utc).timestamp()
+    last_active = session.get("_last_active", now)
+
+    if now - last_active > idle_timeout:
+        logout_user()
+        session.clear()
+        # Для API возвращаем 401, для страниц — ничего (Flask-Login перенаправит)
+        if request.path.startswith("/api/"):
+            return jsonify({
+                "status": "error",
+                "code": 401,
+                "message": "Сессия истекла из-за неактивности. Войдите снова.",
+            }), 401
+        return
+
+    session["_last_active"] = now
 
 
 # ── Security headers (after every response) ───────────────────────────────────
@@ -72,9 +105,17 @@ def set_security_headers(response):
         response.set_cookie("XSRF-TOKEN", token, httponly=False, samesite="Lax")
     except Exception:
         pass
+
+    # Убираем Server-заголовок (не раскрываем версию сервера)
+    response.headers.remove("Server")
+
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault(
+        "Permissions-Policy",
+        "geolocation=(), camera=(), microphone=(), payment=()",
+    )
     response.headers.setdefault(
         "Content-Security-Policy",
         "default-src 'self'; "
@@ -85,6 +126,14 @@ def set_security_headers(response):
         "frame-ancestors 'none'; "
         "form-action 'self'",
     )
+
+    # HSTS — только для production (HTTPS-only)
+    if not app.debug and not app.testing:
+        response.headers.setdefault(
+            "Strict-Transport-Security",
+            "max-age=31536000; includeSubDomains",
+        )
+
     return response
 
 
@@ -174,49 +223,73 @@ def _update_bond_prices() -> None:
 
 
 def _send_coupon_reminders() -> None:
-    """Email users about coupons due tomorrow (only if MAIL_SERVER is configured)."""
+    """Рассылает напоминания о купонах завтра — через email и/или Telegram."""
     with app.app_context():
-        if not app.config.get("MAIL_SERVER"):
+        has_mail = bool(app.config.get("MAIL_SERVER"))
+        has_tg = bool(app.config.get("TELEGRAM_BOT_TOKEN"))
+        if not has_mail and not has_tg:
             return
         try:
             from flask_mail import Message
             from models import User, BondPortfolio
             from moex import get_coupon_calendar
             from datetime import date, timedelta
+            from services.telegram_service import send_message as tg_send
 
             tomorrow = date.today() + timedelta(days=1)
+
+            # Собираем пользователей с хотя бы одним каналом уведомлений
             users = User.query.filter(
-                User.email.isnot(None),
-                User.email_notifications == True,
+                db.or_(
+                    db.and_(User.email.isnot(None), User.email_notifications == True),
+                    db.and_(User.telegram_chat_id.isnot(None), User.telegram_notifications == True),
+                )
             ).all()
+
             for user in users:
                 bonds = BondPortfolio.query.filter_by(user_id=user.id, is_sold=False).all()
                 due = []
                 for bond in bonds:
                     for c in get_coupon_calendar(bond.secid or bond.isin):
                         if c["date"] == tomorrow.strftime("%Y-%m-%d") and c["value"]:
-                            due.append(
-                                f"  {bond.name} ({bond.isin}): "
-                                f"{round(float(c['value']) * bond.amount, 2)} ₽"
-                            )
+                            due.append((
+                                bond.name or bond.isin,
+                                bond.isin,
+                                round(float(c["value"]) * bond.amount, 2),
+                            ))
                 if not due:
                     continue
-                body = (
-                    f"Привет, {user.username}!\n\n"
-                    f"Завтра ({tomorrow}) ожидаются купонные выплаты:\n\n"
-                    + "\n".join(due)
-                    + "\n\nС уважением,\nInvestTrack"
-                )
-                msg = Message(
-                    subject=f"InvestTrack: купонные выплаты {tomorrow}",
-                    recipients=[user.email],
-                    body=body,
-                )
-                try:
-                    mail.send(msg)
-                    logger.info("Coupon reminder sent to %s", user.email)
-                except Exception as send_err:
-                    logger.warning("Could not send reminder to %s: %s", user.email, send_err)
+
+                # Email
+                if has_mail and user.email and user.email_notifications:
+                    lines = "\n".join(f"  {n} ({i}): {v} ₽" for n, i, v in due)
+                    body = (
+                        f"Привет, {user.username}!\n\n"
+                        f"Завтра ({tomorrow}) ожидаются купонные выплаты:\n\n"
+                        + lines
+                        + "\n\nС уважением,\nInvestTrack"
+                    )
+                    msg = Message(
+                        subject=f"InvestTrack: купонные выплаты {tomorrow}",
+                        recipients=[user.email],
+                        body=body,
+                    )
+                    try:
+                        mail.send(msg)
+                        logger.info("Coupon email sent to %s", user.email)
+                    except Exception as send_err:
+                        logger.warning("Email send failed for %s: %s", user.email, send_err)
+
+                # Telegram
+                if has_tg and user.telegram_chat_id and user.telegram_notifications:
+                    lines = "\n".join(f"• {n} ({i}): <b>{v} ₽</b>" for n, i, v in due)
+                    text = (
+                        f"📅 <b>Купонные выплаты завтра ({tomorrow}):</b>\n\n"
+                        + lines
+                        + "\n\n<i>InvestTrack — ваш трекер облигаций</i>"
+                    )
+                    tg_send(user.telegram_chat_id, text)
+
         except Exception as exc:
             logger.error("Coupon reminder job failed: %s", exc)
 

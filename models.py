@@ -74,3 +74,20 @@ class Transaction(db.Model):
     price = db.Column(db.Numeric(10, 2), nullable=False)
     commission = db.Column(db.Numeric(10, 4), nullable=True)
     tx_date = db.Column(db.Date, nullable=False, default=date.today)
+
+
+class AuditLog(db.Model):
+    """Журнал действий пользователей — вход, выход, смена пароля и т.д."""
+    __tablename__ = 'audit_log'
+    __table_args__ = (
+        db.Index('ix_audit_user_id', 'user_id'),
+        db.Index('ix_audit_created_at', 'created_at'),
+    )
+    id = db.Column(db.Integer, primary_key=True)
+    # nullable=True — чтобы логировать и неудачные попытки входа (без user_id)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    action = db.Column(db.String(50), nullable=False)   # login_ok | login_fail | logout | change_password | tg_link | tg_unlink
+    ip_address = db.Column(db.String(45), nullable=True)
+    user_agent = db.Column(db.String(255), nullable=True)
+    details = db.Column(db.Text, nullable=True)         # JSON или текстовое описание
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)

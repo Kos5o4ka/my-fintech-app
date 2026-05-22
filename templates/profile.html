@@ -373,6 +373,73 @@
         </div>
       </div>
 
+      {# ── Telegram-бот ──────────────────────────────────────────── #}
+      <div class="prf-section-label mt-4">Telegram-бот</div>
+      <div class="card" style="border-radius:var(--radius)">
+        <div class="card-body p-4">
+
+          {# Статус привязки #}
+          <div class="notif-row" id="tgStatusRow">
+            <div class="notif-info">
+              <div class="notif-title">
+                <span id="tgStatusIcon">⏳</span>
+                <span id="tgStatusText">Загрузка…</span>
+              </div>
+              <div class="notif-desc" id="tgStatusDesc">Проверяем статус привязки</div>
+            </div>
+          </div>
+
+          {# Не привязан: кнопка получить ссылку #}
+          <div id="tgUnlinkedBlock" style="display:none">
+            <p style="font-size:.8rem;color:var(--text-tertiary);margin:.75rem 0">
+              Привяжите Telegram, чтобы получать уведомления о купонах
+              и использовать двухфакторную аутентификацию.
+            </p>
+            <button id="tgLinkBtn" class="btn btn-primary w-100"
+                    style="border-radius:var(--radius-sm)">
+              Привязать Telegram
+            </button>
+            <div id="tgDeepLinkWrap" style="display:none;margin-top:.85rem">
+              <p style="font-size:.8rem;color:var(--text-tertiary);margin-bottom:.5rem">
+                Перейдите по ссылке и нажмите <b>Старт</b> в боте:
+              </p>
+              <a id="tgDeepLink" href="#" target="_blank" rel="noopener"
+                 class="btn btn-outline-secondary w-100"
+                 style="border-radius:var(--radius-sm);font-size:.85rem">
+                Открыть бот в Telegram →
+              </a>
+            </div>
+          </div>
+
+          {# Привязан: уведомления + отвязка #}
+          <div id="tgLinkedBlock" style="display:none">
+            <div class="notif-row mt-2">
+              <div class="notif-info">
+                <div class="notif-title">Купонные уведомления</div>
+                <div class="notif-desc">Напоминания за день до выплаты</div>
+              </div>
+              <label class="toggle-switch ms-3">
+                <input type="checkbox" id="tgNotifCheck"
+                       {% if current_user.telegram_notifications %}checked{% endif %}>
+                <span class="toggle-track"></span>
+              </label>
+            </div>
+            <div class="notif-row">
+              <div class="notif-info">
+                <div class="notif-title">Двухфакторная аутентификация</div>
+                <div class="notif-desc">Код в Telegram при каждом входе</div>
+              </div>
+              <span style="font-size:.75rem;color:var(--emerald-400);font-weight:600">Включена</span>
+            </div>
+            <button id="tgUnlinkBtn" class="btn btn-outline-danger w-100 mt-3"
+                    style="border-radius:var(--radius-sm);font-size:.83rem">
+              Отвязать Telegram
+            </button>
+          </div>
+
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -439,6 +506,96 @@ document.addEventListener('DOMContentLoaded', () => {
       btn.disabled = false; btn.textContent = 'Изменить пароль';
     }
   });
+
+  // ── Telegram-бот ──────────────────────────────────────────────────
+  async function loadTelegramStatus() {
+    try {
+      const res  = await fetch('/api/profile/telegram/status');
+      const data = await res.json();
+      const icon = document.getElementById('tgStatusIcon');
+      const text = document.getElementById('tgStatusText');
+      const desc = document.getElementById('tgStatusDesc');
+
+      if (data.linked) {
+        icon.textContent = '✅';
+        text.textContent = 'Telegram привязан';
+        desc.textContent = `Бот @${data.bot_username}`;
+        document.getElementById('tgLinkedBlock').style.display = '';
+        document.getElementById('tgUnlinkedBlock').style.display = 'none';
+        document.getElementById('tgNotifCheck').checked = data.notifications;
+      } else {
+        icon.textContent = '🔗';
+        text.textContent = 'Telegram не привязан';
+        desc.textContent = 'Привяжите бот для уведомлений и 2FA';
+        document.getElementById('tgLinkedBlock').style.display  = 'none';
+        document.getElementById('tgUnlinkedBlock').style.display = '';
+      }
+    } catch {
+      document.getElementById('tgStatusText').textContent = 'Ошибка загрузки';
+    }
+  }
+
+  // Кнопка «Привязать»
+  document.getElementById('tgLinkBtn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('tgLinkBtn');
+    btn.disabled = true; btn.textContent = 'Получаем ссылку…';
+    try {
+      const res  = await window.Common.csrfFetch('/api/profile/telegram/link', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok && data.deep_link) {
+        const wrap = document.getElementById('tgDeepLinkWrap');
+        const link = document.getElementById('tgDeepLink');
+        link.href = data.deep_link;
+        link.textContent = 'Открыть бот в Telegram →';
+        wrap.style.display = '';
+        btn.textContent = 'Обновить ссылку';
+        btn.disabled = false;
+      } else {
+        window.Common.showSystemMessage(data.message || 'Ошибка', true);
+        btn.disabled = false; btn.textContent = 'Привязать Telegram';
+      }
+    } catch {
+      btn.disabled = false; btn.textContent = 'Привязать Telegram';
+    }
+  });
+
+  // Переключатель Telegram-уведомлений
+  document.getElementById('tgNotifCheck')?.addEventListener('change', async function() {
+    try {
+      const res  = await window.Common.csrfFetch('/api/profile/telegram/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: this.checked }),
+      });
+      const data = await res.json();
+      if (res.ok) window.Common.showToast(data.message);
+      else { window.Common.showSystemMessage(data.message, true); this.checked = !this.checked; }
+    } catch { this.checked = !this.checked; }
+  });
+
+  // Кнопка «Отвязать»
+  document.getElementById('tgUnlinkBtn')?.addEventListener('click', async () => {
+    if (!confirm('Отвязать Telegram? Уведомления и 2FA будут отключены.')) return;
+    const btn = document.getElementById('tgUnlinkBtn');
+    btn.disabled = true; btn.textContent = 'Отвязываем…';
+    try {
+      const res  = await window.Common.csrfFetch('/api/profile/telegram/unlink', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) { window.Common.showToast(data.message); await loadTelegramStatus(); }
+      else { window.Common.showSystemMessage(data.message, true); }
+    } finally { btn.disabled = false; btn.textContent = 'Отвязать Telegram'; }
+  });
+
+  // Загружаем статус при открытии вкладки Уведомлений
+  const origPrfTab = window.prfTab || prfTab;
+  window.prfTab = function(idx) {
+    origPrfTab(idx);
+    if (idx === 2) loadTelegramStatus();
+  };
+  // Если уже открыта вкладка 2 — загружаем сразу
+  if (document.getElementById('prf-panel-2').classList.contains('active')) {
+    loadTelegramStatus();
+  }
 });
 </script>
 {% endblock %}

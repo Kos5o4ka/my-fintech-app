@@ -12,7 +12,7 @@
 | 0 | Premium Редизайн (UI/UX) | ✅ Выполнен |
 | 1 | Архитектурный рефакторинг | ✅ Выполнен |
 | 2 | Оптимизация и кэш | ✅ Выполнен |
-| 3 | Безопасность + Telegram | 🔲 В плане |
+| 3 | Безопасность + Telegram | ✅ Выполнен |
 | 4 | Новые фичи | 🔲 В плане |
 | 5 | Тестирование | 🔲 В плане |
 | 6 | DevOps и деплой | 🔲 В плане |
@@ -193,44 +193,43 @@
 
 ---
 
-## Этап 3 — Безопасность + Telegram-бот 🔲 В ПЛАНЕ
+## Этап 3 — Безопасность + Telegram-бот ✅ ВЫПОЛНЕН
 
 ### 3.0 Telegram-бот (уведомления + 2FA)
 
 > Поля `telegram_chat_id` и `telegram_notifications` уже в модели User (миграция d4e5f6a7b8c9).
 
-- [ ] Создать бота через @BotFather → `TELEGRAM_BOT_TOKEN` в `.env`
-- [ ] `blueprints/telegram_bot.py` — вебхук `/api/telegram/webhook`
-- [ ] Привязка аккаунта:
-  - Профиль → «Привязать Telegram» → генерируется short-lived токен (UUID, TTL 10 мин, хранится в кэше)
-  - Ссылка `t.me/<bot>?start=<token>` — пользователь открывает в Telegram
-  - Бот получает `/start <token>` → верифицирует → сохраняет `chat_id` в User
-- [ ] Уведомления о купонах через бота (замена/дополнение email)
-- [ ] **2FA через Telegram**: при входе бот присылает 6-значный OTP-код → пользователь вводит на сайте
-- [ ] `services/telegram_service.py` — `send_message(chat_id, text)`, `send_otp(chat_id) → code`
+- [x] Создать бота через @BotFather → `TELEGRAM_BOT_TOKEN` в `.env`
+- [x] `services/telegram_service.py` — `send_message`, `generate_otp`, `verify_otp`, `generate_link_token`, deep-link
+- [x] `blueprints/telegram_bot.py` — вебхук `/api/telegram/webhook` (освобождён от CSRF)
+- [x] Привязка аккаунта: Профиль → «Привязать» → deep-link → `/start <token>` в боте
+- [x] Уведомления о купонах через бота (APScheduler, параллельно с email)
+- [x] **2FA через Telegram**: при входе бот присылает 6-значный OTP-код (pending-токен, TTL 5 мин)
+- [x] `/api/auth/verify_2fa` — новый эндпоинт для проверки кода
 
 ### 3.1 Аутентификация
 
-- [ ] 2FA через Telegram-бот *(см. 3.0)*
-- [ ] Audit log: login/logout/смена пароля → таблица с IP, UA, timestamp
+- [x] 2FA через Telegram-бот *(см. 3.0)*
+- [x] Audit log: `AuditLog` модель (action, user_id, ip, UA, details, created_at) — миграция e5f6a7b8c9d0
+- [x] Записи login_ok / login_fail / login_2fa_sent / login_2fa_fail / logout / change_password
 
 ### 3.2 Сессии
 
-- [ ] `PERMANENT_SESSION_LIFETIME = timedelta(days=7)`
-- [ ] Ротация session ID после логина
-- [ ] Idle timeout: автологаут через 30 мин неактивности
+- [x] `PERMANENT_SESSION_LIFETIME = timedelta(days=7)` в Config
+- [x] `session.permanent = True` при логине
+- [x] Idle timeout 30 мин — `before_request` проверяет `_last_active`
 
 ### 3.3 HTTP-заголовки
 
-- [ ] `Strict-Transport-Security: max-age=31536000; includeSubDomains`
-- [ ] `Permissions-Policy: geolocation=(), microphone=(), camera=()`
-- [ ] Убрать заголовок `Server: Werkzeug/...`
+- [x] `Strict-Transport-Security: max-age=31536000; includeSubDomains` (только production)
+- [x] `Permissions-Policy: geolocation=(), camera=(), microphone=(), payment=()`
+- [x] Убрать заголовок `Server: Werkzeug/...` через `response.headers.remove("Server")`
 
-### 3.4 Файлы
+### 3.4 Файлы (аватары)
 
-- [ ] Аватары → хранить вне `static/`, отдавать через `@login_required`
-- [ ] Ре-энкод изображений через `Pillow`
-- [ ] UUID-имена для аватаров
+- [x] Pillow: открытие → `img.verify()` → convert RGB → thumbnail 400×400 → save JPEG (strip EXIF)
+- [x] UUID-имена файлов (`uuid4().hex + .jpg`) — нет path traversal, нет привязки к username
+- [x] Удаление предыдущего аватара при загрузке нового
 
 ---
 
