@@ -1,362 +1,476 @@
-# Production Readiness Roadmap
+# InvestTrack — Полный Roadmap
 
-Полный список улучшений для вывода проекта на уровень production-продукта, пригодного для публичной презентации. Сгруппировано по направлениям, приоритизировано по спринтам.
+> **Ветка активной разработки:** `update-fr`
+> Последнее обновление: 2026-05-22
 
 ---
 
-## 1. Рефакторинг
+## Статус по этапам
 
-### 1.1 Типизация и структура кода
+| Этап | Тема | Статус |
+|------|------|--------|
+| 0 | Premium Редизайн (UI/UX) | 🔲 В плане |
+| 1 | Архитектурный рефакторинг | 🔲 В плане |
+| 2 | Оптимизация и кэш | 🔲 В плане |
+| 3 | Безопасность | 🔲 В плане |
+| 4 | Новые фичи | 🔲 В плане |
+| 5 | Тестирование | 🔲 В плане |
+| 6 | DevOps и деплой | 🔲 В плане |
+| 7 | Документация | 🔲 В плане |
 
-- [ ] Добавить Python type hints во все функции (`blueprints/`, `moex.py`, `models.py`)
-- [ ] Создать `schemas/` с Pydantic/marshmallow схемами для валидации входящих запросов вместо ручных проверок в каждом роуте
-- [ ] Вынести константы (лимиты, TTL кэша, разрешённые расширения) в `constants.py`
-- [ ] Заменить все `print()` в `moex.py` на `logging.getLogger(__name__)`
+---
 
-### 1.2 Слой сервисов
+## Этап 0 — Premium Редизайн ⭐ ПРИОРИТЕТ
+
+> Цель: UI, который выглядит как продукт лучшей дизайн-студии уровня Linear, Vercel, Stripe Dashboard.
+> Всё делается в ветке `update-fr`, каждый пункт — отдельный коммит.
+
+### 0.1 Дизайн-система — фундамент
+
+- [ ] **Типографика**: подключить `Inter` через `@font-face` (локальная копия, не Google CDN) с вариативным начертанием
+- [ ] **Полная замена CSS-переменных** в `variables.css`:
+  - Новая палитра: `--color-*` (10 ступеней для каждого цвета: slate, blue, emerald, violet, amber)
+  - Семантические токены: `--surface-1..4`, `--text-primary`, `--text-secondary`, `--text-tertiary`
+  - Тени: `--shadow-xs`, `--shadow-sm`, `--shadow-md`, `--shadow-lg`, `--shadow-xl`, `--glow-blue`, `--glow-green`
+  - Анимации: `--duration-fast: 120ms`, `--duration-base: 200ms`, `--duration-slow: 350ms`, `--ease-spring`
+  - Радиусы: `--radius-xs: 4px` до `--radius-2xl: 20px`
+- [ ] **Базовые компоненты** в `static/css/design-system.css`:
+  - Badge, Pill, Tag — 3 варианта с иконкой слева
+  - Avatar — круглый, с инициалами как fallback
+  - Tooltip — кастомный, без Bootstrap (pure CSS + JS)
+  - Divider, Separator
+  - Progress bar — анимированный gradient
+  - Chip/Tag с кнопкой удаления
+
+### 0.2 Навигация — полный редизайн
+
+- [ ] **Убрать текущий navbar** — заменить на `sidebar` (desktop) + `bottom-bar` (mobile):
+  - Desktop: фиксированная левая панель 220px с логотипом, иконками + подписями, разделителями
+  - Mobile: нижняя панель с 4 иконками (Home, Portfolio, Profile, Admin)
+  - Micro-animation: активный пункт подсвечивается с `transform: scale(1.02)` и `glow`-эффектом
+- [ ] **Логотип**: заменить emoji `📈` → SVG логотип с `IT` монограммой + трендовая линия вверх
+- [ ] **User widget** в sidebar: аватар + имя + роль (admin / user), клик → /profile
+- [ ] **Быстрые действия** в sidebar: кнопка "Добавить облигацию" + "Экспорт CSV"
+- [ ] **Collapsed sidebar** на 1280px: иконки без текста + tooltip при hover
+
+### 0.3 Лендинг (`/`) — полный редизайн
+
+- [ ] **Hero секция** — full-viewport с animated gradient mesh background:
+  - CSS-анимированные gradient blobs (3 слоя: синий, фиолетовый, cyan) без JavaScript
+  - Заголовок с `letter-spacing` и word-by-word `fadeInUp` анимацией при загрузке
+  - Подзаголовок + CTA-кнопки в одну строку: "Войти" (primary) + "Посмотреть демо" (ghost)
+  - Floating mockup: карточка-превью дашборда с shimmer-эффектом (CSS only)
+- [ ] **Форма входа** справа:
+  - Glassmorphism-карточка (`backdrop-filter: blur(20px)`, `background: rgba(..., .08)`)
+  - Floating labels вместо обычных (`<label>` анимируется вверх при фокусе)
+  - Кнопка "Войти" — gradient с shimmer на hover, loading spinner при сабмите
+  - Transition между состояниями (login → loading → success) через CSS classes
+- [ ] **Feature grid** под hero — 3 колонки:
+  - Иконка (SVG, не emoji), заголовок, описание
+  - Hover: карточка поднимается (`translateY(-4px)`) с усиленной тенью
+- [ ] **Статистика** в строку: "N облигаций" / "N пользователей" / "Данные MOEX real-time" — с count-up анимацией
+- [ ] **Footer**: логотип, ссылки, версия, "Данные: MOEX ISS API"
+
+### 0.4 Dashboard — полный редизайн
+
+- [ ] **Metric cards** — кардинальный редизайн:
+  - Размер: высота 120px, padding 24px
+  - Иконка: SVG в цветном круге 40px (`background: linear-gradient(...)`)
+  - Главное значение: `font-size: 2rem; font-weight: 800; font-variant-numeric: tabular-nums`
+  - Дельта под значением: `▲ +2.4%` зелёным / `▼ -1.2%` красным с `font-size: 0.75rem`
+  - Тонкая полоска-акцент снизу (4px) вместо текущих 3px сверху
+  - Micro-animation: значение "считает" (`countUp`) при каждой загрузке
+  - `will-change: transform` + `transform: translateZ(0)` для GPU-ускорения
+- [ ] **График P&L** на дашборде:
+  - Area chart (Chart.js) с gradient fill (от accent-цвета к прозрачному)
+  - Кастомный tooltip-попап (тёмный, с blur)
+  - Анимация рисования линии при появлении (`clip-path` reveal)
+  - Переключатель периода: 7д / 30д / 90д / YTD
+- [ ] **Купонный календарь** — редизайн:
+  - Timeline-стиль: вертикальная линия, события с датой слева
+  - Цветовая кодировка: ближайшие 7 дней — зелёный, 8-30 — синий, дальше — серый
+  - Пустое состояние: красивый SVG illustration + текст
+- [ ] **Best/Worst позиции** — horizontal bar chart вместо текста:
+  - Top 3 лучших и Top 3 худших позиций
+  - Animated bars при загрузке
+- [ ] **Widget карта распределения** — donut chart (без текста в центре, подписи снаружи):
+  - По эмитентам (топ-5 + "Остальные")
+  - Hover: сегмент увеличивается, показывает % и сумму
+
+### 0.5 Страница портфеля — редизайн
+
+- [ ] **Sidebar слева** — редизайн виджетов:
+  - Карточка стоимости: огромное число, YTM и P&L в строку под ним
+  - Купонный доход: кнопки периода → tabbed (underline-стиль), значение с анимацией
+  - Форма добавления → вынести в `drawer` (боковая панель, slide-in слева), не в sidebar
+- [ ] **Таблица позиций** — полный редизайн:
+  - Sticky header с `backdrop-filter: blur(8px)`
+  - Hover строки: left-border 2px синий + лёгкий background
+  - Статус-иконки: зелёная точка (active) / серая (погашена)
+  - Sprkline мини-график (7 дней, inline SVG) в колонке "Цена"
+  - Сортировка по клику на заголовок с анимированными стрелками
+  - Drag-to-reorder строки (опционально)
+  - Виртуальный скролл при 100+ строках
+- [ ] **Поиск и фильтры** — top bar над таблицей:
+  - Инлайн поиск с иконкой лупы и кнопкой очистки
+  - Dropdown фильтры: "Только активные" / "Проданные" / "Все"
+  - Chip-теги для активных фильтров с кнопкой ✕
+- [ ] **Drawer "Добавить облигацию"**:
+  - Slide-in с правой стороны (400px), backdrop blur
+  - Step 1: Поиск ISIN с live-autocomplete и превью карточки
+  - Step 2: Заполнение деталей (кол-во, цена покупки, дата)
+  - Анимация перехода между шагами: `slide + fade`
+  - Confirm button с loading state → success animation (checkmark)
+- [ ] **Модал продажи** — редизайн:
+  - Двухколоночный layout: слева — детали позиции, справа — форма
+  - P&L preview: меняется в реальном времени при вводе цены продажи
+  - Цветовой индикатор: зелёный (прибыль) / красный (убыток)
+
+### 0.6 Страница профиля — редизайн
+
+- [ ] **Hero секция** профиля:
+  - Аватар большой (96px) с gradient border + кнопка замены (overlay при hover)
+  - Имя пользователя, роль-badge, дата регистрации
+  - Quick stats: "В портфеле X облигаций", "Стоимость: Y ₽", "Участник с: Z"
+- [ ] **Секции** в виде аккордеона или tabbed:
+  - "Личные данные" — форма редактирования
+  - "Безопасность" — смена пароля + 2FA (заглушка)
+  - "Уведомления" — toggles
+  - "Опасная зона" — удаление аккаунта (красный раздел)
+- [ ] **Activity feed** — последние 10 действий (покупки/продажи) в timeline-стиле
+
+### 0.7 Тёмная тема — доработка
+
+- [ ] Проверить каждый новый компонент в dark mode — никакого "белого на белом"
+- [ ] Новые CSS-переменные для dark: `--surface-1: #0d1117`, `--surface-2: #161b22`, `--surface-3: #1c2128`
+- [ ] Glow-эффекты в тёмной теме: `box-shadow: 0 0 20px rgba(var(--accent-rgb), .15)`
+- [ ] Переключатель темы: анимация sun↔moon SVG иконки (rotate + scale)
+- [ ] Сохранение предпочтения + respect `prefers-color-scheme` при первом визите
+
+### 0.8 Micro-interactions и анимации
+
+- [ ] **Page transitions**: `fade` при навигации (CSS class toggle)
+- [ ] **Button states**: pressed (`scale(.97)`), loading (spinner), success (checkmark), error (shake)
+- [ ] **Form validation**: shake-анимация при ошибке, зелёная галочка при успехе
+- [ ] **Toast notifications**: slide-in снизу-справа, auto-dismiss с progress bar
+- [ ] **Skeleton loaders**: анимированные placeholder блоки (shimmer) для каждого компонента
+- [ ] **Number animations**: `countUp` для всех числовых значений при загрузке страницы
+- [ ] **Hover states**: каждый интерактивный элемент должен иметь заметный hover (cursor: pointer, transition)
+- [ ] **Focus states**: красивый focus ring (`outline: 2px solid var(--accent); outline-offset: 2px`) для a11y
+- [ ] **Empty states**: кастомные SVG иллюстрации для: пустой портфель, нет купонов, ошибка загрузки
+
+### 0.9 Производительность дизайна
+
+- [ ] CSS `contain: layout style` для карточек — изоляция reflow
+- [ ] `will-change` только на анимируемые свойства, убирать после завершения
+- [ ] `font-display: swap` для кастомных шрифтов
+- [ ] Critical CSS inline в `<head>` (navbar + hero fold)
+- [ ] Убрать Bootstrap с CDN → собрать только нужные модули локально (50% меньше CSS)
+- [ ] SVG-спрайт для иконок вместо emoji
+- [ ] CSS Houdini `@property` для анимированных CSS-переменных (gradient transitions)
+
+### 0.10 Адаптивность (Mobile-first)
+
+- [ ] Breakpoints: 320px / 480px / 768px / 1024px / 1280px / 1536px
+- [ ] Sidebar → bottom bar на < 768px
+- [ ] Metric cards: 2 колонки на mobile, 4 на desktop
+- [ ] Таблица портфеля: card-view на mobile (каждая строка → карточка)
+- [ ] Drawer (форма добавления) → full-screen modal на mobile
+- [ ] Touch targets минимум 44×44px для всех кнопок
+- [ ] Swipe-to-dismiss для toast и модалок
+
+---
+
+## Этап 1 — Архитектурный рефакторинг
+
+### 1.1 Сервисный слой
 
 - [ ] Создать `services/` директорию:
-  - `portfolio_service.py` — бизнес-логика P&L, расчёты доходности
-  - `moex_service.py` — всё взаимодействие с MOEX ISS API
-  - `user_service.py` — создание/удаление/управление пользователями
-- [ ] Вынести бизнес-логику из `blueprints/portfolio.py` (сейчас 400+ строк смешанного кода)
-- [ ] Blueprints должны содержать только HTTP-слой: парсинг запроса → вызов сервиса → ответ
+  - `portfolio_service.py` — P&L, расчёт доходности, купонный доход
+  - `moex_service.py` — все обращения к MOEX ISS API
+  - `user_service.py` — CRUD пользователей, аватары, смена пароля
+- [ ] Blueprints = только HTTP-слой: parse → call service → respond
+- [ ] Вынести бизнес-логику из `blueprints/portfolio.py` (сейчас 400+ строк)
+
+### 1.2 Типизация
+
+- [ ] Python type hints во всех функциях (`blueprints/`, `moex.py`, `models.py`, `services/`)
+- [ ] Pydantic схемы валидации в `schemas/` для входящих JSON-запросов
+- [ ] `constants.py` — все магические числа (лимиты, TTL, размеры файлов)
 
 ### 1.3 База данных
 
-- [ ] Переключиться на Alembic-миграции вместо `db.create_all()` (`flask-migrate` уже установлен, но не используется)
-- [ ] Добавить `updated_at` (timestamp) в `BondPortfolio`
-- [ ] Добавить поле `currency` в `BondPortfolio` (RUB/USD/EUR) для поддержки валютных облигаций
-- [ ] Добавить модель `Transaction` для хранения детальной истории покупок/продаж частей позиций
-- [ ] Добавить индекс на `BondPortfolio.isin`
+- [ ] Alembic-миграции вместо `db.create_all()` (flask-migrate уже установлен)
+- [ ] Поле `updated_at` в `BondPortfolio`
+- [ ] Поле `currency` (RUB/USD/EUR) для валютных облигаций
+- [ ] Модель `Transaction` для истории покупок/продаж
+- [ ] Индекс на `BondPortfolio.isin`
 
 ### 1.4 Конфигурация
 
-- [ ] Разделить `config.py` на `DevelopmentConfig`, `TestingConfig`, `ProductionConfig`
-- [ ] Добавить валидацию обязательных переменных окружения при старте (если `SECRET_KEY` не задан — падать, не стартовать)
-- [ ] Убрать fallback `'change-me-before-production'` для `SECRET_KEY`
-- [ ] Добавить `.env.production.example` с production-специфичными переменными
+- [ ] `DevelopmentConfig`, `TestingConfig`, `ProductionConfig` в `config.py`
+- [ ] Валидация обязательных env-vars при старте (если нет `SECRET_KEY` — падать)
+- [ ] Убрать fallback `'change-me-before-production'`
+- [ ] `.env.production.example`
 
 ---
 
-## 2. Оптимизация
+## Этап 2 — Оптимизация
 
 ### 2.1 База данных
 
-- [ ] Добавить пагинацию в `/api/portfolio` и `/api/portfolio/history` (параметры `page`, `per_page`)
-- [ ] Заменить цикл N отдельных UPDATE в APScheduler на `db.session.bulk_update_mappings()` (1 запрос вместо N)
-- [ ] Добавить connection pooling в `config.py`: `SQLALCHEMY_POOL_SIZE`, `SQLALCHEMY_MAX_OVERFLOW`, `SQLALCHEMY_POOL_TIMEOUT`
-- [ ] Добавить `db.session.expire_on_commit = False` где нужно избежать lazy load после commit
+- [ ] Пагинация в `/api/portfolio` и `/api/portfolio/history`
+- [ ] `bulk_update_mappings()` вместо N отдельных UPDATE в APScheduler
+- [ ] Connection pooling: `SQLALCHEMY_POOL_SIZE`, `SQLALCHEMY_MAX_OVERFLOW`
 
 ### 2.2 Кэширование
 
-- [ ] Переключиться с `SimpleCache` на Redis (shared cache между воркерами Gunicorn)
-- [ ] Кэшировать `/api/portfolio_stats` (пересчёт ежесекундно не нужен — TTL 5 минут достаточно)
-- [ ] Добавить `ETag` + `Cache-Control` заголовки для read-only API ответов
-- [ ] Инвалидировать кэш портфеля при добавлении/продаже облигации
+- [ ] Redis вместо SimpleCache (shared между воркерами Gunicorn)
+- [ ] TTL 5 мин для `/api/portfolio_stats`
+- [ ] `ETag` + `Cache-Control` для read-only API ответов
+- [ ] Инвалидация кэша при изменении портфеля
 
-### 2.3 Внешний API (MOEX)
+### 2.3 MOEX API
 
-- [ ] Добавить retry-логику с exponential backoff через `tenacity` (3 попытки, backoff 1/2/4 сек)
-- [ ] Добавить явный `timeout` на все `requests.get()` вызовы (сейчас может зависнуть навсегда)
-- [ ] Ограничить параллельные исходящие запросы к MOEX в APScheduler через `asyncio.Semaphore` или очередь
-- [ ] Добавить circuit breaker: если MOEX API недоступен N раз подряд — прекратить попытки на T минут
+- [ ] Retry с exponential backoff через `tenacity` (3 попытки: 1/2/4 сек)
+- [ ] Явный `timeout=10` на все `requests.get()` (сейчас может зависнуть)
+- [ ] Circuit breaker: если MOEX недоступен 5 раз подряд — пауза 10 мин
+- [ ] Ограничение параллельных запросов в APScheduler через Semaphore
 
 ### 2.4 Frontend
 
-- [ ] Добавить debounce 300ms для поиска облигаций (сейчас может спамить `/api/search_bond` на каждый символ)
-- [ ] Lazy-load Chart.js только при открытии модального окна с графиком
-- [ ] Использовать `IntersectionObserver` для подгрузки истории торгов по скроллу
-- [ ] Перенести Bootstrap/Chart.js на локальные копии или bundle (убрать CDN из CSP)
-- [ ] Добавить `rel="preload"` для критических шрифтов и стилей
+- [ ] Debounce 300ms для поиска облигаций
+- [ ] `IntersectionObserver` для lazy-load истории торгов
+- [ ] Bootstrap → только нужные модули, без CDN
+- [ ] `rel="preload"` для Inter шрифта и critical CSS
 
 ---
 
-## 3. Безопасность
+## Этап 3 — Безопасность
 
 ### 3.1 Аутентификация
 
-- [ ] Добавить 2FA через TOTP (`pyotp` + Google Authenticator) — критично для финансового приложения
-- [ ] Добавить audit log таблицу: каждый вход/выход/смена пароля записывается с IP, user-agent и timestamp
+- [ ] Страница смены пароля (`/profile` → форма)
+- [ ] 2FA через TOTP (`pyotp` + Google Authenticator) — финтех требует
+- [ ] Audit log: каждый login/logout/смена пароля → таблица с IP, UA, timestamp
 
 ### 3.2 Сессии
 
-- [ ] Установить `PERMANENT_SESSION_LIFETIME` (сейчас сессии не истекают)
-- [ ] Реализовать ротацию session ID после логина (защита от session fixation)
-- [ ] Добавить idle timeout: автоматический logout после N минут неактивности
+- [ ] `PERMANENT_SESSION_LIFETIME = timedelta(days=7)`
+- [ ] Ротация session ID после логина (защита от session fixation)
+- [ ] Idle timeout: автологаут через 30 мин неактивности
 
 ### 3.3 HTTP-заголовки
 
-- [ ] Добавить `Strict-Transport-Security: max-age=31536000; includeSubDomains` (HSTS)
-- [ ] Добавить `Permissions-Policy: geolocation=(), microphone=(), camera=()`
-- [ ] Убрать `Server: Werkzeug/...` / `Server: gunicorn` заголовок (утечка версий)
-- [ ] Ужесточить CSP: убрать CDN из `script-src`, перейти на `nonce` или `hash`
+- [ ] `Strict-Transport-Security: max-age=31536000; includeSubDomains`
+- [ ] `Permissions-Policy: geolocation=(), microphone=(), camera=()`
+- [ ] Убрать заголовок `Server: Werkzeug/...`
+- [ ] CSP: убрать CDN из `script-src`, перейти на `nonce`
 
-### 3.4 Файлы и загрузки
+### 3.4 Файлы
 
-- [ ] Хранить аватары вне `static/` — отдавать через роут с `@login_required` (сейчас доступны по прямому URL)
-- [ ] Пропускать загружаемые изображения через `Pillow` (`Image.open().save()`) — ре-энкодинг убивает embedded payloads
-- [ ] Rate limit на загрузку файлов: максимум 5 загрузок в час на пользователя
-- [ ] Хранить аватары с непредсказуемыми именами (UUID, не `user_1_photo.jpg`)
+- [ ] Аватары → хранить вне `static/`, отдавать через `@login_required`
+- [ ] Ре-энкод изображений через `Pillow` (убивает embedded payloads)
+- [ ] Rate limit на загрузку файлов: 5/час на пользователя
+- [ ] UUID-имена для аватаров
 
 ---
 
-## 4. UX / UI
+## Этап 4 — Новые функции
 
-### 4.1 Навигация и страницы
-
-- [ ] Добавить страницу `/dashboard` — главный экран после логина:
-  - Общая стоимость портфеля
-  - Доходность (день/месяц/всё время)
-  - Ближайшие купоны (список на 30 дней)
-  - Карточка "Лучшая и худшая позиция"
-- [ ] Вынести admin-панель на отдельный роут `/admin` с отдельным шаблоном
-- [ ] Добавить боковое меню / navbar с навигацией (Dashboard / Portfolio / Profile / Admin)
-- [ ] Добавить хлебные крошки на всех страницах кроме главной
-
-### 4.2 Таблицы и данные
-
-- [ ] Серверная сортировка (параметр `sort=field&order=asc|desc` в API)
-- [ ] Фильтрация истории торгов по дате (date picker from/to)
-- [ ] Поиск/фильтр по названию внутри активного портфеля
-- [ ] Skeleton screens при загрузке данных (вместо пустой таблицы)
-- [ ] Empty state с CTA при пустом портфеле ("Добавьте первую облигацию")
-
-### 4.3 Форма добавления облигации
-
-- [ ] Live-preview данных облигации при вводе ISIN: название, эмитент, купон %, дата погашения
-- [ ] Автозаполнение `buy_price` текущей рыночной ценой (с возможностью изменить)
-- [ ] Предупреждение при добавлении дублирующегося ISIN в портфель
-- [ ] Показывать YTM и следующий купон в превью перед добавлением
-
-### 4.4 Аналитика портфеля
+### 4.1 Аналитика портфеля
 
 - [ ] Средневзвешенный YTM по всему портфелю
-- [ ] Виджет купонного дохода: сколько рублей придёт в следующие 30/90/365 дней
-- [ ] Круговая диаграмма: распределение по эмитентам и секторам
-- [ ] Бенчмарк: доходность портфеля vs индекс RGBI (Московская биржа)
-- [ ] Sharpe Ratio и стандартное отклонение доходности (для продвинутых пользователей)
+- [ ] Виджет купонного дохода: 30/90/365 дней
+- [ ] Donut chart: распределение по эмитентам и секторам
+- [ ] Бенчмарк: доходность портфеля vs RGBI индекс
+- [ ] Sharpe Ratio и стандартное отклонение (продвинутый режим)
 
-### 4.5 Адаптивность
+### 4.2 Скринер и поиск
 
-- [ ] Мобильная версия таблиц (горизонтальный скролл или card view на маленьких экранах)
-- [ ] Touch-friendly элементы управления (кнопки минимум 44x44px)
-- [ ] Проверить работу на iOS Safari (особенно CSRF cookies и modals)
-
----
-
-## 5. Новые функции
-
-### 5.1 Уведомления
-
-- [ ] Email-уведомления через `flask-mail` + SMTP/SendGrid:
-  - За 1 день до выплаты купона (с суммой в рублях)
-  - При погашении облигации
-  - При больших изменениях цены (>5% за день)
-- [ ] Настройки уведомлений в профиле (вкл/выкл каждый тип)
-- [ ] In-app notification bell (уведомления внутри приложения без email)
-
-### 5.2 Расширение модели данных
-
-- [ ] Модель `Transaction`: докупка/продажа частей позиции с сохранением истории
-- [ ] Поле `broker_commission` при продаже для точного P&L (сейчас комиссия не учитывается)
-- [ ] Поддержка валютных облигаций (курс ЦБ РФ через API `cbr.ru`)
-- [ ] Поле `notes` — текстовые заметки к каждой позиции
-
-### 5.3 Скринер и поиск
-
-- [ ] Скринер облигаций с фильтрами: YTM, дюрация, эмитент, тип купона, рейтинг
-- [ ] Watchlist — облигации "в избранном" без добавления в портфель
+- [ ] Полнотекстовый поиск по ISIN, названию, эмитенту с debounce
+- [ ] Скринер облигаций: фильтры YTM, дюрация, эмитент, тип купона, рейтинг
+- [ ] Watchlist — избранные бумаги без добавления в портфель
 - [ ] Сравнение двух облигаций на одном графике
-- [ ] Поиск по эмитенту (все облигации одного эмитента)
 
-### 5.4 Отчётность
+### 4.3 Уведомления
 
-- [ ] Экспорт в Excel `.xlsx` с форматированием, формулами, сводной таблицей (`openpyxl`)
-- [ ] Налоговый отчёт: расчёт НДФЛ 13% с купонного дохода и прибыли от продаж
-- [ ] PDF-отчёт по портфелю через `weasyprint` или `reportlab`
+- [ ] Email-уведомления через `flask-mail`:
+  - За 1 день до купона (с суммой ₽)
+  - При погашении облигации
+  - При изменении цены > 5% за день
+- [ ] In-app notification bell
+- [ ] Настройки уведомлений в профиле
 
+### 4.4 Расширенные данные
 
----
+- [ ] `Transaction` модель: частичные покупки/продажи
+- [ ] `broker_commission` при продаже для точного P&L
+- [ ] Поддержка валютных облигаций (курс ЦБ РФ через `cbr.ru`)
+- [ ] Поле `notes` — заметки к каждой позиции
 
-## 6. Тестирование
+### 4.5 Отчётность
 
-### 6.1 Покрытие
-
-- [ ] Подключить `pytest-cov`, установить цель ≥ 85% покрытия
-- [ ] Написать интеграционные тесты с реальной PostgreSQL через `testcontainers`
-- [ ] E2E тесты через Playwright: ключевые сценарии (логин, добавить облигацию, продать, экспорт CSV)
-
-### 6.2 Качество кода
-
-- [ ] Настроить `pre-commit` хуки:
-  - `ruff` — линтер + автоформатирование
-  - `mypy` — статическая типизация
-  - `bandit` — SAST (поиск уязвимостей в коде)
-- [ ] Property-based тестирование P&L расчётов через `hypothesis`
-- [ ] Нагрузочное тестирование через `locust` для MOEX API роутов
-
-### 6.3 CI/CD
-
-- [ ] GitHub Actions workflow: `lint → typecheck → test → build → deploy`
-- [ ] Автоматический запуск тестов на каждый PR
-- [ ] Проверка зависимостей на CVE через `safety` или GitHub Dependabot
-- [ ] Code coverage badge в README
+- [ ] Excel `.xlsx` с форматированием, формулами, сводной таблицей (`openpyxl`)
+- [ ] Налоговый отчёт: НДФЛ 13% с купонов и прибыли от продаж
+- [ ] PDF-отчёт через `weasyprint` или `reportlab`
 
 ---
 
-## 7. DevOps и деплой
+## Этап 5 — Тестирование
 
-### 7.1 Контейнеризация
+### 5.1 Покрытие
 
-- [ ] `Dockerfile` (multi-stage: builder установка зависимостей + slim runtime образ)
+- [ ] `pytest-cov` → цель ≥ 85%
+- [ ] Интеграционные тесты с реальной PostgreSQL через `testcontainers`
+- [ ] E2E тесты через Playwright: логин, добавить/продать облигацию, экспорт
+
+### 5.2 Качество кода
+
+- [ ] `pre-commit` хуки: `ruff` + `mypy` + `bandit`
+- [ ] Property-based тесты P&L через `hypothesis`
+- [ ] Нагрузочное тестирование через `locust`
+
+### 5.3 CI/CD
+
+- [ ] GitHub Actions: `lint → typecheck → test → build → deploy`
+- [ ] Тесты на каждый PR
+- [ ] `safety check` (CVE в зависимостях)
+- [ ] Coverage badge в README
+
+---
+
+## Этап 6 — DevOps и деплой
+
+### 6.1 Контейнеризация
+
+- [ ] Multi-stage `Dockerfile` (builder + slim runtime)
 - [ ] `docker-compose.yml`: app + PostgreSQL + Redis + Nginx
-- [ ] `.dockerignore` для исключения `.env`, `__pycache__`, тестов из образа
-- [ ] Health check в Dockerfile: `HEALTHCHECK CMD curl -f http://localhost:5000/health`
+- [ ] `HEALTHCHECK CMD curl -f http://localhost:5000/health`
 
-### 7.2 Production окружение
+### 6.2 Production
 
-- [ ] Nginx как reverse proxy перед Gunicorn (SSL termination, gzip, static files)
-- [ ] Gunicorn с несколькими воркерами: `--workers 4 --threads 2 --worker-class gthread`
-- [ ] Systemd unit или supervisord для автозапуска и автоперезапуска
-- [ ] Let's Encrypt + certbot для SSL сертификата
+- [ ] Nginx как reverse proxy (SSL termination, gzip, static files)
+- [ ] Gunicorn: `--workers 4 --threads 2 --worker-class gthread`
+- [ ] Systemd unit для автозапуска
+- [ ] Let's Encrypt + certbot
 
-### 7.3 Мониторинг
+### 6.3 Мониторинг
 
-- [ ] Sentry для отслеживания ошибок (ловить исключения с контекстом запроса)
-- [ ] Prometheus метрики через `prometheus-flask-exporter`
-- [ ] Grafana dashboard: API latency, error rate, active users, MOEX API availability
-- [ ] Healthcheck endpoint `GET /health`:
-  ```json
-  { "status": "ok", "db": "ok", "moex": "ok", "cache": "ok" }
-  ```
-- [ ] Uptime monitoring (UptimeRobot или аналог)
+- [ ] `GET /health` → `{"status":"ok","db":"ok","moex":"ok","cache":"ok"}`
+- [ ] Sentry для отслеживания ошибок
+- [ ] Prometheus метрики + Grafana dashboard
+- [ ] Uptime monitoring
 
-### 7.4 Логирование
+### 6.4 Логирование
 
-- [ ] Структурированные JSON-логи через `structlog` или `python-json-logger`
-- [ ] Ротация логов: `TimedRotatingFileHandler` (ежедневно, хранить 30 дней)
-- [ ] Единый root logger в `app.py` вместо разрозненных логгеров в каждом файле
-- [ ] Логировать медленные запросы (>500ms) и ошибки MOEX API
+- [ ] Структурированные JSON-логи через `structlog`
+- [ ] `TimedRotatingFileHandler` (ежедневно, 30 дней)
+- [ ] Логировать медленные запросы (> 500ms)
 
 ---
 
-## 8. Документация
+## Этап 7 — Документация
 
-- [ ] `README.md` — Features, Quick Start, Configuration, Architecture, API Reference
-- [ ] `CONTRIBUTING.md` — как запустить локально, как писать тесты, code style
-- [ ] `CHANGELOG.md` в формате [Keep a Changelog](https://keepachangelog.com)
-- [ ] Docstrings для публичных функций в `moex.py` и `services/`
-- [ ] Postman / Bruno collection для ручного тестирования API
+- [ ] `README.md` — Features, Quick Start, Architecture, API Reference
+- [ ] `CONTRIBUTING.md` — как запустить локально, code style
+- [ ] `CHANGELOG.md` — формат Keep a Changelog
+- [ ] Docstrings в `moex.py` и `services/`
+- [ ] Bruno/Postman collection для API
 - [ ] Architecture diagram (C4 Level 2) в `/docs/architecture.md`
 
 ---
 
-## Роадмап по спринтам
+## Roadmap по спринтам
 
-### Sprint 1 — Технический долг (1-2 недели)
-> Фундамент, без которого нельзя двигаться дальше
+### Sprint 0 — Premium Редизайн (текущий, ветка `update-fr`)
+> Цель: визуально безупречный продукт класса Linear/Vercel
 
-- [ ] Переключить БД на Alembic-миграции
-- [ ] Убрать fallback для `SECRET_KEY`
-- [ ] Добавить retry + таймауты для MOEX API
-- [ ] Заменить `print()` на `logging` в `moex.py`
-- [ ] Разделить `config.py` на Dev/Test/Prod классы
-- [ ] Добавить `pytest-cov`, довести покрытие до 85%
-- [ ] Добавить `ruff` + `mypy` в pre-commit
+**Неделя 1:**
+- [ ] Дизайн-система: Inter шрифт + полная замена CSS-переменных
+- [ ] SVG-логотип + SVG-спрайт для иконок
+- [ ] Новый sidebar + bottom-bar для mobile
+- [ ] Лендинг: gradient mesh background + glassmorphism форма
 
-### Sprint 2 — Безопасность и стабильность (2-3 недели)
-> Обязательно перед любым production-деплоем
+**Неделя 2:**
+- [ ] Dashboard: новые metric cards + countUp + Area chart P&L
+- [ ] Купонный timeline + доnut chart распределения
+- [ ] Toast redesign + skeleton loaders redesign
 
-- [ ] Audit log (IP, действие, timestamp)
-- [ ] `PERMANENT_SESSION_LIFETIME` + ротация session ID
-- [ ] HSTS, Permissions-Policy заголовки
-- [ ] Убрать `Server` заголовок с версией
-- [ ] Аватары вне `static/` с авторизацией доступа
-- [ ] Debounce для поиска облигаций
-- [ ] Dockerfile + docker-compose
+**Неделя 3:**
+- [ ] Portfolio: sticky header таблицы + hover states + sparklines
+- [ ] Drawer "Добавить облигацию" (step-by-step)
+- [ ] Модал продажи с live P&L preview
 
-### Sprint 3 — UX и аналитика (3-4 недели)
-> Делает продукт презентабельным
+**Неделя 4:**
+- [ ] Profile page redesign
+- [ ] Dark mode доработка + switch анимация
+- [ ] Micro-interactions: countUp, button states, form validation
+- [ ] Mobile адаптация card-view для таблицы
+- [ ] Финальный audit: lighthouse score ≥ 90 по всем метрикам
 
-- [ ] Страница `/dashboard` с обзором портфеля
-- [ ] Средневзвешенный YTM по портфелю
-- [ ] Виджет купонного дохода (30/90/365 дней)
-- [ ] Live-preview облигации при вводе ISIN
-- [ ] Skeleton screens при загрузке
-- [ ] Мобильная адаптация таблиц
-- [ ] Email-уведомления о купонах (flask-mail)
+### Sprint 1 — Технический долг (2 нед.)
+- Alembic миграции, SECRET_KEY валидация, retry MOEX, разделение конфига, тесты ≥ 85%
 
-### Sprint 4 — Новые функции (4-6 недель)
-> Расширение ценности продукта
+### Sprint 2 — Безопасность (2-3 нед.)
+- Audit log, session lifetime, HSTS, аватары в защищённое место, Dockerfile
 
-- [ ] Скринер облигаций с фильтрами
-- [ ] Watchlist (избранные без добавления в портфель)
-- [ ] Экспорт в Excel `.xlsx`
-- [ ] Налоговый отчёт НДФЛ 13%
-- [ ] Модель `Transaction` (частичные покупки/продажи)
-- [ ] Бенчмарк: портфель vs RGBI индекс
+### Sprint 3 — UX-функции (3-4 нед.)
+- Transaction модель, скринер, watchlist, email-уведомления, Excel-экспорт
 
-### Sprint 5 — DevOps и мониторинг (1-2 недели)
-> Production-ready деплой
-
-- [ ] Nginx + SSL (Let's Encrypt)
-- [ ] `GET /health` endpoint
-- [ ] Sentry интеграция
-- [ ] Prometheus + Grafana dashboard
-- [ ] GitHub Actions CI/CD pipeline
-- [ ] README (EN) + OpenAPI документация
-
-### Sprint 6 — Масштабирование (по необходимости)
-> Когда есть реальная нагрузка
-
-- [ ] Redis вместо SimpleCache
-- [ ] Bulk update в APScheduler
-- [ ] Публичный REST API с JWT
-- [ ] WebSocket для live-обновления цен
-- [ ] Расширение на акции (MOEX stock engine)
-- [ ] 2FA через TOTP
+### Sprint 4 — DevOps (1-2 нед.)
+- Nginx + SSL, /health, Sentry, Prometheus, CI/CD pipeline
 
 ---
 
-## Таблица приоритетов по файлам
+## Дизайн-референсы (вдохновение)
 
-| Приоритет | Файл | Изменение |
-|-----------|------|-----------|
-| 🔴 Высокий | `config.py` | Убрать fallback SECRET_KEY, разделить на окружения |
-| 🔴 Высокий | `moex.py` | Retry, таймауты, logging вместо print |
-| 🔴 Высокий | `blueprints/portfolio.py` | Вынести бизнес-логику в `services/` |
-| 🟡 Средний | `models.py` | Transaction модель, `updated_at`, `currency` |
-| 🟡 Средний | `app.py` | Bulk update в APScheduler, `/health` роут |
-| 🟡 Средний | `static/js/portfolio.js` | Debounce для search, skeleton loaders |
-| 🟢 Низкий | `templates/*.html` | Мобильная адаптация, dashboard шаблон |
-| 🟢 Низкий | `tests/test_app.py` | pytest-cov, интеграционные тесты |
+| Продукт | Что взять |
+|---------|-----------|
+| **Linear.app** | Sidebar, typography, micro-animations |
+| **Vercel Dashboard** | Metric cards, dark theme, spacing |
+| **Stripe Dashboard** | Data tables, charts, color system |
+| **Liveblocks** | Landing gradient, glassmorphism |
+| **Resend** | Minimalist forms, toast notifications |
+| **Clerk** | Profile page, auth forms |
+| **Raycast** | Color palette, icon style |
+| **Notion** | Empty states, sidebar collapse |
 
 ---
 
-## Чеклист для проверки production-готовности
+## Принципы дизайна InvestTrack
 
-```bash
-# Тесты и покрытие
-python -m pytest tests/ --cov=. --cov-report=term-missing
-# Цель: ≥ 85% coverage, 0 failed tests
+1. **Данные — главное.** UI служит данным, не наоборот. Числа читаются с первого взгляда.
+2. **Единая сетка.** Spacing = множители 4px (4, 8, 12, 16, 24, 32, 48, 64). Никаких случайных отступов.
+3. **Тёмная тема первична.** Финансовые дашборды используются вечером. Dark mode должен быть безупречен.
+4. **Motion = информация.** Анимации показывают изменение состояния, не развлекают. Всегда `prefers-reduced-motion: reduce`.
+5. **Accessibility.** WCAG 2.1 AA: контраст ≥ 4.5:1, focus видим, aria-label на иконках.
+6. **Производительность.** LCP < 1.5s, CLS < 0.1, FID < 100ms. Красивый UI не должен быть медленным.
 
-# Статический анализ
-ruff check .
-mypy .
-bandit -r . -ll
-# Цель: 0 ошибок, 0 критических уязвимостей
+---
 
-# Docker запуск
-docker-compose up --build
-curl http://localhost:5000/health
-# Цель: {"status": "ok", "db": "ok", "moex": "ok"}
+## Файлы для редизайна (checklist для code review)
 
-# Нагрузочный тест
-locust -f locustfile.py --headless -u 50 -r 10 --run-time 60s
-# Цель: p99 latency < 200ms, error rate < 0.1%
+```
+static/
+  css/
+    design-system.css    ← НОВЫЙ: токены + базовые компоненты
+    variables.css        ← ПЕРЕПИСАТЬ: новая палитра + токены
+    portfolio.css        ← ОБНОВИТЬ: использовать новые токены
+    sidebar.css          ← НОВЫЙ: sidebar + bottom-bar
+    animations.css       ← НОВЫЙ: keyframes + transition utilities
+  js/
+    sidebar.js           ← НОВЫЙ: collapse логика + mobile bottom-bar
+    animations.js        ← НОВЫЙ: countUp + intersection observer
+  fonts/
+    inter/               ← НОВЫЙ: Inter Variable woff2
+  icons/
+    sprite.svg           ← НОВЫЙ: SVG спрайт
 
-# Безопасность зависимостей
-safety check
-# Цель: 0 known vulnerabilities
+templates/
+  base.html              ← sidebar вместо navbar, Inter подключение
+  index.html             ← gradient mesh hero + glassmorphism form
+  dashboard.html         ← новые cards + Area chart + timeline
+  portfolio.html         ← sticky table + drawer + sparklines
+  profile.html           ← hero section + tabs + activity feed
 ```
