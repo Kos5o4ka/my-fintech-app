@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 
 import requests
 from datetime import datetime
@@ -10,9 +11,11 @@ from tenacity import (
     after_log,
 )
 
+from constants import MOEX_REQUEST_TIMEOUT, MOEX_MAX_HISTORY_OFFSET
+
 logger = logging.getLogger(__name__)
 
-_TIMEOUT = 10  # seconds for every outgoing MOEX request
+_TIMEOUT = MOEX_REQUEST_TIMEOUT
 
 
 @retry(
@@ -28,7 +31,7 @@ def _fetch_json(url: str) -> dict:
     return resp.json()
 
 
-def get_moex_bond(isin_code):
+def get_moex_bond(isin_code: str) -> Optional[dict]:
     isin_code = isin_code.strip().upper()
     try:
         search_res = _fetch_json(f"https://iss.moex.com/iss/securities.json?q={isin_code}")
@@ -79,11 +82,15 @@ def get_moex_bond(isin_code):
         return None
 
 
-def get_bond_history_all(secid, facevalue=1000):
-    labels, prices, nkd_history, ytm_history = [], [], [], []
+def get_bond_history_all(secid: str, facevalue: float = 1000) -> dict:
+    """Возвращает полную историю цен, НКД и YTM с пагинацией."""
+    labels: list[str] = []
+    prices: list[float] = []
+    nkd_history: list[float] = []
+    ytm_history: list[float] = []
     start_offset = 0
     try:
-        while start_offset < 1000:
+        while start_offset < MOEX_MAX_HISTORY_OFFSET:
             url = (
                 f"https://iss.moex.com/iss/history/engines/stock/markets/bonds"
                 f"/securities/{secid}.json"
@@ -119,7 +126,8 @@ def get_bond_history_all(secid, facevalue=1000):
     return {"labels": labels, "data": prices, "nkd": nkd_history, "ytm": ytm_history}
 
 
-def get_coupon_calendar(secid):
+def get_coupon_calendar(secid: str) -> list[dict]:
+    """Возвращает ближайшие купонные выплаты для облигации."""
     try:
         res = _fetch_json(
             f"https://iss.moex.com/iss/statistics/engines/stock/markets"
@@ -165,7 +173,7 @@ def get_bond_details(secid: str) -> dict:
         return {}
 
 
-def get_rgbi_history(from_date: str = None, to_date: str = None) -> dict:
+def get_rgbi_history(from_date: Optional[str] = None, to_date: Optional[str] = None) -> dict:
     """Fetch RGBI index price history from MOEX ISS."""
     try:
         url = (
@@ -195,12 +203,12 @@ def get_rgbi_history(from_date: str = None, to_date: str = None) -> dict:
 
 
 def get_screener_bonds(
-    min_ytm: float = None,
-    max_ytm: float = None,
-    maturity_from: str = None,
-    maturity_to: str = None,
+    min_ytm: Optional[float] = None,
+    max_ytm: Optional[float] = None,
+    maturity_from: Optional[str] = None,
+    maturity_to: Optional[str] = None,
     limit: int = 100,
-) -> list:
+) -> list[dict]:
     """Fetch bonds list from MOEX with optional YTM / maturity filtering."""
     try:
         url = (
@@ -252,7 +260,7 @@ def get_screener_bonds(
         return []
 
 
-def search_bonds(query: str, limit: int = 10) -> list:
+def search_bonds(query: str, limit: int = 10) -> list[dict]:
     try:
         url = (
             "https://iss.moex.com/iss/securities.json"

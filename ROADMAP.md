@@ -1,7 +1,7 @@
 # InvestTrack — Полный Roadmap
 
 > **Ветка активной разработки:** `update-fr`
-> Последнее обновление: 2026-05-22
+> Последнее обновление: 2026-05-23
 
 ---
 
@@ -10,7 +10,7 @@
 | Этап | Тема | Статус |
 |------|------|--------|
 | 0 | Premium Редизайн (UI/UX) | ✅ Выполнен |
-| 1 | Архитектурный рефакторинг | 🔄 В работе |
+| 1 | Архитектурный рефакторинг | ✅ Выполнен |
 | 2 | Оптимизация и кэш | 🔲 В плане |
 | 3 | Безопасность | 🔲 В плане |
 | 4 | Новые фичи | 🔲 В плане |
@@ -127,36 +127,39 @@
 
 ---
 
-## Этап 1 — Архитектурный рефакторинг 🔄 В РАБОТЕ
+## Этап 1 — Архитектурный рефакторинг ✅ ВЫПОЛНЕН
 
 ### 1.1 Сервисный слой
 
-- [ ] Создать `services/` директорию:
+- [x] Создать `services/` директорию:
   - `portfolio_service.py` — P&L, расчёт доходности, купонный доход
-  - `moex_service.py` — все обращения к MOEX ISS API
-  - `user_service.py` — CRUD пользователей, аватары, смена пароля
-- [ ] Blueprints = только HTTP-слой: parse → call service → respond
-- [ ] Вынести бизнес-логику из `blueprints/portfolio.py` (400+ строк)
+  - `moex_service.py` — кэшированные обращения к MOEX ISS API
+  - `user_service.py` — аватары, email-настройки пользователей
+- [x] Blueprints = только HTTP-слой: parse → call service → respond
+- [x] Вынести бизнес-логику из `blueprints/portfolio.py`
 
 ### 1.2 Типизация
 
-- [ ] Python type hints во всех функциях (`blueprints/`, `moex.py`, `models.py`)
-- [ ] Pydantic схемы валидации в `schemas/` для входящих JSON-запросов
-- [ ] `constants.py` — все магические числа (лимиты, TTL, размеры файлов)
+- [x] Python type hints во всех функциях (`blueprints/`, `moex.py`, `models.py`, `services/`)
+- [x] Pydantic схемы валидации в `schemas/` для входящих JSON-запросов
+  - `AddBondRequest`, `SellBondRequest`, `ScreenerRequest`
+  - `LoginRequest`, `ChangePasswordRequest`
+  - `EmailSettingsRequest`
+- [x] `constants.py` — все магические числа (TTL, таймауты, налоговые ставки, лимиты)
 
 ### 1.3 База данных
 
-- [ ] Alembic-миграции вместо `db.create_all()` (flask-migrate уже установлен)
-- [ ] Поле `updated_at` в `BondPortfolio`
-- [ ] Поле `currency` (RUB/USD/EUR) для валютных облигаций
-- [ ] Индекс на `BondPortfolio.isin`
+- [x] Alembic-миграции (flask-migrate уже был установлен, добавлена новая миграция `stage1_bond_portfolio_fields`)
+- [x] Поле `updated_at` в `BondPortfolio`
+- [x] Поле `currency` (RUB/USD/EUR) для валютных облигаций
+- [x] Индекс `ix_bp_isin` на `BondPortfolio.isin`
 
 ### 1.4 Конфигурация
 
-- [ ] `DevelopmentConfig`, `TestingConfig`, `ProductionConfig` в `config.py`
-- [ ] Валидация обязательных env-vars при старте
-- [ ] Убрать fallback `'change-me-before-production'`
-- [ ] `.env.production.example`
+- [x] `DevelopmentConfig`, `TestingConfig`, `ProductionConfig` в `config.py`
+- [x] Валидация обязательных env-vars при старте (`ProductionConfig.validate()`)
+- [x] Убрать небезопасный fallback `'change-me-before-production'`
+- [x] `.env.production.example` с документацией всех переменных
 
 ---
 

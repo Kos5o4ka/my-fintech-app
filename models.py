@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from extensions import db
 from flask_login import UserMixin
 
@@ -24,6 +24,7 @@ class BondPortfolio(db.Model):
         db.Index('ix_bp_user_id', 'user_id'),
         db.Index('ix_bp_is_sold', 'is_sold'),
         db.Index('ix_bp_user_sold', 'user_id', 'is_sold'),
+        db.Index('ix_bp_isin', 'isin'),
     )
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
@@ -38,6 +39,8 @@ class BondPortfolio(db.Model):
     sell_price = db.Column(db.Numeric(10, 2), nullable=True)
     sell_date = db.Column(db.Date, nullable=True)
     broker_commission = db.Column(db.Numeric(10, 4), nullable=True)
+    currency = db.Column(db.String(3), nullable=False, default='RUB')
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class Watchlist(db.Model):

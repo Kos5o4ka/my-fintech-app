@@ -6,7 +6,7 @@ load_dotenv()
 
 class Config:
     BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'change-me-before-production'
+    SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-insecure-please-set-SECRET_KEY-env-var'
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or 'sqlite:///local_fintech.db'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     REDIS_URL = os.environ.get('REDIS_URL')

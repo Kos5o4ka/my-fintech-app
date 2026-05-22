@@ -317,7 +317,7 @@ class PortfolioTests(BaseTest):
     def test_get_portfolio_empty(self):
         uid = self._make_user()
         self._set_logged_in(uid)
-        with patch("blueprints.portfolio._get_moex_cached", return_value=None):
+        with patch("services.moex_service.get_bond_cached", return_value=None):
             r = self.client.get("/api/portfolio")
         self.assertEqual(r.status_code, 200)
         data = r.get_json()
@@ -328,7 +328,7 @@ class PortfolioTests(BaseTest):
         uid = self._make_user()
         self._set_logged_in(uid)
         self._make_bond(uid)
-        with patch("blueprints.portfolio._get_moex_cached", return_value=MOCK_MOEX):
+        with patch("services.moex_service.get_bond_cached", return_value=MOCK_MOEX):
             r = self.client.get("/api/portfolio")
         self.assertEqual(r.status_code, 200)
         data = r.get_json()
