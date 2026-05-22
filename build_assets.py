@@ -5,9 +5,12 @@ JS_FILES = [
     "static/js/common.js",
     "static/js/index.js",
     "static/js/portfolio.js",
+    "static/js/sidebar.js",
 ]
 CSS_FILES = [
     "static/css/variables.css",
+    "static/css/sidebar.css",
+    "static/css/animations.css",
     "static/css/portfolio.css",
 ]
 

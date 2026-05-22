@@ -5,120 +5,203 @@
 
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/portfolio.min.css') }}">
+<style>
+.page-header { padding: 1.75rem 1.75rem .25rem; }
+.page-header h4 { font-weight: 700; letter-spacing: -.02em; font-size: 1.2rem; }
+
+.dash-container { padding: 0 1.75rem 2rem; }
+
+/* Metric cards row */
+.metrics-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 1rem; margin-bottom: 1.5rem; }
+@media(max-width:900px){ .metrics-row{ grid-template-columns: repeat(2,1fr); } }
+@media(max-width:480px){ .metrics-row{ grid-template-columns: 1fr 1fr; gap:.75rem; } }
+
+/* Bottom section */
+.dash-bottom { display: grid; grid-template-columns: 2fr 3fr; gap: 1rem; }
+@media(max-width:900px){ .dash-bottom{ grid-template-columns:1fr; } }
+
+/* Position cards */
+.pos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+
+/* Summary row */
+.summary-row { display: grid; grid-template-columns: repeat(3,1fr); gap: 0; }
+.summary-cell { padding: .9rem; text-align: center; border-right: 1px solid var(--card-border); }
+.summary-cell:last-child { border-right: none; }
+
+/* Timeline coupon list */
+#d-coupon-list .list-group-item {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .65rem 1.1rem;
+  border: none;
+  border-bottom: 1px solid var(--border-subtle);
+}
+#d-coupon-list .list-group-item:last-child { border-bottom: none; }
+.coupon-date-badge {
+  font-size: .65rem;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  min-width: 38px;
+  text-align: center;
+  line-height: 1.2;
+}
+</style>
 {% endblock %}
 
 {% block content %}
-<div class="container mb-5">
 
-    <!-- Welcome -->
-    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-        <div>
-            <h4 class="mb-0 fw-bold">Добро пожаловать, {{ current_user.username }}! 👋</h4>
-            <small class="text-muted">Обзор вашего портфеля</small>
-        </div>
-        <a href="/portfolio" class="btn btn-primary btn-sm">Управление портфелем →</a>
+<div class="page-header">
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div>
+      <h4 class="mb-0">Добро пожаловать, {{ current_user.username }}!</h4>
+      <small style="color:var(--text-tertiary)">Обзор вашего портфеля</small>
+    </div>
+    <a href="/portfolio" class="btn btn-primary btn-sm px-3">Управление портфелем →</a>
+  </div>
+</div>
+
+<div class="dash-container">
+
+  <!-- ── Metric cards ─────────────────────────────────────────────── -->
+  <div class="metrics-row" id="metrics-row">
+
+    <div class="metric-card accent-green animate-fade-in-up">
+      <div class="metric-icon-wrap green">
+        <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="6" width="14" height="10" rx="1.5"/>
+          <path d="M5 6V5a4 4 0 018 0v1"/>
+        </svg>
+      </div>
+      <div class="metric-label">Стоимость портфеля</div>
+      <div class="metric-value" style="color:var(--text-success)"><span id="d-total-value">—</span> ₽</div>
+      <div class="metric-delta neutral" id="d-count-delta">— позиций</div>
     </div>
 
-    <!-- Metric cards -->
-    <div class="row g-3 mb-4" id="metrics-row">
-        <div class="col-6 col-md-3">
-            <div class="metric-card accent-green">
-                <div class="metric-icon">💼</div>
-                <div class="metric-label">Стоимость портфеля</div>
-                <div class="metric-value text-success"><span id="d-total-value">—</span> ₽</div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="metric-card accent-blue">
-                <div class="metric-icon">📈</div>
-                <div class="metric-label">P&amp;L итого</div>
-                <div class="metric-value" id="d-total-pnl">—</div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="metric-card accent-cyan">
-                <div class="metric-icon">🎯</div>
-                <div class="metric-label">Средний YTM</div>
-                <div class="metric-value text-info"><span id="d-ytm">—</span></div>
-            </div>
-        </div>
-        <div class="col-6 col-md-3">
-            <div class="metric-card accent-violet">
-                <div class="metric-icon">💸</div>
-                <div class="metric-label">Доход / 30 дней</div>
-                <div class="metric-value text-success"><span id="d-income30">—</span> ₽</div>
-            </div>
-        </div>
+    <div class="metric-card accent-blue animate-fade-in-up delay-100">
+      <div class="metric-icon-wrap blue">
+        <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="2,13 6,8 9,11 13,5 16,7"/>
+          <polyline points="13,3 16,3 16,6"/>
+        </svg>
+      </div>
+      <div class="metric-label">P&amp;L итого</div>
+      <div class="metric-value" id="d-total-pnl">—</div>
     </div>
 
-    <div class="row g-4">
-        <!-- Coupon calendar -->
-        <div class="col-md-5">
-            <div class="card shadow-sm h-100">
-                <div class="card-header bg-primary text-white py-2 fw-semibold">📅 Ближайшие купоны</div>
-                <div class="card-body p-0">
-                    <ul class="list-group list-group-flush" id="d-coupon-list">
-                        <li class="list-group-item text-center text-muted py-3">
-                            <span class="skeleton-cell d-inline-block" style="width:60%;height:14px;"></span>
-                        </li>
-                    </ul>
-                </div>
-                <div class="card-footer text-center py-2">
-                    <a href="/portfolio" class="small text-muted">Все купоны в портфеле →</a>
-                </div>
-            </div>
-        </div>
-
-        <!-- Best / Worst + Quick stats -->
-        <div class="col-md-7">
-            <div class="row g-3 mb-3">
-                <div class="col-6">
-                    <div class="card shadow-sm border-success h-100">
-                        <div class="card-header bg-success bg-opacity-10 py-2 small fw-semibold text-success">
-                            🏆 Лучшая позиция
-                        </div>
-                        <div class="card-body py-3">
-                            <div class="fw-semibold text-truncate" id="d-best-name">—</div>
-                            <div class="text-success fs-5 fw-bold" id="d-best-pnl">—</div>
-                            <small class="text-muted" id="d-best-isin"></small>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-6">
-                    <div class="card shadow-sm border-danger h-100">
-                        <div class="card-header bg-danger bg-opacity-10 py-2 small fw-semibold text-danger">
-                            📉 Худшая позиция
-                        </div>
-                        <div class="card-body py-3">
-                            <div class="fw-semibold text-truncate" id="d-worst-name">—</div>
-                            <div class="text-danger fs-5 fw-bold" id="d-worst-pnl">—</div>
-                            <small class="text-muted" id="d-worst-isin"></small>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Portfolio summary -->
-            <div class="card shadow-sm">
-                <div class="card-body py-3">
-                    <div class="row g-2 text-center">
-                        <div class="col-4">
-                            <div class="text-muted small">Позиций</div>
-                            <div class="fw-bold" id="d-count">—</div>
-                        </div>
-                        <div class="col-4">
-                            <div class="text-muted small">Доход / 90 дн.</div>
-                            <div class="fw-bold text-success" id="d-income90">—</div>
-                        </div>
-                        <div class="col-4">
-                            <div class="text-muted small">Доход / год</div>
-                            <div class="fw-bold text-success" id="d-income365">—</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+    <div class="metric-card accent-cyan animate-fade-in-up delay-200">
+      <div class="metric-icon-wrap cyan">
+        <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="9" cy="9" r="6.5"/>
+          <polyline points="9,5.5 9,9 11.5,11"/>
+        </svg>
+      </div>
+      <div class="metric-label">Средний YTM</div>
+      <div class="metric-value" style="color:var(--text-info)" id="d-ytm">—</div>
     </div>
+
+    <div class="metric-card accent-violet animate-fade-in-up delay-300">
+      <div class="metric-icon-wrap violet">
+        <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="9" y1="2" x2="9" y2="16"/>
+          <path d="M13 5H7a2 2 0 000 4h4a2 2 0 010 4H5"/>
+        </svg>
+      </div>
+      <div class="metric-label">Доход / 30 дней</div>
+      <div class="metric-value" style="color:var(--text-success)"><span id="d-income30">—</span> ₽</div>
+    </div>
+
+  </div>
+
+  <!-- ── Bottom grid ─────────────────────────────────────────────── -->
+  <div class="dash-bottom">
+
+    <!-- Coupon calendar -->
+    <div class="card animate-fade-in-up delay-200">
+      <div class="card-header" style="background:var(--blue-600)!important;color:#fff!important;">
+        <div class="d-flex align-items-center gap-2">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+            <rect x="2" y="3" width="12" height="11" rx="1.5"/>
+            <line x1="2" y1="7" x2="14" y2="7"/>
+            <line x1="5" y1="1" x2="5" y2="5"/>
+            <line x1="11" y1="1" x2="11" y2="5"/>
+          </svg>
+          Ближайшие купоны
+        </div>
+      </div>
+      <div class="card-body p-0">
+        <ul class="list-group list-group-flush" id="d-coupon-list">
+          <li class="list-group-item">
+            <span class="skeleton-cell" style="width:38px;height:28px;flex-shrink:0;border-radius:4px;"></span>
+            <div style="flex:1">
+              <span class="skeleton-cell mb-1" style="width:70%;height:12px;"></span>
+              <span class="skeleton-cell" style="width:40%;height:10px;"></span>
+            </div>
+            <span class="skeleton-cell" style="width:60px;height:20px;border-radius:20px;"></span>
+          </li>
+        </ul>
+      </div>
+      <div class="card-footer text-center py-2">
+        <a href="/portfolio" class="small" style="color:var(--text-tertiary)">Все купоны в портфеле →</a>
+      </div>
+    </div>
+
+    <!-- Right column -->
+    <div>
+
+      <!-- Best / Worst -->
+      <div class="pos-grid animate-fade-in-up delay-300">
+        <div class="card" style="border-color:rgba(16,185,129,.2)">
+          <div class="card-header" style="font-size:.75rem;color:var(--text-success);background:rgba(16,185,129,.06)!important;">
+            <div class="d-flex align-items-center gap-1">
+              <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><polyline points="1,9 4,5 7,7 10,2"/></svg>
+              Лучшая позиция
+            </div>
+          </div>
+          <div class="card-body py-2 px-3">
+            <div class="fw-semibold text-truncate small" id="d-best-name">—</div>
+            <div class="fw-bold" style="font-size:1.1rem;color:var(--text-success)" id="d-best-pnl">—</div>
+            <div class="small" style="color:var(--text-tertiary);font-size:.72rem" id="d-best-isin"></div>
+          </div>
+        </div>
+        <div class="card" style="border-color:rgba(239,68,68,.2)">
+          <div class="card-header" style="font-size:.75rem;color:var(--text-danger);background:rgba(239,68,68,.06)!important;">
+            <div class="d-flex align-items-center gap-1">
+              <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><polyline points="1,3 4,7 7,5 10,10"/></svg>
+              Худшая позиция
+            </div>
+          </div>
+          <div class="card-body py-2 px-3">
+            <div class="fw-semibold text-truncate small" id="d-worst-name">—</div>
+            <div class="fw-bold" style="font-size:1.1rem;color:var(--text-danger)" id="d-worst-pnl">—</div>
+            <div class="small" style="color:var(--text-tertiary);font-size:.72rem" id="d-worst-isin"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Summary card -->
+      <div class="card animate-fade-in-up delay-400">
+        <div class="summary-row" id="d-summary-row">
+          <div class="summary-cell">
+            <div class="small" style="color:var(--text-tertiary);font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;font-weight:600">Позиций</div>
+            <div class="fw-bold mt-1" id="d-count">—</div>
+          </div>
+          <div class="summary-cell">
+            <div class="small" style="color:var(--text-tertiary);font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;font-weight:600">Доход / 90 дн.</div>
+            <div class="fw-bold mt-1" style="color:var(--text-success)" id="d-income90">—</div>
+          </div>
+          <div class="summary-cell">
+            <div class="small" style="color:var(--text-tertiary);font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;font-weight:600">Доход / год</div>
+            <div class="fw-bold mt-1" style="color:var(--text-success)" id="d-income365">—</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
 </div>
 {% endblock %}
 
@@ -126,7 +209,7 @@
 <script defer>
 async function loadDashboard() {
     const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    const fmt = v => v != null ? v.toLocaleString('ru-RU', {minimumFractionDigits: 2}) : '—';
+    const fmt = v => v != null ? v.toLocaleString('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '—';
     const sign = v => v >= 0 ? '+' : '';
 
     try {
@@ -137,52 +220,65 @@ async function loadDashboard() {
             fetch('/api/portfolio/history').then(r => r.json()),
         ]);
 
+        const bonds = portfolio.bonds || [];
+
         // Total value
         document.getElementById('d-total-value').textContent = fmt(portfolio.total_value);
+        document.getElementById('d-count-delta').textContent = bonds.length + ' позиций';
 
         // YTM
         const ytmEl = document.getElementById('d-ytm');
         ytmEl.textContent = portfolio.portfolio_ytm ? portfolio.portfolio_ytm.toFixed(2) + ' %' : '—';
 
         // Count
-        const bonds = portfolio.bonds || [];
         document.getElementById('d-count').textContent = bonds.length;
 
-        // P&L total (unrealized + realized)
+        // P&L
         const unrealized = bonds.reduce((s, b) => s + (b.pnl || 0), 0);
-        const realized = (history.trades || []).reduce((s, t) => s + (t.pnl || 0), 0);
-        const totalPnl = unrealized + realized;
+        const realized   = (history.trades || []).reduce((s, t) => s + (t.pnl || 0), 0);
+        const totalPnl   = unrealized + realized;
         const pnlEl = document.getElementById('d-total-pnl');
         pnlEl.textContent = sign(totalPnl) + fmt(totalPnl) + ' ₽';
-        pnlEl.className = 'fs-5 fw-bold mt-1 ' + (totalPnl >= 0 ? 'text-success' : 'text-danger');
+        pnlEl.style.color = totalPnl >= 0 ? 'var(--text-success)' : 'var(--text-danger)';
 
         // Income
-        document.getElementById('d-income30').textContent = fmt(income['30d']);
-        document.getElementById('d-income90').textContent = fmt(income['90d']) + ' ₽';
+        document.getElementById('d-income30').textContent  = fmt(income['30d']);
+        document.getElementById('d-income90').textContent  = fmt(income['90d']) + ' ₽';
         document.getElementById('d-income365').textContent = fmt(income['365d']) + ' ₽';
 
         // Best / Worst
         if (bonds.length) {
-            const sorted = [...bonds].sort((a, b) => (b.pnl_pct || 0) - (a.pnl_pct || 0));
-            const best = sorted[0], worst = sorted[sorted.length - 1];
-            document.getElementById('d-best-name').textContent = best.name;
-            document.getElementById('d-best-pnl').textContent = '+' + (best.pnl_pct || 0).toFixed(2) + '%';
-            document.getElementById('d-best-isin').textContent = best.isin;
+            const sorted = [...bonds].sort((a,b) => (b.pnl_pct||0) - (a.pnl_pct||0));
+            const best = sorted[0], worst = sorted[sorted.length-1];
+            document.getElementById('d-best-name').textContent  = best.name;
+            document.getElementById('d-best-pnl').textContent   = '+' + (best.pnl_pct||0).toFixed(2) + '%';
+            document.getElementById('d-best-isin').textContent  = best.isin;
             document.getElementById('d-worst-name').textContent = worst.name;
-            document.getElementById('d-worst-pnl').textContent = (worst.pnl_pct || 0).toFixed(2) + '%';
+            document.getElementById('d-worst-pnl').textContent  = (worst.pnl_pct||0).toFixed(2) + '%';
             document.getElementById('d-worst-isin').textContent = worst.isin;
         }
 
-        // Coupons
+        // Coupon calendar
         const list = document.getElementById('d-coupon-list');
         if (!coupons.length) {
-            list.innerHTML = '<li class="list-group-item text-muted text-center py-3">Нет предстоящих купонов</li>';
+            list.innerHTML = '<li class="list-group-item justify-content-center" style="color:var(--text-tertiary);font-size:.875rem">Нет предстоящих купонов</li>';
         } else {
-            list.innerHTML = coupons.slice(0, 6).map(c => `
-                <li class="list-group-item d-flex justify-content-between align-items-center py-2">
-                    <div><b>${esc(c.name)}</b><br><small class="text-muted">${esc(c.date)}</small></div>
-                    <span class="badge bg-success font-monospace">+${parseFloat(c.total_payout).toFixed(2)} ₽</span>
-                </li>`).join('');
+            list.innerHTML = coupons.slice(0,6).map(c => {
+                const d = new Date(c.date);
+                const day   = d.getDate();
+                const month = d.toLocaleString('ru-RU',{month:'short'});
+                return `
+                <li class="list-group-item">
+                    <div class="coupon-date-badge">${day}<br>${month}</div>
+                    <div style="flex:1;min-width:0">
+                        <div class="fw-semibold small text-truncate">${esc(c.name)}</div>
+                        <div style="font-size:.72rem;color:var(--text-tertiary)">${esc(c.date)}</div>
+                    </div>
+                    <span class="badge" style="background:rgba(16,185,129,.15);color:var(--text-success);font-variant-numeric:tabular-nums">
+                        +${parseFloat(c.total_payout).toFixed(2)} ₽
+                    </span>
+                </li>`;
+            }).join('');
         }
 
     } catch(e) {
