@@ -1,6 +1,7 @@
 venv/
 .venv/
 .claude/settings.local.json
+.idea/
 __pycache__/
 *.pyc
 .env

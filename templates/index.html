@@ -1,41 +1,294 @@
 {% extends "base.html" %}
 
-{% block title %}InvestTrack — Войти{% endblock %}
-{% block description %}InvestTrack — персональный трекер облигационного портфеля с данными Московской Биржи{% endblock %}
+{% block title %}InvestTrack — Умный трекер облигаций{% endblock %}
+{% block description %}InvestTrack — персональный трекер облигационного портфеля с данными Московской Биржи. Отслеживайте P&L, купоны и рыночные цены в реальном времени.{% endblock %}
+
+{% block head_extra %}
+<style>
+  .hero-wrap {
+    min-height: calc(100vh - 72px);
+    display: flex;
+    align-items: stretch;
+  }
+  .hero-left {
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 60%, #1a4f7a 100%);
+    color: #fff;
+    padding: 3rem 2.5rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero-left::before {
+    content: '';
+    position: absolute;
+    top: -80px; right: -80px;
+    width: 320px; height: 320px;
+    border-radius: 50%;
+    background: rgba(99,179,237,.08);
+  }
+  .hero-left::after {
+    content: '';
+    position: absolute;
+    bottom: -60px; left: -60px;
+    width: 240px; height: 240px;
+    border-radius: 50%;
+    background: rgba(99,179,237,.06);
+  }
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    background: rgba(255,255,255,.1);
+    border: 1px solid rgba(255,255,255,.15);
+    border-radius: 50px;
+    padding: .3rem .9rem;
+    font-size: .78rem;
+    letter-spacing: .03em;
+    margin-bottom: 1.5rem;
+    width: fit-content;
+    backdrop-filter: blur(4px);
+  }
+  .hero-title {
+    font-size: clamp(1.8rem, 3vw, 2.6rem);
+    font-weight: 800;
+    line-height: 1.2;
+    margin-bottom: .8rem;
+  }
+  .hero-title span {
+    background: linear-gradient(90deg, #63b3ed, #90cdf4);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .hero-sub {
+    color: rgba(255,255,255,.72);
+    font-size: 1rem;
+    line-height: 1.65;
+    margin-bottom: 2rem;
+    max-width: 400px;
+  }
+  .feature-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .75rem;
+  }
+  .feature-list li {
+    display: flex;
+    align-items: flex-start;
+    gap: .75rem;
+    font-size: .92rem;
+    color: rgba(255,255,255,.85);
+  }
+  .feature-icon {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    background: rgba(99,179,237,.18);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1rem;
+    flex-shrink: 0;
+    margin-top: .05rem;
+  }
+  .feature-list strong {
+    color: #fff;
+    display: block;
+    margin-bottom: .1rem;
+    font-size: .9rem;
+  }
+  .feature-list span {
+    color: rgba(255,255,255,.6);
+    font-size: .8rem;
+    line-height: 1.4;
+  }
+  .moex-tag {
+    margin-top: 2rem;
+    display: flex; align-items: center; gap: .5rem;
+    font-size: .75rem;
+    color: rgba(255,255,255,.45);
+  }
+  .moex-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: #48bb78;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .3; }
+  }
+
+  .hero-right {
+    background: var(--card-bg);
+    padding: 3rem 2.5rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .login-card {
+    max-width: 360px;
+    width: 100%;
+    margin: 0 auto;
+  }
+  .login-logo {
+    font-size: 2.4rem;
+    text-align: center;
+    margin-bottom: .5rem;
+  }
+  .login-title {
+    font-size: 1.4rem;
+    font-weight: 700;
+    text-align: center;
+    margin-bottom: .3rem;
+  }
+  .login-sub {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: .85rem;
+    margin-bottom: 1.8rem;
+  }
+  .form-control:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59,130,246,.15);
+  }
+  .btn-login {
+    background: linear-gradient(135deg, #1e3a5f, #1a6fad);
+    border: none;
+    color: #fff;
+    font-weight: 600;
+    letter-spacing: .02em;
+    padding: .65rem;
+    transition: opacity .2s, transform .15s;
+  }
+  .btn-login:hover {
+    opacity: .9;
+    transform: translateY(-1px);
+    color: #fff;
+  }
+  .btn-login:disabled {
+    opacity: .7;
+    transform: none;
+  }
+  .visits-line {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: .78rem;
+    margin-top: 1.4rem;
+  }
+  .visits-line b { color: var(--body-color); }
+
+  @media (max-width: 767px) {
+    .hero-wrap { flex-direction: column; min-height: unset; }
+    .hero-left { padding: 2rem 1.5rem; }
+    .hero-right { padding: 2rem 1.5rem; }
+  }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="container">
-    <div class="row justify-content-center mt-5">
-        <div class="col-md-4 col-sm-8">
-            <div class="card shadow">
-                <div class="card-body px-4 py-4">
-                    <h3 class="card-title text-center mb-4">Авторизация</h3>
-                    {% if error %}
-                    <div class="alert alert-danger alert-dismissible fade show py-2" role="alert">
-                        {{ error }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                    </div>
-                    {% endif %}
-                    <form id="uiLoginForm">
-                        <div class="mb-3">
-                            <label class="form-label" for="loginUsername">Логин</label>
-                            <input type="text" id="loginUsername" class="form-control"
-                                   placeholder="Введите логин" aria-label="Логин" required autocomplete="username">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label" for="loginPassword">Пароль</label>
-                            <input type="password" id="loginPassword" class="form-control"
-                                   placeholder="Введите пароль" aria-label="Пароль" required autocomplete="current-password">
-                        </div>
-                        <button type="submit" id="loginBtn" class="btn btn-primary w-100">Войти</button>
-                    </form>
-                </div>
-            </div>
-            <p class="text-center text-muted small mt-3">
-                <span id="global-visits-line">Сервис посетили <b id="global-visits">…</b> раз</span>
-            </p>
-        </div>
+<div class="hero-wrap">
+
+  {# ── Левая панель — описание ──────────────────────────────────────── #}
+  <div class="hero-left col-lg-6 col-md-5">
+    <div style="position:relative;z-index:1">
+
+      <div class="hero-badge">
+        <span>📊</span> Трекер облигационного портфеля
+      </div>
+
+      <h1 class="hero-title">
+        Твои облигации<br>под <span>полным контролем</span>
+      </h1>
+
+      <p class="hero-sub">
+        Добавляй бумаги, следи за доходностью и купонами —
+        данные с Московской Биржи обновляются автоматически.
+      </p>
+
+      <ul class="feature-list">
+        <li>
+          <div class="feature-icon">📈</div>
+          <div>
+            <strong>P&amp;L в реальном времени</strong>
+            <span>Прибыль и убыток по каждой позиции с учётом комиссии брокера</span>
+          </div>
+        </li>
+        <li>
+          <div class="feature-icon">💸</div>
+          <div>
+            <strong>Купонный календарь</strong>
+            <span>Ближайшие выплаты и уведомления на email за день до даты</span>
+          </div>
+        </li>
+        <li>
+          <div class="feature-icon">🔎</div>
+          <div>
+            <strong>Скринер + вотчлист</strong>
+            <span>Поиск по всем бумагам MOEX, список наблюдения для быстрого мониторинга</span>
+          </div>
+        </li>
+        <li>
+          <div class="feature-icon">📥</div>
+          <div>
+            <strong>Экспорт в Excel</strong>
+            <span>Выгрузка полной истории портфеля одним кликом</span>
+          </div>
+        </li>
+      </ul>
+
+      <div class="moex-tag">
+        <div class="moex-dot"></div>
+        Данные: Московская Биржа (MOEX ISS API)
+      </div>
+
     </div>
+  </div>
+
+  {# ── Правая панель — форма входа ──────────────────────────────────── #}
+  <div class="hero-right col-lg-6 col-md-7">
+    <div class="login-card">
+
+      <div class="login-logo">📈</div>
+      <div class="login-title">InvestTrack</div>
+      <div class="login-sub">Войдите, чтобы открыть портфель</div>
+
+      {% if error %}
+      <div class="alert alert-danger alert-dismissible fade show py-2 mb-3" role="alert">
+        {{ error }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+      {% endif %}
+
+      <form id="uiLoginForm">
+        <div class="mb-3">
+          <label class="form-label fw-semibold small" for="loginUsername">Логин</label>
+          <input type="text" id="loginUsername" class="form-control"
+                 placeholder="Введите логин" aria-label="Логин"
+                 required autocomplete="username">
+        </div>
+        <div class="mb-4">
+          <label class="form-label fw-semibold small" for="loginPassword">Пароль</label>
+          <input type="password" id="loginPassword" class="form-control"
+                 placeholder="Введите пароль" aria-label="Пароль"
+                 required autocomplete="current-password">
+        </div>
+        <button type="submit" id="loginBtn" class="btn btn-login w-100 rounded-3">
+          Войти →
+        </button>
+      </form>
+
+      <div class="visits-line">
+        <span id="global-visits-line">
+          Сервис посетили <b id="global-visits">…</b> раз
+        </span>
+      </div>
+
+    </div>
+  </div>
+
 </div>
 {% endblock %}
 
@@ -44,13 +297,14 @@
 document.addEventListener('DOMContentLoaded', () => {
     fetch('/api/init').then(r => r.json()).then(d => {
         const el = document.getElementById('global-visits');
-        if (el) el.textContent = d.visits;
+        if (el) el.textContent = Number(d.visits).toLocaleString('ru-RU');
     }).catch(() => {});
 
     document.getElementById('uiLoginForm').addEventListener('submit', async e => {
         e.preventDefault();
         const btn = document.getElementById('loginBtn');
-        btn.disabled = true; btn.textContent = 'Вход…';
+        btn.disabled = true;
+        btn.textContent = 'Входим…';
         try {
             const res = await window.Common.csrfFetch('/api/auth/login', {
                 method: 'POST',
@@ -65,9 +319,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 window.location.href = '/dashboard';
             } else {
                 window.Common.showSystemMessage(data.message, true);
+                btn.disabled = false;
+                btn.textContent = 'Войти →';
             }
-        } finally {
-            btn.disabled = false; btn.textContent = 'Войти';
+        } catch {
+            btn.disabled = false;
+            btn.textContent = 'Войти →';
         }
     });
 });
