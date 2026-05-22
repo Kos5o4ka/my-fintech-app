@@ -22,35 +22,31 @@
     <!-- Metric cards -->
     <div class="row g-3 mb-4" id="metrics-row">
         <div class="col-6 col-md-3">
-            <div class="card shadow-sm border-success text-center h-100">
-                <div class="card-body py-3">
-                    <div class="text-muted small text-uppercase" style="font-size:.7rem;">Стоимость</div>
-                    <div class="fs-5 fw-bold text-success mt-1"><span id="d-total-value">—</span> ₽</div>
-                </div>
+            <div class="metric-card accent-green">
+                <div class="metric-icon">💼</div>
+                <div class="metric-label">Стоимость портфеля</div>
+                <div class="metric-value text-success"><span id="d-total-value">—</span> ₽</div>
             </div>
         </div>
         <div class="col-6 col-md-3">
-            <div class="card shadow-sm text-center h-100">
-                <div class="card-body py-3">
-                    <div class="text-muted small text-uppercase" style="font-size:.7rem;">P&amp;L (итого)</div>
-                    <div class="fs-5 fw-bold mt-1" id="d-total-pnl">—</div>
-                </div>
+            <div class="metric-card accent-blue">
+                <div class="metric-icon">📈</div>
+                <div class="metric-label">P&amp;L итого</div>
+                <div class="metric-value" id="d-total-pnl">—</div>
             </div>
         </div>
         <div class="col-6 col-md-3">
-            <div class="card shadow-sm border-info text-center h-100">
-                <div class="card-body py-3">
-                    <div class="text-muted small text-uppercase" style="font-size:.7rem;">Средний YTM</div>
-                    <div class="fs-5 fw-bold text-info mt-1"><span id="d-ytm">—</span></div>
-                </div>
+            <div class="metric-card accent-cyan">
+                <div class="metric-icon">🎯</div>
+                <div class="metric-label">Средний YTM</div>
+                <div class="metric-value text-info"><span id="d-ytm">—</span></div>
             </div>
         </div>
         <div class="col-6 col-md-3">
-            <div class="card shadow-sm text-center h-100">
-                <div class="card-body py-3">
-                    <div class="text-muted small text-uppercase" style="font-size:.7rem;">Доход / 30 дней</div>
-                    <div class="fs-5 fw-bold text-success mt-1"><span id="d-income30">—</span> ₽</div>
-                </div>
+            <div class="metric-card accent-violet">
+                <div class="metric-icon">💸</div>
+                <div class="metric-label">Доход / 30 дней</div>
+                <div class="metric-value text-success"><span id="d-income30">—</span> ₽</div>
             </div>
         </div>
     </div>

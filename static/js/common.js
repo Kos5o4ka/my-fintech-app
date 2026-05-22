@@ -76,7 +76,8 @@ window.Common = (function(){
     }
 
     function getCsrfToken() {
-        return getCookie('XSRF-TOKEN');
+        const raw = getCookie('XSRF-TOKEN');
+        try { return raw ? decodeURIComponent(raw) : null; } catch { return raw; }
     }
 
     async function csrfFetch(url, options = {}) {
