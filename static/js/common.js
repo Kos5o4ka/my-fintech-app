@@ -107,11 +107,17 @@ window.Common = (function(){
         toast.setAttribute('role', role);
         toast.setAttribute('aria-live', live);
         toast.setAttribute('aria-atomic', 'true');
+        toast.style.cssText = 'overflow:hidden;position:relative;min-width:260px;';
         toast.innerHTML = `
             <div class="d-flex">
                 <div class="toast-body fw-semibold">${escapeHtml(msg)}</div>
                 <button type="button" class="btn-close ${isWarning ? '' : 'btn-close-white'} me-2 m-auto"
                         data-bs-dismiss="toast" aria-label="Закрыть"></button>
+            </div>
+            <div style="position:absolute;bottom:0;left:0;height:3px;width:100%;
+                        background:rgba(0,0,0,.2);border-radius:0 0 var(--radius-xs,4px) var(--radius-xs,4px)">
+                <div style="height:100%;width:100%;background:rgba(255,255,255,.5);
+                            animation:toastProgress ${delay}ms linear forwards;transform-origin:left"></div>
             </div>`;
         container.appendChild(toast);
         const bsToast = new bootstrap.Toast(toast, { delay });
