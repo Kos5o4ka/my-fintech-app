@@ -593,6 +593,86 @@ def portfolio_benchmark():
     return jsonify(result)
 
 
+# ── Dashboard: P&L chart data ─────────────────────────────────────────────────
+
+@portfolio_bp.route("/api/dashboard/pnl_chart", methods=["GET"])
+@login_required
+def dashboard_pnl_chart():
+    """Возвращает данные для area-чарта P&L на дашборде.
+
+    ?period=7d   — последние 7 дней (дневные точки)
+    ?period=30d  — последние 30 дней (дневные точки, по 5 подписей)
+    ?period=ytd  — с начала года (месячные точки)
+    """
+    period = request.args.get("period", "30d")
+    today = date.today()
+
+    if period == "7d":
+        start = today - timedelta(days=6)
+        date_range = [start + timedelta(days=i) for i in range(7)]
+        label_fmt = "%d.%m"
+        # Показываем каждую дату
+        tick_every = 1
+    elif period == "ytd":
+        # Месячные точки с 1 января до сегодня
+        start = date(today.year, 1, 1)
+        date_range = []
+        m = start
+        while m <= today:
+            date_range.append(m)
+            if m.month == 12:
+                m = date(m.year + 1, 1, 1)
+            else:
+                m = date(m.year, m.month + 1, 1)
+        label_fmt = "%b"
+        tick_every = 1
+    else:  # 30d
+        start = today - timedelta(days=29)
+        date_range = [start + timedelta(days=i) for i in range(30)]
+        label_fmt = "%d.%m"
+        tick_every = 5  # подпись каждые 5 дней
+
+    # Собираем P&L по дням из закрытых позиций (только DB, без MOEX)
+    sold = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=True).all()
+    daily_pnl: dict[date, float] = {}
+    for bond in sold:
+        if not bond.sell_date:
+            continue
+        sell_p = float(bond.sell_price) if bond.sell_price else float(bond.buy_price)
+        commission = float(bond.broker_commission) if bond.broker_commission else 0.0
+        pnl = (sell_p - float(bond.buy_price)) * bond.amount - commission
+        daily_pnl[bond.sell_date] = daily_pnl.get(bond.sell_date, 0.0) + pnl
+
+    # Строим кумулятивный P&L внутри периода (старт = 0 в начале периода)
+    if period == "ytd":
+        # Накапливаем помесячно
+        labels, data = [], []
+        running = 0.0
+        for d in date_range:
+            for sell_date, pnl in daily_pnl.items():
+                if sell_date.year == d.year and sell_date.month == d.month:
+                    running += pnl
+            labels.append(d.strftime(label_fmt))
+            data.append(round(running, 2))
+    else:
+        labels, data = [], []
+        running = 0.0
+        for i, d in enumerate(date_range):
+            running += daily_pnl.get(d, 0.0)
+            # Показываем подпись не для каждой точки — chart.js разберётся
+            labels.append(d.strftime(label_fmt) if i % tick_every == 0 or i == len(date_range) - 1 else "")
+            data.append(round(running, 2))
+
+    # Текущий нереализованный P&L (для отображения в тултипе / в заголовке)
+    active = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False).all()
+    unrealized = round(sum(
+        (float(b.last_price or b.buy_price) - float(b.buy_price)) * b.amount
+        for b in active
+    ), 2)
+
+    return jsonify({"labels": labels, "data": data, "unrealized": unrealized, "period": period})
+
+
 # ── Статистика (P&L по месяцам) ───────────────────────────────────────────────
 
 @portfolio_bp.route("/api/portfolio_stats", methods=["GET"])

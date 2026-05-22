@@ -5,6 +5,7 @@
 
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/portfolio.min.css') }}">
+<script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
 <style>
 .page-header { padding: 1.75rem 1.75rem .25rem; }
 .page-header h4 { font-weight: 700; letter-spacing: -.02em; font-size: 1.2rem; }
@@ -15,6 +16,64 @@
 .metrics-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 1rem; margin-bottom: 1.5rem; }
 @media(max-width:900px){ .metrics-row{ grid-template-columns: repeat(2,1fr); } }
 @media(max-width:480px){ .metrics-row{ grid-template-columns: 1fr 1fr; gap:.75rem; } }
+
+/* Charts row */
+.dash-charts {
+  display: grid;
+  grid-template-columns: 5fr 3fr;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+@media(max-width:900px){ .dash-charts { grid-template-columns: 1fr; } }
+
+.dash-chart-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+}
+
+.dash-chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: .75rem 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.dash-chart-title {
+  font-size: .78rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* P&L period selector */
+.pnl-period-tabs {
+  display: flex;
+  gap: 2px;
+}
+.pnl-tab {
+  padding: .22rem .6rem;
+  font-size: .72rem;
+  font-weight: 600;
+  border: 1px solid var(--border-subtle);
+  background: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background var(--dur-fast), color var(--dur-fast), border-color var(--dur-fast);
+}
+.pnl-tab.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.pnl-tab:hover:not(.active) {
+  color: var(--text-primary);
+  border-color: var(--text-tertiary);
+}
 
 /* Bottom section */
 .dash-bottom { display: grid; grid-template-columns: 2fr 3fr; gap: 1rem; }
@@ -48,6 +107,28 @@
   text-align: center;
   line-height: 1.2;
 }
+
+/* Skeleton shimmer on metric values */
+.metric-value.loading, .metric-delta.loading {
+  position: relative;
+  overflow: hidden;
+  color: transparent !important;
+  min-width: 80px;
+  border-radius: var(--radius-xs);
+}
+.metric-value.loading::after, .metric-delta.loading::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 50%, var(--surface-2) 75%);
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.4s ease-in-out infinite;
+}
+@keyframes skeletonShimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
 </style>
 {% endblock %}
 
@@ -76,8 +157,8 @@
         </svg>
       </div>
       <div class="metric-label">Стоимость портфеля</div>
-      <div class="metric-value" style="color:var(--text-success)"><span id="d-total-value">—</span> ₽</div>
-      <div class="metric-delta neutral" id="d-count-delta">— позиций</div>
+      <div class="metric-value loading" style="color:var(--text-success)"><span id="d-total-value">—</span> ₽</div>
+      <div class="metric-delta neutral loading" id="d-count-delta">— позиций</div>
     </div>
 
     <div class="metric-card accent-blue animate-fade-in-up delay-100">
@@ -88,7 +169,7 @@
         </svg>
       </div>
       <div class="metric-label">P&amp;L итого</div>
-      <div class="metric-value" id="d-total-pnl">—</div>
+      <div class="metric-value loading" id="d-total-pnl">—</div>
     </div>
 
     <div class="metric-card accent-cyan animate-fade-in-up delay-200">
@@ -99,7 +180,7 @@
         </svg>
       </div>
       <div class="metric-label">Средний YTM</div>
-      <div class="metric-value" style="color:var(--text-info)" id="d-ytm">—</div>
+      <div class="metric-value loading" style="color:var(--text-info)" id="d-ytm">—</div>
     </div>
 
     <div class="metric-card accent-violet animate-fade-in-up delay-300">
@@ -110,7 +191,43 @@
         </svg>
       </div>
       <div class="metric-label">Доход / 30 дней</div>
-      <div class="metric-value" style="color:var(--text-success)"><span id="d-income30">—</span> ₽</div>
+      <div class="metric-value loading" style="color:var(--text-success)"><span id="d-income30">—</span> ₽</div>
+    </div>
+
+  </div>
+
+  <!-- ── Charts row ─────────────────────────────────────────────── -->
+  <div class="dash-charts animate-fade-in-up delay-200">
+
+    <!-- P&L Area Chart -->
+    <div class="dash-chart-card">
+      <div class="dash-chart-header">
+        <span class="dash-chart-title">Реализованный P&amp;L (₽)</span>
+        <div class="pnl-period-tabs" id="pnlPeriodTabs">
+          <button class="pnl-tab" onclick="loadPnlChart('7d',this)">7д</button>
+          <button class="pnl-tab active" onclick="loadPnlChart('30d',this)">30д</button>
+          <button class="pnl-tab" onclick="loadPnlChart('ytd',this)">YTD</button>
+        </div>
+      </div>
+      <div style="position:relative;height:170px;padding:.5rem .75rem .5rem">
+        <canvas id="dashPnlChart"></canvas>
+        <div id="dashPnlEmpty" style="display:none;position:absolute;inset:0;display:flex;align-items:center;justify-content:center">
+          <small style="color:var(--text-tertiary)">Нет закрытых сделок за период</small>
+        </div>
+      </div>
+    </div>
+
+    <!-- Donut by issuer -->
+    <div class="dash-chart-card">
+      <div class="dash-chart-header">
+        <span class="dash-chart-title">Распределение портфеля</span>
+      </div>
+      <div style="position:relative;height:170px;padding:.5rem">
+        <canvas id="dashDonutChart"></canvas>
+        <div id="dashDonutEmpty" style="display:none;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center">
+          <small style="color:var(--text-tertiary)">Добавьте облигации,<br>чтобы увидеть диаграмму</small>
+        </div>
+      </div>
     </div>
 
   </div>
@@ -207,11 +324,160 @@
 
 {% block scripts %}
 <script defer>
-async function loadDashboard() {
-    const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    const fmt = v => v != null ? v.toLocaleString('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '—';
-    const sign = v => v >= 0 ? '+' : '';
+// ── Helpers ──────────────────────────────────────────────────────────────────
+const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
+function _removeSkeleton() {
+  document.querySelectorAll('.metric-value.loading, .metric-delta.loading')
+    .forEach(el => el.classList.remove('loading'));
+}
+
+// ── Charts ────────────────────────────────────────────────────────────────────
+let dashPnlChartInst = null;
+let dashDonutChartInst = null;
+
+async function loadPnlChart(period, btn) {
+  // Update active tab
+  if (btn) {
+    document.querySelectorAll('.pnl-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+  }
+
+  try {
+    const res  = await fetch(`/api/dashboard/pnl_chart?period=${period}`);
+    const data = await res.json();
+    const isDark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
+
+    const ctx = document.getElementById('dashPnlChart').getContext('2d');
+    if (dashPnlChartInst) dashPnlChartInst.destroy();
+
+    const allZero = data.data.every(v => v === 0);
+    const emptyEl = document.getElementById('dashPnlEmpty');
+    if (emptyEl) emptyEl.style.display = allZero ? 'flex' : 'none';
+    document.getElementById('dashPnlChart').style.display = allZero ? 'none' : '';
+
+    const lastVal = data.data[data.data.length - 1] ?? 0;
+    const positive = lastVal >= 0;
+    const lineColor = positive ? 'rgba(16,185,129,1)' : 'rgba(239,68,68,1)';
+    const fillColor = positive ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.08)';
+
+    dashPnlChartInst = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: data.labels,
+        datasets: [{
+          data: data.data,
+          borderColor: lineColor,
+          backgroundColor: fillColor,
+          borderWidth: 2,
+          fill: true,
+          tension: 0.35,
+          pointRadius: data.data.length <= 12 ? 3 : 0,
+          pointHoverRadius: 5,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: ctx => {
+                const v = ctx.parsed.y;
+                return (v >= 0 ? '+' : '') + v.toLocaleString('ru-RU', {minimumFractionDigits: 2}) + ' ₽';
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { font: { size: 10 }, color: 'rgba(148,163,184,.7)', maxTicksLimit: 7 }
+          },
+          y: {
+            grid: { color: isDark ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.04)' },
+            ticks: {
+              font: { size: 10 }, color: 'rgba(148,163,184,.7)',
+              callback: v => (v >= 0 ? '+' : '') + v.toLocaleString('ru-RU') + ' ₽'
+            }
+          }
+        }
+      }
+    });
+  } catch(e) {
+    console.error('PnL chart error', e);
+  }
+}
+
+async function loadDonutChart() {
+  try {
+    const res   = await fetch('/api/portfolio/allocation');
+    const items = await res.json();
+
+    const canvas = document.getElementById('dashDonutChart');
+    const emptyEl = document.getElementById('dashDonutEmpty');
+
+    if (!items.length) {
+      canvas.style.display = 'none';
+      if (emptyEl) emptyEl.style.display = 'flex';
+      return;
+    }
+    if (emptyEl) emptyEl.style.display = 'none';
+
+    // Топ-5 + Остальные
+    const top5 = items.slice(0, 5);
+    const rest = items.slice(5).reduce((s, i) => s + i.value, 0);
+    const labels = top5.map(i => i.name);
+    const values = top5.map(i => i.value);
+    if (rest > 0) { labels.push('Остальные'); values.push(rest); }
+
+    const palette = [
+      'rgba(59,130,246,.85)',
+      'rgba(16,185,129,.85)',
+      'rgba(124,58,237,.85)',
+      'rgba(245,158,11,.85)',
+      'rgba(6,182,212,.85)',
+      'rgba(148,163,184,.6)',
+    ];
+
+    if (dashDonutChartInst) dashDonutChartInst.destroy();
+    dashDonutChartInst = new Chart(canvas.getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels,
+        datasets: [{ data: values, backgroundColor: palette, borderWidth: 2,
+                     borderColor: 'var(--card-bg)', hoverOffset: 6 }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '62%',
+        plugins: {
+          legend: {
+            position: 'right',
+            labels: { font: { size: 10 }, boxWidth: 10, padding: 8,
+                      color: 'rgba(148,163,184,.9)' }
+          },
+          tooltip: {
+            callbacks: {
+              label: ctx => {
+                const total = ctx.dataset.data.reduce((a,b)=>a+b,0);
+                const pct = ((ctx.parsed / total) * 100).toFixed(1);
+                return ` ${ctx.parsed.toLocaleString('ru-RU',{maximumFractionDigits:0})} ₽ (${pct}%)`;
+              }
+            }
+          }
+        }
+      }
+    });
+  } catch(e) {
+    console.error('Donut chart error', e);
+  }
+}
+
+// ── Main dashboard load ───────────────────────────────────────────────────────
+async function loadDashboard() {
     try {
         const [portfolio, income, coupons, history] = await Promise.all([
             fetch('/api/portfolio').then(r => r.json()),
@@ -222,6 +488,9 @@ async function loadDashboard() {
 
         const bonds = portfolio.bonds || [];
         const cu = window.Common.countUp;
+
+        // Снимаем skeleton-классы с карточек
+        _removeSkeleton();
 
         // Total value
         cu(document.getElementById('d-total-value'), portfolio.total_value || 0, {decimals: 2});
@@ -288,10 +557,23 @@ async function loadDashboard() {
         }
 
     } catch(e) {
+        _removeSkeleton();
         console.error('Dashboard load error', e);
     }
 }
 
+// Дожидаемся Chart.js, потом запускаем
+function _onChartsReady(fn) {
+  if (typeof Chart !== 'undefined') { fn(); return; }
+  const s = document.querySelector('script[src*="chart.js"]');
+  if (s) s.addEventListener('load', fn);
+  else fn();
+}
+
 loadDashboard();
+_onChartsReady(() => {
+  loadPnlChart('30d', document.querySelector('.pnl-tab.active'));
+  loadDonutChart();
+});
 </script>
 {% endblock %}

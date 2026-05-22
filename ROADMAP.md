@@ -60,8 +60,8 @@
 - [x] **Купонный календарь** — timeline стиль, badge с датой
 - [x] **Best / Worst позиции** — карточки с P&L
 - [x] **Summary row** — Позиций / Доход 90д / Доход год
-- [ ] Area chart P&L с переключателем 7д/30д/YTD *(на следующий итерацию)*
-- [ ] Donut chart распределения по эмитентам *(на следующую итерацию)*
+- [x] Area chart P&L с переключателем 7д/30д/YTD — на дашборде (кумулятивный реализованный P&L)
+- [x] Donut chart распределения по эмитентам — на дашборде (топ-5 + Остальные)
 
 ### 0.5 Страница портфеля — редизайн
 
@@ -75,7 +75,7 @@
 - [x] **Sell modal** с live P&L preview (обновляется при вводе цены/комиссии)
 - [x] **Mobile card-view** — таблица → карточки на < 767px с `data-label`
 - [ ] Sparklines в колонке цены *(сложно без отдельного API)*
-- [ ] Сортировка по клику на заголовок *(добавить в Stage 1)*
+- [x] Сортировка по клику на заголовок — реализована в portfolio.js (sortTable)
 
 ### 0.6 Страница профиля — редизайн
 
@@ -107,7 +107,7 @@
 - [x] **Empty states** — SVG иллюстрация в пустом портфеле
 - [ ] Page transitions fade при навигации *(добавить)*
 - [ ] Form validation shake-анимация *(Stage 3)*
-- [ ] Skeleton loaders для медленных API *(Stage 2)*
+- [x] Skeleton loaders для медленных API — shimmer на metric cards (dashboard) + skeleton rows в таблице (portfolio)
 
 ### 0.9 Производительность
 
@@ -122,7 +122,7 @@
 - [x] Metric cards: 2 колонки на mobile, 4 на desktop
 - [x] Таблица портфеля: card-view на `< 767px`
 - [x] FAB кнопка "Добавить" на mobile
-- [ ] Drawer → full-screen на `< 480px` *(добавить)*
+- [x] Drawer → full-screen на `< 480px` — CSS width:100vw, no border-left
 - [ ] Swipe-to-dismiss для toast *(Stage 3)*
 
 ---

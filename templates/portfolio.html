@@ -318,6 +318,15 @@
 
 @media(max-width:767.98px){ .fab-add { bottom: 80px; right: 1rem; } }
 
+/* Drawer full-screen на очень маленьких экранах */
+@media(max-width:480px) {
+  .drawer {
+    width: 100vw !important;
+    border-left: none;
+    border-top: 1px solid var(--card-border);
+  }
+}
+
 /* ── Empty state ─────────────────────────────────────────────────── */
 .empty-state { text-align: center; padding: 3.5rem 1rem; }
 .empty-state-icon {
