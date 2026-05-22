@@ -8,8 +8,8 @@ from flask_wtf import CSRFProtect
 from flask_wtf.csrf import generate_csrf
 from werkzeug.exceptions import RequestEntityTooLarge
 
-from config import Config
-from extensions import db, login_manager, migrate, cache, limiter
+from config import get_config
+from extensions import db, login_manager, migrate, cache, limiter, mail
 from models import User
 
 logging.basicConfig(
@@ -19,13 +19,20 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.config.from_object(Config)
+app.config.from_object(get_config())
 
 # ── Extensions ────────────────────────────────────────────────────────────────
 db.init_app(app)
 login_manager.init_app(app)
 migrate.init_app(app, db)
-cache.init_app(app, config={"CACHE_TYPE": "SimpleCache"})
+_cache_config = {"CACHE_TYPE": "SimpleCache"}
+if app.config.get("REDIS_URL"):
+    _cache_config = {
+        "CACHE_TYPE": "RedisCache",
+        "CACHE_REDIS_URL": app.config["REDIS_URL"],
+    }
+cache.init_app(app, config=_cache_config)
+mail.init_app(app)
 csrf = CSRFProtect()
 csrf.init_app(app)
 limiter.init_app(app)
@@ -141,6 +148,54 @@ def _update_bond_prices() -> None:
             logger.error("Price update job failed: %s", exc)
 
 
+def _send_coupon_reminders() -> None:
+    """Email users about coupons due tomorrow (only if MAIL_SERVER is configured)."""
+    with app.app_context():
+        if not app.config.get("MAIL_SERVER"):
+            return
+        try:
+            from flask_mail import Message
+            from models import User, BondPortfolio
+            from moex import get_coupon_calendar
+            from datetime import date, timedelta
+
+            tomorrow = date.today() + timedelta(days=1)
+            users = User.query.filter(
+                User.email.isnot(None),
+                User.email_notifications == True,
+            ).all()
+            for user in users:
+                bonds = BondPortfolio.query.filter_by(user_id=user.id, is_sold=False).all()
+                due = []
+                for bond in bonds:
+                    for c in get_coupon_calendar(bond.secid or bond.isin):
+                        if c["date"] == tomorrow.strftime("%Y-%m-%d") and c["value"]:
+                            due.append(
+                                f"  {bond.name} ({bond.isin}): "
+                                f"{round(float(c['value']) * bond.amount, 2)} ₽"
+                            )
+                if not due:
+                    continue
+                body = (
+                    f"Привет, {user.username}!\n\n"
+                    f"Завтра ({tomorrow}) ожидаются купонные выплаты:\n\n"
+                    + "\n".join(due)
+                    + "\n\nС уважением,\nInvestTrack"
+                )
+                msg = Message(
+                    subject=f"InvestTrack: купонные выплаты {tomorrow}",
+                    recipients=[user.email],
+                    body=body,
+                )
+                try:
+                    mail.send(msg)
+                    logger.info("Coupon reminder sent to %s", user.email)
+                except Exception as send_err:
+                    logger.warning("Could not send reminder to %s: %s", user.email, send_err)
+        except Exception as exc:
+            logger.error("Coupon reminder job failed: %s", exc)
+
+
 # Start scheduler only outside tests and in the real server process
 # (WERKZEUG_RUN_MAIN == 'true' in the reload child, unset in the parent watchdog)
 _in_test = os.environ.get("FLASK_TESTING") == "1"
@@ -158,6 +213,15 @@ if not _in_test and not _is_reload_parent:
             id="price_update",
             max_instances=1,
             misfire_grace_time=60,
+        )
+        _scheduler.add_job(
+            _send_coupon_reminders,
+            "cron",
+            hour=9,
+            minute=0,
+            id="coupon_reminders",
+            max_instances=1,
+            misfire_grace_time=600,
         )
         _scheduler.start()
         atexit.register(lambda: _scheduler.shutdown(wait=False))

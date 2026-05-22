@@ -7,6 +7,7 @@ charset-normalizer==3.4.7
 click==8.3.3
 Flask==3.1.3
 Flask-Caching==2.4.0
+redis==5.2.1
 Flask-Login==0.6.3
 Flask-Migrate==4.1.0
 Flask-SQLAlchemy==3.1.1
@@ -28,5 +29,8 @@ tzlocal==5.3.1
 urllib3==2.7.0
 Werkzeug==3.1.8
 flask-cors==3.0.10
-Flask-WTF==1.1.1
+Flask-WTF==1.3.0
 Flask-Limiter==4.1.1
+Flask-Mail==0.10.0
+tenacity==9.1.4
+openpyxl==3.1.5

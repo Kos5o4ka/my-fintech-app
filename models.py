@@ -14,6 +14,8 @@ class User(db.Model, UserMixin):
     password_hash = db.Column(db.String(256), nullable=False)
     avatar = db.Column(db.String(255), nullable=True)
     is_admin = db.Column(db.Boolean, default=False)
+    email = db.Column(db.String(254), nullable=True)
+    email_notifications = db.Column(db.Boolean, default=False)
     bonds = db.relationship('BondPortfolio', backref='user', lazy=True)
 
 class BondPortfolio(db.Model):
@@ -35,3 +37,34 @@ class BondPortfolio(db.Model):
     last_price = db.Column(db.Numeric(10, 2), nullable=True)
     sell_price = db.Column(db.Numeric(10, 2), nullable=True)
     sell_date = db.Column(db.Date, nullable=True)
+    broker_commission = db.Column(db.Numeric(10, 4), nullable=True)
+
+
+class Watchlist(db.Model):
+    __tablename__ = 'watchlist'
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'isin', name='uq_watchlist_user_isin'),
+        db.Index('ix_wl_user_id', 'user_id'),
+    )
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    isin = db.Column(db.String(12), nullable=False)
+    secid = db.Column(db.String(50), nullable=True)
+    name = db.Column(db.String(100), nullable=True)
+    added_at = db.Column(db.Date, nullable=False, default=date.today)
+
+
+class Transaction(db.Model):
+    __tablename__ = 'transactions'
+    __table_args__ = (
+        db.Index('ix_tx_user_id', 'user_id'),
+    )
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    isin = db.Column(db.String(12), nullable=False)
+    name = db.Column(db.String(100), nullable=True)
+    tx_type = db.Column(db.String(4), nullable=False)  # 'buy' | 'sell'
+    amount = db.Column(db.Integer, nullable=False)
+    price = db.Column(db.Numeric(10, 2), nullable=False)
+    commission = db.Column(db.Numeric(10, 4), nullable=True)
+    tx_date = db.Column(db.Date, nullable=False, default=date.today)

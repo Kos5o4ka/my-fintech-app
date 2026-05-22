@@ -74,3 +74,103 @@ body {
 .isin-dropdown-item:focus {
     background-color: var(--bs-secondary-bg);
 }
+
+/* ── Bond preview card ──────────────────────────────────────────────────────── */
+.bond-preview-card {
+    background-color: var(--bs-tertiary-bg);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-top: 8px;
+    font-size: 0.875rem;
+    animation: previewFadeIn 0.18s ease;
+}
+@keyframes previewFadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.bond-preview-card .preview-name {
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 80%;
+}
+.bond-preview-card .preview-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+    margin-top: 6px;
+    color: var(--bs-secondary-color);
+}
+.bond-preview-card .preview-row span {
+    color: var(--bs-body-color);
+    font-weight: 500;
+}
+
+/* ── Skeleton loader ────────────────────────────────────────────────────────── */
+.skeleton-cell {
+    display: block;
+    height: 14px;
+    border-radius: 4px;
+    background: linear-gradient(
+        90deg,
+        var(--bs-secondary-bg) 25%,
+        var(--bs-tertiary-bg) 50%,
+        var(--bs-secondary-bg) 75%
+    );
+    background-size: 200% 100%;
+    animation: skeletonPulse 1.4s ease-in-out infinite;
+}
+@keyframes skeletonPulse {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* ── Mobile responsive tables ───────────────────────────────────────────────── */
+@media (max-width: 767.98px) {
+    /* Stack table rows as cards */
+    .table-responsive table,
+    .table-responsive thead,
+    .table-responsive tbody,
+    .table-responsive th,
+    .table-responsive td,
+    .table-responsive tr {
+        display: block;
+    }
+    .table-responsive thead tr {
+        position: absolute;
+        top: -9999px;
+        left: -9999px;
+    }
+    .table-responsive tbody tr {
+        border: 1px solid var(--bs-border-color);
+        border-radius: 8px;
+        margin-bottom: 0.75rem;
+        padding: 0.5rem 0.25rem;
+        background-color: var(--bs-body-bg);
+    }
+    .table-responsive tbody td {
+        border: none;
+        padding: 0.3rem 0.75rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.875rem;
+    }
+    .table-responsive tbody td::before {
+        content: attr(data-label);
+        font-weight: 600;
+        color: var(--bs-secondary-color);
+        flex-shrink: 0;
+        margin-right: 0.5rem;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+    }
+    /* Left sidebar full-width on mobile */
+    .col-md-4, .col-md-8 {
+        padding-left: 0.75rem;
+        padding-right: 0.75rem;
+    }
+}

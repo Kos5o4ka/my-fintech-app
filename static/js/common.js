@@ -92,31 +92,38 @@ window.Common = (function(){
         return fetch(url, { ...options, headers, credentials: 'same-origin' });
     }
 
-    function showToast(msg, isError = false) {
+    function showToast(msg, isError = false, isWarning = false) {
         const container = document.getElementById('toastContainer');
         if (!container) { showSystemMessage(msg, isError); return; }
 
+        let bgClass, role, live, delay;
+        if (isError)        { bgClass = 'bg-danger';  role = 'alert';  live = 'assertive'; delay = 6000; }
+        else if (isWarning) { bgClass = 'bg-warning text-dark'; role = 'status'; live = 'polite'; delay = 5000; }
+        else                { bgClass = 'bg-success'; role = 'status'; live = 'polite';    delay = 3000; }
+
         const toast = document.createElement('div');
-        toast.className = [
-            'toast align-items-center text-white border-0',
-            isError ? 'bg-danger' : 'bg-success'
-        ].join(' ');
-        toast.setAttribute('role', isError ? 'alert' : 'status');
-        toast.setAttribute('aria-live', isError ? 'assertive' : 'polite');
+        toast.className = `toast align-items-center border-0 ${isWarning ? 'text-dark' : 'text-white'} ${bgClass}`;
+        toast.setAttribute('role', role);
+        toast.setAttribute('aria-live', live);
         toast.setAttribute('aria-atomic', 'true');
         toast.innerHTML = `
             <div class="d-flex">
                 <div class="toast-body fw-semibold">${escapeHtml(msg)}</div>
-                <button type="button" class="btn-close btn-close-white me-2 m-auto"
+                <button type="button" class="btn-close ${isWarning ? '' : 'btn-close-white'} me-2 m-auto"
                         data-bs-dismiss="toast" aria-label="Закрыть"></button>
             </div>`;
         container.appendChild(toast);
-        const bsToast = new bootstrap.Toast(toast, { delay: isError ? 6000 : 3000 });
+        const bsToast = new bootstrap.Toast(toast, { delay });
         bsToast.show();
         toast.addEventListener('hidden.bs.toast', () => toast.remove());
     }
 
+    async function handleLogout() {
+        await csrfFetch('/api/auth/logout', { method: 'POST' });
+        window.location.href = '/';
+    }
+
     initTheme();
 
-    return { showSystemMessage, askConfirmation, csrfFetch, escapeHtml, setTheme, initTheme, toggleTheme, showToast };
+    return { showSystemMessage, askConfirmation, csrfFetch, escapeHtml, setTheme, initTheme, toggleTheme, showToast, handleLogout };
 })();

@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+
+{% block title %}Админ — InvestTrack{% endblock %}
+
+{% block content %}
+<div class="container mb-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4 class="fw-bold mb-0">⚙️ Управление пользователями</h4>
+    </div>
+
+    <div class="row g-4">
+        <!-- Add user form -->
+        <div class="col-md-4">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white fw-semibold">Добавить пользователя</div>
+                <div class="card-body">
+                    <form id="adminCreateUserForm">
+                        <div class="mb-3">
+                            <label class="form-label">Логин</label>
+                            <input type="text" id="newUsername" class="form-control"
+                                   placeholder="3–20 символов, a-z, 0-9" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Пароль</label>
+                            <input type="password" id="newPassword" class="form-control"
+                                   placeholder="Минимум 8 символов" required minlength="8">
+                        </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="isAdminCheck">
+                            <label class="form-check-label" for="isAdminCheck">Сделать администратором</label>
+                        </div>
+                        <button type="submit" class="btn btn-success w-100" id="createUserBtn">Создать</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Users table -->
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+                    <span>Список пользователей</span>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="loadUsersList()">↻ Обновить</button>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Логин</th>
+                                    <th>Роль</th>
+                                    <th>Действия</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-users-table">
+                                <tr><td colspan="4" class="text-center text-muted py-4">Загрузка…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script defer>
+const _currentUserId = {{ current_user.id }};
+
+async function loadUsersList() {
+    const tbody = document.getElementById('admin-users-table');
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Загрузка…</td></tr>';
+    const res = await window.Common.csrfFetch('/api/admin/users');
+    if (!res.ok) { tbody.innerHTML = '<tr><td colspan="4" class="text-danger text-center py-3">Ошибка загрузки</td></tr>'; return; }
+    const users = await res.json();
+    const esc = window.Common.escapeHtml;
+    tbody.innerHTML = users.map(u => {
+        const isSelf = u.id === _currentUserId;
+        return `<tr>
+            <td class="text-muted small">${u.id}</td>
+            <td><b>${esc(u.username)}</b></td>
+            <td><span class="badge ${u.is_admin ? 'bg-danger' : 'bg-secondary'}">${u.is_admin ? 'Админ' : 'Юзер'}</span></td>
+            <td>${isSelf ? '<span class="text-muted small">—</span>' :
+                `<button class="btn btn-sm btn-outline-danger"
+                    onclick="deleteUserTrigger(${u.id}, '${esc(u.username)}')">Удалить</button>`}
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+function deleteUserTrigger(userId, name) {
+    window.Common.askConfirmation(`Удалить аккаунт «${name}» навсегда?`, async () => {
+        const res = await window.Common.csrfFetch(`/api/admin/delete_user/${userId}`, { method: 'DELETE' });
+        const data = await res.json();
+        window.Common.showToast(data.message, !res.ok);
+        loadUsersList();
+    });
+}
+
+document.getElementById('adminCreateUserForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const btn = document.getElementById('createUserBtn');
+    btn.disabled = true; btn.textContent = 'Создание…';
+    try {
+        const res = await window.Common.csrfFetch('/api/admin/add_user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                username: document.getElementById('newUsername').value,
+                password: document.getElementById('newPassword').value,
+                is_admin: document.getElementById('isAdminCheck').checked,
+            })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            window.Common.showToast(data.message);
+            e.target.reset();
+            loadUsersList();
+        } else {
+            window.Common.showSystemMessage(data.message, true);
+        }
+    } finally {
+        btn.disabled = false; btn.textContent = 'Создать';
+    }
+});
+
+loadUsersList();
+</script>
+{% endblock %}

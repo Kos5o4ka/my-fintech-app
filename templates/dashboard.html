@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+
+{% block title %}Главная — InvestTrack{% endblock %}
+{% block description %}Обзор инвестиционного портфеля{% endblock %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/portfolio.min.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="container mb-5">
+
+    <!-- Welcome -->
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div>
+            <h4 class="mb-0 fw-bold">Добро пожаловать, {{ current_user.username }}! 👋</h4>
+            <small class="text-muted">Обзор вашего портфеля</small>
+        </div>
+        <a href="/portfolio" class="btn btn-primary btn-sm">Управление портфелем →</a>
+    </div>
+
+    <!-- Metric cards -->
+    <div class="row g-3 mb-4" id="metrics-row">
+        <div class="col-6 col-md-3">
+            <div class="card shadow-sm border-success text-center h-100">
+                <div class="card-body py-3">
+                    <div class="text-muted small text-uppercase" style="font-size:.7rem;">Стоимость</div>
+                    <div class="fs-5 fw-bold text-success mt-1"><span id="d-total-value">—</span> ₽</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card shadow-sm text-center h-100">
+                <div class="card-body py-3">
+                    <div class="text-muted small text-uppercase" style="font-size:.7rem;">P&amp;L (итого)</div>
+                    <div class="fs-5 fw-bold mt-1" id="d-total-pnl">—</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card shadow-sm border-info text-center h-100">
+                <div class="card-body py-3">
+                    <div class="text-muted small text-uppercase" style="font-size:.7rem;">Средний YTM</div>
+                    <div class="fs-5 fw-bold text-info mt-1"><span id="d-ytm">—</span></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card shadow-sm text-center h-100">
+                <div class="card-body py-3">
+                    <div class="text-muted small text-uppercase" style="font-size:.7rem;">Доход / 30 дней</div>
+                    <div class="fs-5 fw-bold text-success mt-1"><span id="d-income30">—</span> ₽</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <!-- Coupon calendar -->
+        <div class="col-md-5">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-primary text-white py-2 fw-semibold">📅 Ближайшие купоны</div>
+                <div class="card-body p-0">
+                    <ul class="list-group list-group-flush" id="d-coupon-list">
+                        <li class="list-group-item text-center text-muted py-3">
+                            <span class="skeleton-cell d-inline-block" style="width:60%;height:14px;"></span>
+                        </li>
+                    </ul>
+                </div>
+                <div class="card-footer text-center py-2">
+                    <a href="/portfolio" class="small text-muted">Все купоны в портфеле →</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Best / Worst + Quick stats -->
+        <div class="col-md-7">
+            <div class="row g-3 mb-3">
+                <div class="col-6">
+                    <div class="card shadow-sm border-success h-100">
+                        <div class="card-header bg-success bg-opacity-10 py-2 small fw-semibold text-success">
+                            🏆 Лучшая позиция
+                        </div>
+                        <div class="card-body py-3">
+                            <div class="fw-semibold text-truncate" id="d-best-name">—</div>
+                            <div class="text-success fs-5 fw-bold" id="d-best-pnl">—</div>
+                            <small class="text-muted" id="d-best-isin"></small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="card shadow-sm border-danger h-100">
+                        <div class="card-header bg-danger bg-opacity-10 py-2 small fw-semibold text-danger">
+                            📉 Худшая позиция
+                        </div>
+                        <div class="card-body py-3">
+                            <div class="fw-semibold text-truncate" id="d-worst-name">—</div>
+                            <div class="text-danger fs-5 fw-bold" id="d-worst-pnl">—</div>
+                            <small class="text-muted" id="d-worst-isin"></small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Portfolio summary -->
+            <div class="card shadow-sm">
+                <div class="card-body py-3">
+                    <div class="row g-2 text-center">
+                        <div class="col-4">
+                            <div class="text-muted small">Позиций</div>
+                            <div class="fw-bold" id="d-count">—</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="text-muted small">Доход / 90 дн.</div>
+                            <div class="fw-bold text-success" id="d-income90">—</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="text-muted small">Доход / год</div>
+                            <div class="fw-bold text-success" id="d-income365">—</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script defer>
+async function loadDashboard() {
+    const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const fmt = v => v != null ? v.toLocaleString('ru-RU', {minimumFractionDigits: 2}) : '—';
+    const sign = v => v >= 0 ? '+' : '';
+
+    try {
+        const [portfolio, income, coupons, history] = await Promise.all([
+            fetch('/api/portfolio').then(r => r.json()),
+            fetch('/api/portfolio/income').then(r => r.json()),
+            fetch('/api/portfolio/calendar').then(r => r.json()),
+            fetch('/api/portfolio/history').then(r => r.json()),
+        ]);
+
+        // Total value
+        document.getElementById('d-total-value').textContent = fmt(portfolio.total_value);
+
+        // YTM
+        const ytmEl = document.getElementById('d-ytm');
+        ytmEl.textContent = portfolio.portfolio_ytm ? portfolio.portfolio_ytm.toFixed(2) + ' %' : '—';
+
+        // Count
+        const bonds = portfolio.bonds || [];
+        document.getElementById('d-count').textContent = bonds.length;
+
+        // P&L total (unrealized + realized)
+        const unrealized = bonds.reduce((s, b) => s + (b.pnl || 0), 0);
+        const realized = (history.trades || []).reduce((s, t) => s + (t.pnl || 0), 0);
+        const totalPnl = unrealized + realized;
+        const pnlEl = document.getElementById('d-total-pnl');
+        pnlEl.textContent = sign(totalPnl) + fmt(totalPnl) + ' ₽';
+        pnlEl.className = 'fs-5 fw-bold mt-1 ' + (totalPnl >= 0 ? 'text-success' : 'text-danger');
+
+        // Income
+        document.getElementById('d-income30').textContent = fmt(income['30d']);
+        document.getElementById('d-income90').textContent = fmt(income['90d']) + ' ₽';
+        document.getElementById('d-income365').textContent = fmt(income['365d']) + ' ₽';
+
+        // Best / Worst
+        if (bonds.length) {
+            const sorted = [...bonds].sort((a, b) => (b.pnl_pct || 0) - (a.pnl_pct || 0));
+            const best = sorted[0], worst = sorted[sorted.length - 1];
+            document.getElementById('d-best-name').textContent = best.name;
+            document.getElementById('d-best-pnl').textContent = '+' + (best.pnl_pct || 0).toFixed(2) + '%';
+            document.getElementById('d-best-isin').textContent = best.isin;
+            document.getElementById('d-worst-name').textContent = worst.name;
+            document.getElementById('d-worst-pnl').textContent = (worst.pnl_pct || 0).toFixed(2) + '%';
+            document.getElementById('d-worst-isin').textContent = worst.isin;
+        }
+
+        // Coupons
+        const list = document.getElementById('d-coupon-list');
+        if (!coupons.length) {
+            list.innerHTML = '<li class="list-group-item text-muted text-center py-3">Нет предстоящих купонов</li>';
+        } else {
+            list.innerHTML = coupons.slice(0, 6).map(c => `
+                <li class="list-group-item d-flex justify-content-between align-items-center py-2">
+                    <div><b>${esc(c.name)}</b><br><small class="text-muted">${esc(c.date)}</small></div>
+                    <span class="badge bg-success font-monospace">+${parseFloat(c.total_payout).toFixed(2)} ₽</span>
+                </li>`).join('');
+        }
+
+    } catch(e) {
+        console.error('Dashboard load error', e);
+    }
+}
+
+loadDashboard();
+</script>
+{% endblock %}

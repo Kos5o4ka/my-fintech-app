@@ -1,143 +1,75 @@
-<!DOCTYPE html>
-<html lang="ru" data-bs-theme="light">
-<head>
-    <meta charset="UTF-8">
-    <script>(function(){var t=localStorage.getItem('portfolioTheme');if(t==='dark')document.documentElement.setAttribute('data-bs-theme','dark');})()</script>
-    <title>InvestTrack — Главная</title>
-    <meta name="description" content="InvestTrack — персональный трекер облигационного портфеля с данными Московской Биржи">
-    <meta name="theme-color" content="#212529">
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/variables.min.css') }}">
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" defer></script>
-</head>
-<body>
+{% extends "base.html" %}
 
-    <nav class="navbar navbar-dark bg-dark mb-4">
-        <div class="container">
-            <span class="navbar-brand mb-0 h1">InvestTrack</span>
-            <div class="d-flex align-items-center gap-3">
-                <span class="text-info small">Заходов: <b id="global-visits">0</b></span>
-                <button class="btn btn-outline-light btn-sm" onclick="window.Common.toggleTheme()" aria-label="Переключить тему">🌓</button>
-                <div id="auth-status-block" class="d-flex align-items-center text-white d-none">
-                    <span class="me-3">Привет, <b id="navbar-username">User</b>!</span>
-                    <a href="/portfolio" class="btn btn-success btn-sm me-2">Мой Портфель</a>
-                    <button onclick="handleLogout()" class="btn btn-outline-light btn-sm" aria-label="Выйти из аккаунта">Выйти</button>
-                </div>
-            </div>
-        </div>
-    </nav>
+{% block title %}InvestTrack — Войти{% endblock %}
+{% block description %}InvestTrack — персональный трекер облигационного портфеля с данными Московской Биржи{% endblock %}
 
-    <div class="container">
-        <div id="login-container" class="row justify-content-center mt-5 d-none">
-            <div class="col-md-4">
-                <div class="card shadow">
-                    <div class="card-body">
-                        <h3 class="card-title text-center mb-4">Авторизация</h3>
-                        <form id="uiLoginForm">
-                            <div class="mb-3">
-                                <input type="text" id="loginUsername" class="form-control" placeholder="Логин" aria-label="Логин" required>
-                            </div>
-                            <div class="mb-3">
-                                <input type="password" id="loginPassword" class="form-control" placeholder="Пароль" aria-label="Пароль" required>
-                            </div>
-                            <button type="submit" class="btn btn-primary w-100">Войти</button>
-                        </form>
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center mt-5">
+        <div class="col-md-4 col-sm-8">
+            <div class="card shadow">
+                <div class="card-body px-4 py-4">
+                    <h3 class="card-title text-center mb-4">Авторизация</h3>
+                    {% if error %}
+                    <div class="alert alert-danger alert-dismissible fade show py-2" role="alert">
+                        {{ error }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                     </div>
-                </div>
-            </div>
-        </div>
-
-        <div id="authorized-content" class="d-none">
-            <div id="admin-panel" class="row d-none">
-                <div class="col-md-4 mb-4">
-                    <div class="card shadow-sm border-primary">
-                        <div class="card-header bg-primary text-white">Добавить пользователя</div>
-                        <div class="card-body">
-                            <form id="adminCreateUserForm">
-                                <div class="mb-3">
-                                        <input type="text" id="newUsername" class="form-control" placeholder="Новый логин" aria-label="Новый логин" required>
-                                </div>
-                                <div class="mb-3">
-                                        <input type="password" id="newPassword" class="form-control" placeholder="Пароль" aria-label="Пароль" required>
-                                </div>
-                                <div class="form-check mb-3">
-                                    <input class="form-check-input" type="checkbox" id="isAdminCheck">
-                                    <label class="form-check-label" for="isAdminCheck">Сделать администратором</label>
-                                </div>
-                                <button type="submit" class="btn btn-success w-100">Создать</button>
-                            </form>
+                    {% endif %}
+                    <form id="uiLoginForm">
+                        <div class="mb-3">
+                            <label class="form-label" for="loginUsername">Логин</label>
+                            <input type="text" id="loginUsername" class="form-control"
+                                   placeholder="Введите логин" aria-label="Логин" required autocomplete="username">
                         </div>
-                    </div>
-                </div>
-
-                <div class="col-md-8">
-                    <div class="card shadow-sm">
-                        <div class="card-body">
-                            <h5 class="card-title mb-3">Список пользователей</h5>
-                            <table class="table table-striped align-middle">
-                                <thead class="table-dark">
-                                    <tr>
-                                        <th>ID</th>
-                                        <th>Логин</th>
-                                        <th>Роль</th>
-                                        <th>Действия</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="admin-users-table"></tbody>
-                            </table>
+                        <div class="mb-3">
+                            <label class="form-label" for="loginPassword">Пароль</label>
+                            <input type="password" id="loginPassword" class="form-control"
+                                   placeholder="Введите пароль" aria-label="Пароль" required autocomplete="current-password">
                         </div>
-                    </div>
+                        <button type="submit" id="loginBtn" class="btn btn-primary w-100">Войти</button>
+                    </form>
                 </div>
             </div>
-
-            <div id="regular-user-msg" class="row justify-content-center mt-5 d-none">
-                <div class="col-md-6 text-center">
-                    <h1 class="display-5">Добро пожаловать!</h1>
-                    <p class="lead">Вы вошли как обычный пользователь. У вас нет доступа к управлению другими аккаунтами.</p>
-                    <a href="/portfolio" class="btn btn-primary btn-lg mt-2">Перейти в портфель →</a>
-                </div>
-            </div>
+            <p class="text-center text-muted small mt-3">
+                <span id="global-visits-line">Сервис посетили <b id="global-visits">…</b> раз</span>
+            </p>
         </div>
     </div>
+</div>
+{% endblock %}
 
-    <div class="modal fade" id="statusModal" tabindex="-1" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="statusModalTitle" aria-describedby="statusModalMessage">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content text-center">
-                <div class="modal-header d-flex justify-content-center border-0 pt-4" id="modalHeaderBg">
-                    <div id="modalIconContainer" style="width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 28px;" class="text-white"></div>
-                </div>
-                <div class="modal-body py-3">
-                    <h4 class="mb-2" id="statusModalTitle"></h4>
-                    <p id="statusModalMessage" class="text-muted mb-0 px-3"></p>
-                </div>
-                <div class="modal-footer justify-content-center border-0 pb-4">
-                    <button type="button" class="btn btn-secondary px-4 btn-sm" data-bs-dismiss="modal" aria-label="Закрыть сообщение">Ок</button>
-                </div>
-            </div>
-        </div>
-    </div>
+{% block scripts %}
+<script defer>
+document.addEventListener('DOMContentLoaded', () => {
+    fetch('/api/init').then(r => r.json()).then(d => {
+        const el = document.getElementById('global-visits');
+        if (el) el.textContent = d.visits;
+    }).catch(() => {});
 
-    <div class="modal fade" id="confirmDeleteModal" tabindex="-1" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="confirmDeleteTitle" aria-describedby="confirmDeleteMessage">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content text-center">
-                <div class="modal-header d-flex justify-content-center border-0 pt-4">
-                    <div class="text-white bg-danger" style="width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 28px;">✕</div>
-                </div>
-                <div class="modal-body py-2">
-                    <h4 id="confirmDeleteTitle" class="text-danger mb-2">Удаление</h4>
-                    <p id="confirmDeleteMessage" class="text-muted mb-0 px-3"></p>
-                </div>
-                <div class="modal-footer justify-content-center border-0 pb-4">
-                    <button type="button" class="btn btn-light btn-sm px-3 me-2" data-bs-dismiss="modal">Отмена</button>
-                    <button type="button" id="confirmDeleteSubmitBtn" class="btn bg-danger text-white btn-sm px-4 shadow-sm">Да, удалить</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script src="{{ url_for('static', filename='js/common.min.js') }}" defer></script>
-    <script src="{{ url_for('static', filename='js/index.min.js') }}" defer></script>
-</body>
-</html>
+    document.getElementById('uiLoginForm').addEventListener('submit', async e => {
+        e.preventDefault();
+        const btn = document.getElementById('loginBtn');
+        btn.disabled = true; btn.textContent = 'Вход…';
+        try {
+            const res = await window.Common.csrfFetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    username: document.getElementById('loginUsername').value,
+                    password: document.getElementById('loginPassword').value,
+                })
+            });
+            const data = await res.json();
+            if (res.ok && data.status === 'success') {
+                window.location.href = '/dashboard';
+            } else {
+                window.Common.showSystemMessage(data.message, true);
+            }
+        } finally {
+            btn.disabled = false; btn.textContent = 'Войти';
+        }
+    });
+});
+</script>
+{% endblock %}

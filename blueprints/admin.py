@@ -1,7 +1,7 @@
 import logging
 import re
 
-from flask import Blueprint, request, jsonify, abort
+from flask import Blueprint, request, jsonify, abort, render_template
 from flask_login import login_required, current_user
 from werkzeug.security import generate_password_hash
 
@@ -10,6 +10,14 @@ from models import User
 
 logger = logging.getLogger(__name__)
 admin_bp = Blueprint("admin", __name__)
+
+
+@admin_bp.route("/admin")
+@login_required
+def admin_page():
+    if not current_user.is_admin:
+        abort(403)
+    return render_template("admin.html", active_page="admin")
 
 
 @admin_bp.route("/api/admin/users", methods=["GET"])

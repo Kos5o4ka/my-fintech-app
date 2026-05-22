@@ -53,3 +53,17 @@ def profile_page():
         db.session.commit()
 
     return render_template("profile.html", csrf_token=generate_csrf())
+
+
+@profile_bp.route("/api/profile/email", methods=["POST"])
+@login_required
+def update_email():
+    data = request.get_json() or {}
+    email = data.get("email", "").strip()
+    notifications = bool(data.get("email_notifications", False))
+    if email and ("@" not in email or "." not in email.split("@")[-1]):
+        return jsonify({"status": "error", "message": "Неверный формат email."}), 400
+    current_user.email = email if email else None
+    current_user.email_notifications = notifications
+    db.session.commit()
+    return jsonify({"status": "success", "message": "Настройки уведомлений сохранены."})
