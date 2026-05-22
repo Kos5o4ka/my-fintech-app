@@ -11,8 +11,8 @@
 |------|------|--------|
 | 0 | Premium Редизайн (UI/UX) | ✅ Выполнен |
 | 1 | Архитектурный рефакторинг | ✅ Выполнен |
-| 2 | Оптимизация и кэш | 🔲 В плане |
-| 3 | Безопасность | 🔲 В плане |
+| 2 | Оптимизация и кэш | ✅ Выполнен |
+| 3 | Безопасность + Telegram | 🔲 В плане |
 | 4 | Новые фичи | 🔲 В плане |
 | 5 | Тестирование | 🔲 В плане |
 | 6 | DevOps и деплой | 🔲 В плане |
@@ -163,40 +163,55 @@
 
 ---
 
-## Этап 2 — Оптимизация
+## Этап 2 — Оптимизация ✅ ВЫПОЛНЕН
 
 ### 2.1 База данных
 
-- [ ] Пагинация в `/api/portfolio` и `/api/portfolio/history`
-- [ ] `bulk_update_mappings()` вместо N UPDATE в APScheduler
-- [ ] Connection pooling: `SQLALCHEMY_POOL_SIZE`, `SQLALCHEMY_MAX_OVERFLOW`
+- [x] Пагинация в `/api/portfolio` и `/api/portfolio/history` (`page`, `per_page`, метаданные)
+- [x] `bulk_update_mappings()` вместо N UPDATE в APScheduler (один SQL)
+- [x] Connection pooling в `ProductionConfig`: `pool_size=5`, `max_overflow=10`, `pool_recycle=1800`
 
 ### 2.2 Кэширование
 
-- [ ] Redis вместо SimpleCache
-- [ ] TTL 5 мин для `/api/portfolio_stats`
-- [ ] `ETag` + `Cache-Control` для read-only API
-- [ ] Инвалидация кэша при изменении портфеля
+- [x] **FileSystemCache** вместо SimpleCache — хранит на диске, не расходует RAM,
+      работает между воркерами; Redis остаётся опциональным через `REDIS_URL`
+- [x] TTL 15 мин для `/api/portfolio_stats` (ключ `portfolio_stats:{user_id}`)
+- [x] `ETag` + `Cache-Control: private, max-age=60` для `/api/portfolio`
+- [x] Инвалидация кэша `_bust_user_cache()` при add_bond / sell_bond
 
 ### 2.3 MOEX API
 
-- [ ] Retry с exponential backoff через `tenacity` (3 попытки: 1/2/4 сек)
-- [ ] Явный `timeout=10` на все `requests.get()`
-- [ ] Circuit breaker: если MOEX недоступен 5 раз подряд — пауза 10 мин
+- [x] Retry с exponential backoff через `tenacity` (3 попытки: 1/2/4 сек) — было в Stage 1
+- [x] Явный `timeout=10` — было в Stage 1
+- [x] **Circuit breaker**: 5 ошибок подряд → пауза 10 мин (thread-safe, `_fetch_json`)
 
 ### 2.4 Frontend
 
-- [ ] Debounce 300ms для поиска облигаций *(уже есть в коде)*
-- [ ] Bootstrap → только нужные модули, без CDN
-- [ ] `rel="preload"` для Inter и critical CSS
+- [x] Debounce 300ms для поиска — уже был в коде
+- [ ] Bootstrap локально вместо CDN *(отложено — не критично для 2 ГБ сервера)*
+- [ ] `rel="preload"` для Inter *(отложено)*
 
 ---
 
-## Этап 3 — Безопасность
+## Этап 3 — Безопасность + Telegram-бот 🔲 В ПЛАНЕ
+
+### 3.0 Telegram-бот (уведомления + 2FA)
+
+> Поля `telegram_chat_id` и `telegram_notifications` уже в модели User (миграция d4e5f6a7b8c9).
+
+- [ ] Создать бота через @BotFather → `TELEGRAM_BOT_TOKEN` в `.env`
+- [ ] `blueprints/telegram_bot.py` — вебхук `/api/telegram/webhook`
+- [ ] Привязка аккаунта:
+  - Профиль → «Привязать Telegram» → генерируется short-lived токен (UUID, TTL 10 мин, хранится в кэше)
+  - Ссылка `t.me/<bot>?start=<token>` — пользователь открывает в Telegram
+  - Бот получает `/start <token>` → верифицирует → сохраняет `chat_id` в User
+- [ ] Уведомления о купонах через бота (замена/дополнение email)
+- [ ] **2FA через Telegram**: при входе бот присылает 6-значный OTP-код → пользователь вводит на сайте
+- [ ] `services/telegram_service.py` — `send_message(chat_id, text)`, `send_otp(chat_id) → code`
 
 ### 3.1 Аутентификация
 
-- [ ] 2FA через TOTP (`pyotp` + Google Authenticator)
+- [ ] 2FA через Telegram-бот *(см. 3.0)*
 - [ ] Audit log: login/logout/смена пароля → таблица с IP, UA, timestamp
 
 ### 3.2 Сессии

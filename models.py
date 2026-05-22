@@ -16,6 +16,9 @@ class User(db.Model, UserMixin):
     is_admin = db.Column(db.Boolean, default=False)
     email = db.Column(db.String(254), nullable=True)
     email_notifications = db.Column(db.Boolean, default=False)
+    # Stage 3 — Telegram-бот
+    telegram_chat_id = db.Column(db.String(20), nullable=True, unique=True)
+    telegram_notifications = db.Column(db.Boolean, default=False)
     bonds = db.relationship('BondPortfolio', backref='user', lazy=True)
 
 class BondPortfolio(db.Model):

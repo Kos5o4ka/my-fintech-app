@@ -8,4 +8,4 @@ __pycache__/
 static/avatars/*
 !static/avatars/default_avatar.png
 # migrations/ — tracked in git so the server can run flask db upgrade
-instance/
+instance/.cache/

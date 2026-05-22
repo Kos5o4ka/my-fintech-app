@@ -1,4 +1,6 @@
 import logging
+import time
+from threading import Lock
 from typing import Optional
 
 import requests
@@ -11,11 +13,48 @@ from tenacity import (
     after_log,
 )
 
-from constants import MOEX_REQUEST_TIMEOUT, MOEX_MAX_HISTORY_OFFSET
+from constants import (
+    MOEX_REQUEST_TIMEOUT, MOEX_MAX_HISTORY_OFFSET,
+    MOEX_CIRCUIT_FAIL_THRESHOLD, MOEX_CIRCUIT_OPEN_SECONDS,
+)
 
 logger = logging.getLogger(__name__)
 
 _TIMEOUT = MOEX_REQUEST_TIMEOUT
+
+# ── Circuit breaker ───────────────────────────────────────────────────────────
+# После MOEX_CIRCUIT_FAIL_THRESHOLD ошибок подряд все запросы
+# блокируются на MOEX_CIRCUIT_OPEN_SECONDS секунд (10 мин).
+_cb_lock = Lock()
+_cb_fail_count: int = 0
+_cb_open_until: float = 0.0
+
+
+def _circuit_check() -> None:
+    """Бросает RuntimeError, если автомат открыт."""
+    with _cb_lock:
+        if time.time() < _cb_open_until:
+            remaining = int(_cb_open_until - time.time())
+            raise RuntimeError(f"MOEX недоступен, повтор через {remaining} с.")
+
+
+def _circuit_success() -> None:
+    global _cb_fail_count
+    with _cb_lock:
+        _cb_fail_count = 0
+
+
+def _circuit_failure() -> None:
+    global _cb_fail_count, _cb_open_until
+    with _cb_lock:
+        _cb_fail_count += 1
+        if _cb_fail_count >= MOEX_CIRCUIT_FAIL_THRESHOLD:
+            _cb_open_until = time.time() + MOEX_CIRCUIT_OPEN_SECONDS
+            _cb_fail_count = 0
+            logger.warning(
+                "MOEX circuit breaker OPEN — слишком много ошибок, пауза %d с.",
+                MOEX_CIRCUIT_OPEN_SECONDS,
+            )
 
 
 @retry(
@@ -26,9 +65,15 @@ _TIMEOUT = MOEX_REQUEST_TIMEOUT
     after=after_log(logger, logging.WARNING),
 )
 def _fetch_json(url: str) -> dict:
-    resp = requests.get(url, timeout=_TIMEOUT)
-    resp.raise_for_status()
-    return resp.json()
+    _circuit_check()
+    try:
+        resp = requests.get(url, timeout=_TIMEOUT)
+        resp.raise_for_status()
+        _circuit_success()
+        return resp.json()
+    except requests.RequestException:
+        _circuit_failure()
+        raise
 
 
 def get_moex_bond(isin_code: str) -> Optional[dict]:

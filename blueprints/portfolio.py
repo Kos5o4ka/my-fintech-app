@@ -1,5 +1,7 @@
+import hashlib
 import io
 import csv
+import json
 import logging
 import math
 from datetime import datetime, date, timedelta
@@ -29,11 +31,32 @@ from services.portfolio_service import (
 from schemas.portfolio import AddBondRequest, SellBondRequest, ScreenerRequest
 from constants import (
     INCOME_TTL, CHART_RANGE_TTL, CHART_ALL_TTL,
-    BENCHMARK_TTL, SCREENER_TTL, MAX_CHART_POINTS,
+    BENCHMARK_TTL, SCREENER_TTL, MAX_CHART_POINTS, STATS_TTL,
+    DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE,
 )
 
 logger = logging.getLogger(__name__)
 portfolio_bp = Blueprint("portfolio", __name__)
+
+
+# ── Утилиты ───────────────────────────────────────────────────────────────────
+
+def _etag(payload: dict) -> str:
+    """Быстрый ETag из MD5 тела ответа (первые 16 символов)."""
+    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    return hashlib.md5(raw.encode()).hexdigest()[:16]
+
+
+def _bust_user_cache(user_id: int) -> None:
+    """Инвалидирует кэши, зависящие от состава портфеля пользователя."""
+    for key in [
+        f"portfolio_income:{user_id}",
+        f"portfolio_stats:{user_id}",
+    ]:
+        try:
+            cache.delete(key)
+        except Exception:
+            pass
 
 
 # ── Страница ──────────────────────────────────────────────────────────────────
@@ -49,10 +72,38 @@ def portfolio_page() -> str:
 @portfolio_bp.route("/api/portfolio", methods=["GET"])
 @login_required
 def get_portfolio():
-    active = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False).all()
-    bonds, total = build_portfolio_list(active)
-    ytm = calc_portfolio_ytm(bonds, total)
-    return jsonify({"status": "success", "total_value": total, "portfolio_ytm": ytm, "bonds": bonds})
+    page = max(request.args.get("page", 1, type=int), 1)
+    per_page = min(request.args.get("per_page", DEFAULT_PAGE_SIZE, type=int), MAX_PAGE_SIZE)
+
+    q = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False)
+    total_count = q.count()
+    active = q.order_by(BondPortfolio.id).offset((page - 1) * per_page).limit(per_page).all()
+
+    bonds, total_val = build_portfolio_list(active)
+    ytm = calc_portfolio_ytm(bonds, total_val)
+
+    payload = {
+        "status": "success",
+        "total_value": total_val,
+        "portfolio_ytm": ytm,
+        "bonds": bonds,
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total_count,
+            "pages": math.ceil(total_count / per_page) if per_page else 1,
+        },
+    }
+
+    # ETag — клиент может прислать If-None-Match и получить 304
+    tag = _etag(payload)
+    if request.headers.get("If-None-Match") == tag:
+        return "", 304
+
+    resp = make_response(jsonify(payload))
+    resp.headers["ETag"] = tag
+    resp.headers["Cache-Control"] = "private, max-age=60"
+    return resp
 
 
 # ── История сделок ────────────────────────────────────────────────────────────
@@ -60,6 +111,8 @@ def get_portfolio():
 @portfolio_bp.route("/api/portfolio/history", methods=["GET"])
 @login_required
 def portfolio_history():
+    page = max(request.args.get("page", 1, type=int), 1)
+    per_page = min(request.args.get("per_page", DEFAULT_PAGE_SIZE, type=int), MAX_PAGE_SIZE)
     date_from_str = request.args.get("date_from", "").strip()
     date_to_str = request.args.get("date_to", "").strip()
 
@@ -79,8 +132,18 @@ def portfolio_history():
         except ValueError:
             pass
 
-    closed = query.order_by(BondPortfolio.sell_date.desc()).all()
-    return jsonify({"status": "success", "trades": [build_trade_entry(b) for b in closed]})
+    total_count = query.count()
+    closed = query.order_by(BondPortfolio.sell_date.desc()).offset((page - 1) * per_page).limit(per_page).all()
+    return jsonify({
+        "status": "success",
+        "trades": [build_trade_entry(b) for b in closed],
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total_count,
+            "pages": math.ceil(total_count / per_page) if per_page else 1,
+        },
+    })
 
 
 # ── Поиск облигаций ───────────────────────────────────────────────────────────
@@ -181,6 +244,7 @@ def add_bond():
         tx_date=purchase_date,
     ))
     db.session.commit()
+    _bust_user_cache(current_user.id)
     return jsonify({
         "status": "success",
         "message": f"Бумага {bond_title} успешно добавлена!",
@@ -228,6 +292,7 @@ def sell_bond(bond_id: int):
         tx_date=bond.sell_date,
     ))
     db.session.commit()
+    _bust_user_cache(current_user.id)
     return jsonify({"status": "success", "message": f"Облигация {bond.name} переведена в архив продаж."})
 
 
@@ -533,10 +598,15 @@ def portfolio_benchmark():
 @portfolio_bp.route("/api/portfolio_stats", methods=["GET"])
 @login_required
 def portfolio_stats():
+    cache_key = f"portfolio_stats:{current_user.id}"
+    cached = cache.get(cache_key)
+    if cached:
+        return jsonify(cached)
+
     closed = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=True).all()
     monthly = calc_monthly_profit(closed)
     sorted_months = sorted(monthly.keys())
-    return jsonify({
+    result = {
         "labels": sorted_months,
         "datasets": [{
             "label": "Чистая зафиксированная прибыль (₽)",
@@ -546,4 +616,6 @@ def portfolio_stats():
             "borderWidth": 2,
             "fill": True,
         }],
-    })
+    }
+    cache.set(cache_key, result, timeout=STATS_TTL)
+    return jsonify(result)

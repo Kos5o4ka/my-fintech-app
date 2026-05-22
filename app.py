@@ -25,11 +25,21 @@ app.config.from_object(get_config())
 db.init_app(app)
 login_manager.init_app(app)
 migrate.init_app(app, db)
-_cache_config = {"CACHE_TYPE": "SimpleCache"}
+
+# Кэш: Redis (если REDIS_URL задан) → FileSystemCache (по умолчанию).
+# FileSystemCache хранит данные на диске, не потребляет RAM, работает
+# между воркерами Gunicorn — идеально для одного сервера с ограниченной памятью.
 if app.config.get("REDIS_URL"):
     _cache_config = {
         "CACHE_TYPE": "RedisCache",
         "CACHE_REDIS_URL": app.config["REDIS_URL"],
+    }
+else:
+    _cache_config = {
+        "CACHE_TYPE": "FileSystemCache",
+        "CACHE_DIR": os.path.join(app.root_path, ".cache"),
+        "CACHE_THRESHOLD": 1000,          # макс. кол-во записей
+        "CACHE_DEFAULT_TIMEOUT": 300,
     }
 cache.init_app(app, config=_cache_config)
 mail.init_app(app)
@@ -120,30 +130,45 @@ def handle_api_errors(error):
     return error
 
 
-# ── APScheduler: background price refresh (ARCH-3) ───────────────────────────
+# ── APScheduler: background price refresh ────────────────────────────────────
 def _update_bond_prices() -> None:
-    """Refresh last_price for all active bonds and pre-warm the MOEX cache."""
+    """Обновляет last_price всех активных облигаций через bulk UPDATE (один запрос)."""
     with app.app_context():
         try:
             from models import BondPortfolio
             from moex import get_moex_bond
+            from constants import MOEX_BOND_TTL
 
             active = BondPortfolio.query.filter_by(is_sold=False).all()
-            seen: dict = {}
-            updated = 0
+            if not active:
+                return
+
+            # 1) Собираем уникальные ISINы и запрашиваем MOEX
+            seen: dict[str, dict | None] = {}
             for bond in active:
                 if bond.isin not in seen:
                     seen[bond.isin] = get_moex_bond(bond.isin)
-                data = seen[bond.isin]
-                if data:
-                    bond.last_price = data.get("price", bond.last_price)
-                    try:
-                        cache.set(f"moex_bond:{bond.isin}", data, timeout=900)
-                    except Exception:
-                        pass
-                    updated += 1
-            db.session.commit()
-            logger.info("Price update job: refreshed %d ISINs (%d bonds)", len(seen), updated)
+                    if seen[bond.isin]:
+                        try:
+                            cache.set(f"moex_bond:{bond.isin}", seen[bond.isin], timeout=MOEX_BOND_TTL)
+                        except Exception:
+                            pass
+
+            # 2) Bulk UPDATE — один SQL вместо N отдельных UPDATE
+            mappings = [
+                {"id": bond.id, "last_price": seen[bond.isin]["price"]}
+                for bond in active
+                if seen.get(bond.isin)
+            ]
+            if mappings:
+                db.session.bulk_update_mappings(BondPortfolio, mappings)
+                db.session.commit()
+
+            logger.info(
+                "Price update: %d ISINs, %d bonds updated",
+                len([v for v in seen.values() if v]),
+                len(mappings),
+            )
         except Exception as exc:
             logger.error("Price update job failed: %s", exc)
 
