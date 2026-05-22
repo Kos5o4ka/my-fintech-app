@@ -1,4 +1,4 @@
-"""Blueprint профиля — аватар, email, настройки, Telegram-привязка."""
+"""Blueprint профиля — аватар, email, настройки, Telegram-привязка, activity."""
 import logging
 
 from pydantic import ValidationError
@@ -7,6 +7,7 @@ from flask_login import login_required, current_user
 from flask_wtf.csrf import generate_csrf
 
 from extensions import db
+from models import AuditLog
 from services.user_service import save_avatar, update_email_settings, update_telegram_settings
 from schemas.profile import EmailSettingsRequest
 
@@ -127,4 +128,54 @@ def telegram_notifications():
     return jsonify({
         "status": "success",
         "message": f"Telegram-уведомления {state}.",
+    })
+
+
+# ── Activity feed (Stage 4) ───────────────────────────────────────────────────
+
+_ACTION_LABELS = {
+    "login_ok":       ("✅", "Вход в систему"),
+    "login_fail":     ("❌", "Неудачная попытка входа"),
+    "login_2fa_sent": ("📲", "Отправлен 2FA-код"),
+    "login_2fa_fail": ("⚠️", "Неверный 2FA-код"),
+    "logout":         ("👋", "Выход из системы"),
+    "change_password":("🔑", "Смена пароля"),
+    "tg_link":        ("🔗", "Telegram привязан"),
+    "tg_unlink":      ("🔓", "Telegram отвязан"),
+}
+
+
+@profile_bp.route("/api/profile/activity", methods=["GET"])
+@login_required
+def profile_activity():
+    """Журнал действий текущего пользователя (последние 50 записей)."""
+    page = max(request.args.get("page", 1, type=int), 1)
+    per_page = 20
+    query = (
+        AuditLog.query
+        .filter_by(user_id=current_user.id)
+        .order_by(AuditLog.created_at.desc())
+    )
+    total = query.count()
+    logs = query.offset((page - 1) * per_page).limit(per_page).all()
+
+    entries = []
+    for log in logs:
+        icon, label = _ACTION_LABELS.get(log.action, ("🔔", log.action))
+        entries.append({
+            "id": log.id,
+            "action": log.action,
+            "label": label,
+            "icon": icon,
+            "ip_address": log.ip_address or "—",
+            "created_at": log.created_at.strftime("%Y-%m-%d %H:%M") if log.created_at else "—",
+            "details": log.details or "",
+        })
+
+    return jsonify({
+        "status": "success",
+        "entries": entries,
+        "total": total,
+        "page": page,
+        "pages": -(-total // per_page),  # ceiling division
     })

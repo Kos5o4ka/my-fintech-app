@@ -44,6 +44,8 @@ class BondPortfolio(db.Model):
     broker_commission = db.Column(db.Numeric(10, 4), nullable=True)
     currency = db.Column(db.String(3), nullable=False, default='RUB')
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # Stage 4 — заметки к позиции
+    notes = db.Column(db.Text, nullable=True)
 
 
 class Watchlist(db.Model):

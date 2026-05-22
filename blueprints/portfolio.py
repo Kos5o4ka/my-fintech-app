@@ -106,6 +106,20 @@ def get_portfolio():
     return resp
 
 
+# ── Заметки к позиции ────────────────────────────────────────────────────────
+
+@portfolio_bp.route("/api/portfolio/<int:bond_id>/notes", methods=["PATCH"])
+@login_required
+def update_bond_notes(bond_id: int):
+    """Обновляет заметку к позиции портфеля (Stage 4)."""
+    bond = BondPortfolio.query.filter_by(id=bond_id, user_id=current_user.id).first_or_404()
+    data = request.get_json() or {}
+    raw = (data.get("notes") or "").strip()
+    bond.notes = raw if raw else None
+    db.session.commit()
+    return jsonify({"status": "success", "notes": bond.notes or ""})
+
+
 # ── История сделок ────────────────────────────────────────────────────────────
 
 @portfolio_bp.route("/api/portfolio/history", methods=["GET"])
@@ -537,17 +551,58 @@ def screener():
             max_ytm=request.args.get("max_ytm") or None,
             maturity_from=request.args.get("maturity_from") or None,
             maturity_to=request.args.get("maturity_to") or None,
+            issuer_type=request.args.get("issuer_type") or None,
+            min_duration=request.args.get("min_duration") or None,
+            max_duration=request.args.get("max_duration") or None,
         )
     except ValidationError:
         return jsonify([])
 
     cache_key = f"screener:{req.min_ytm}:{req.max_ytm}:{req.maturity_from}:{req.maturity_to}"
     cached = cache.get(cache_key)
-    if cached:
-        return jsonify(cached)
+    if not cached:
+        cached = get_screener_bonds(req.min_ytm, req.max_ytm, req.maturity_from, req.maturity_to, limit=200)
+        cache.set(cache_key, cached, timeout=SCREENER_TTL)
 
-    results = get_screener_bonds(req.min_ytm, req.max_ytm, req.maturity_from, req.maturity_to, limit=100)
-    cache.set(cache_key, results, timeout=SCREENER_TTL)
+    results = cached
+
+    # Stage 4: post-filter by issuer type (client-side semantic)
+    if req.issuer_type:
+        itype = req.issuer_type.lower()
+        def _matches_type(b: dict) -> bool:
+            name = (b.get("name") or b.get("secid") or "").upper()
+            if itype == "ofz":
+                return "ОФЗ" in name or name.startswith("SU") or name.startswith("RU000A0")
+            if itype == "muni":
+                return any(k in name for k in ("МУН", "МУНИЦИN", "ОБЛИГАЦ", "РЕГИОН", "ОБЛАСТЬ", "КРАЙ", "ГОРОД"))
+            if itype == "corp":
+                return "ОФЗ" not in name and not any(
+                    k in name for k in ("МУН", "РЕГИОН", "ОБЛАСТЬ", "КРАЙ", "ГОРОД")
+                )
+            return True
+        results = [b for b in results if _matches_type(b)]
+
+    # Stage 4: post-filter by approximate duration (years to maturity)
+    if req.min_duration is not None or req.max_duration is not None:
+        today_ord = date.today().toordinal()
+        filtered = []
+        for b in results:
+            mat = b.get("maturity_date") or b.get("matdate") or ""
+            if not mat:
+                filtered.append(b)
+                continue
+            try:
+                dur = (date.fromisoformat(mat[:10]).toordinal() - today_ord) / 365.25
+            except ValueError:
+                filtered.append(b)
+                continue
+            if req.min_duration is not None and dur < req.min_duration:
+                continue
+            if req.max_duration is not None and dur > req.max_duration:
+                continue
+            filtered.append(b)
+        results = filtered
+
     return jsonify(results)
 
 
@@ -556,6 +611,7 @@ def screener():
 @portfolio_bp.route("/api/portfolio/tax", methods=["GET"])
 @login_required
 def portfolio_tax():
+    """Налоговый отчёт за год — сделки + купоны + НДФЛ (Stage 4 UI)."""
     try:
         year = int(request.args.get("year", date.today().year))
     except (ValueError, TypeError):
@@ -570,7 +626,42 @@ def portfolio_tax():
         BondPortfolio.sell_date <= year_end,
     ).all()
     active = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False).all()
-    return jsonify(calc_tax_report(sold, active, year))
+    summary = calc_tax_report(sold, active, year)
+
+    # Build enriched response for Stage 4 Tax UI
+    trades_list = []
+    gross_profit = 0.0
+    total_commission = 0.0
+    for bond in sold:
+        buy_p = float(bond.buy_price)
+        sell_p = float(bond.sell_price) if bond.sell_price else buy_p
+        comm = float(bond.broker_commission) if bond.broker_commission else 0.0
+        pnl = (sell_p - buy_p) * bond.amount - comm
+        gross_profit += pnl
+        total_commission += comm
+        trades_list.append({
+            "id": bond.id,
+            "name": bond.name or bond.isin,
+            "isin": bond.isin,
+            "amount": bond.amount,
+            "buy_price": round(buy_p, 2),
+            "sell_price": round(sell_p, 2),
+            "commission": round(comm, 2),
+            "pnl": round(pnl, 2),
+            "sell_date": bond.sell_date.strftime("%Y-%m-%d") if bond.sell_date else None,
+        })
+
+    taxable_base = max(0.0, round(gross_profit, 2))
+    tax_amount = round(taxable_base * 0.13, 2)
+
+    return jsonify({
+        **summary,
+        "gross_profit": round(gross_profit, 2),
+        "total_commission": round(total_commission, 2),
+        "taxable_base": taxable_base,
+        "tax_amount": tax_amount,
+        "trades": trades_list,
+    })
 
 
 # ── Бенчмарк RGBI ─────────────────────────────────────────────────────────────
@@ -671,6 +762,55 @@ def dashboard_pnl_chart():
     ), 2)
 
     return jsonify({"labels": labels, "data": data, "unrealized": unrealized, "period": period})
+
+
+# ── Уведомления: ближайшие купоны ────────────────────────────────────────────
+
+@portfolio_bp.route("/api/notifications/upcoming", methods=["GET"])
+@login_required
+def upcoming_notifications():
+    """Возвращает купонные выплаты в ближайшие N дней (для колокольчика).
+
+    ?days=7  — горизонт (по умолчанию 7)
+    """
+    try:
+        days = max(1, min(int(request.args.get("days", 7)), 90))
+    except (ValueError, TypeError):
+        days = 7
+
+    today = date.today()
+    horizon = today + timedelta(days=days)
+
+    active_bonds = BondPortfolio.query.filter_by(
+        user_id=current_user.id, is_sold=False
+    ).all()
+
+    events: list[dict] = []
+    for bond in active_bonds:
+        try:
+            coupons = get_coupon_calendar(bond.isin) or []
+        except Exception:
+            continue
+        for c in coupons:
+            coupon_date_str = c.get("coupondate") or c.get("date") or ""
+            if not coupon_date_str:
+                continue
+            try:
+                coupon_date = date.fromisoformat(coupon_date_str[:10])
+            except ValueError:
+                continue
+            if today <= coupon_date <= horizon:
+                events.append({
+                    "isin": bond.isin,
+                    "name": bond.name or bond.isin,
+                    "coupon_date": coupon_date_str[:10],
+                    "coupon_value": c.get("value") or c.get("couponvalue"),
+                    "amount": bond.amount,
+                    "days_left": (coupon_date - today).days,
+                })
+
+    events.sort(key=lambda x: x["coupon_date"])
+    return jsonify({"count": len(events), "events": events})
 
 
 # ── Статистика (P&L по месяцам) ───────────────────────────────────────────────

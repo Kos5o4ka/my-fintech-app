@@ -33,6 +33,7 @@ def build_portfolio_entry(bond: BondPortfolio) -> dict:
         "ytm": moex_data.get("ytm", 0.0),
         "pnl": round(pnl, 2),
         "pnl_pct": round(pnl_pct, 2),
+        "notes": bond.notes or "",
     }
 
 

@@ -225,14 +225,23 @@ function renderBondRows() {
                     <b>${sign}${pnl.toFixed(2)} ₽</b><br>
                     <small>${sign}${pnlPct.toFixed(2)}%</small>
                 </td>
-                <td><button
-                    onclick="sellTrigger(parseInt(this.dataset.id), this.dataset.name, parseFloat(this.dataset.price), parseFloat(this.dataset.buyPrice), parseInt(this.dataset.amount))"
-                    data-id="${bond.id}"
-                    data-name="${esc(bond.name)}"
-                    data-price="${bond.last_price || bond.buy_price}"
-                    data-buy-price="${bond.buy_price}"
-                    data-amount="${bond.amount}"
-                    class="btn btn-sm btn-outline-success w-100">Продать</button></td>
+                <td style="white-space:nowrap">
+                    <button
+                        onclick="sellTrigger(parseInt(this.dataset.id), this.dataset.name, parseFloat(this.dataset.price), parseFloat(this.dataset.buyPrice), parseInt(this.dataset.amount))"
+                        data-id="${bond.id}"
+                        data-name="${esc(bond.name)}"
+                        data-price="${bond.last_price || bond.buy_price}"
+                        data-buy-price="${bond.buy_price}"
+                        data-amount="${bond.amount}"
+                        class="btn btn-sm btn-outline-success">Продать</button>
+                    <button
+                        data-note-btn="${bond.id}"
+                        title="${esc(bond.notes || 'Добавить заметку')}"
+                        onclick="openDrawer(${bond.id}, ${JSON.stringify(bond.notes || '')})"
+                        class="btn btn-sm btn-outline-secondary ms-1"
+                        style="opacity:${bond.notes ? '1' : '0.35'}"
+                        aria-label="Заметка">📝</button>
+                </td>
             </tr>`;
     });
 }
@@ -655,14 +664,20 @@ async function runScreener() {
     tbody.innerHTML = '';
 
     const params = new URLSearchParams();
-    const minYtm = document.getElementById('screenerMinYtm').value;
-    const maxYtm = document.getElementById('screenerMaxYtm').value;
-    const matFrom = document.getElementById('screenerMatFrom').value;
-    const matTo   = document.getElementById('screenerMatTo').value;
-    if (minYtm) params.set('min_ytm', minYtm);
-    if (maxYtm) params.set('max_ytm', maxYtm);
+    const minYtm    = document.getElementById('screenerMinYtm')?.value;
+    const maxYtm    = document.getElementById('screenerMaxYtm')?.value;
+    const matFrom   = document.getElementById('screenerMatFrom')?.value;
+    const matTo     = document.getElementById('screenerMatTo')?.value;
+    const issType   = document.getElementById('screenerIssuerType')?.value;
+    const minDur    = document.getElementById('screenerMinDuration')?.value;
+    const maxDur    = document.getElementById('screenerMaxDuration')?.value;
+    if (minYtm)  params.set('min_ytm', minYtm);
+    if (maxYtm)  params.set('max_ytm', maxYtm);
     if (matFrom) params.set('maturity_from', matFrom);
     if (matTo)   params.set('maturity_to', matTo);
+    if (issType) params.set('issuer_type', issType);
+    if (minDur)  params.set('min_duration', minDur);
+    if (maxDur)  params.set('max_duration', maxDur);
 
     const res = await window.Common.csrfFetch('/api/screener?' + params.toString());
     loading.style.display = 'none';
@@ -695,8 +710,10 @@ async function runScreener() {
 }
 
 function clearScreener() {
-    ['screenerMinYtm','screenerMaxYtm','screenerMatFrom','screenerMatTo'].forEach(id => {
-        document.getElementById(id).value = '';
+    ['screenerMinYtm','screenerMaxYtm','screenerMatFrom','screenerMatTo',
+     'screenerIssuerType','screenerMinDuration','screenerMaxDuration'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
     });
     const tbody = document.getElementById('screener-table-body');
     tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Задайте фильтры и нажмите «Найти».</td></tr>';
