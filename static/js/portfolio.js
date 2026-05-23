@@ -969,6 +969,21 @@ async function addScreenerToWatchlist(isin) {
     const form = document.getElementById('importBrokerForm');
     if (!form) return;
 
+    // ── Broker chip toggle ──────────────────────────────────────────────────
+    const brokerHints = {
+        tinkoff: 'Отчёт по сделкам из личного кабинета Т‑Инвестиций (.xlsx)',
+        auto:    'Универсальный парсер — для других брокеров с похожим форматом',
+    };
+    document.querySelectorAll('.broker-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+            document.querySelectorAll('.broker-chip').forEach(c => c.classList.remove('active'));
+            chip.classList.add('active');
+            chip.querySelector('input[type=radio]').checked = true;
+            const hintEl = document.getElementById('brokerHint');
+            if (hintEl) hintEl.textContent = brokerHints[chip.dataset.value] || '';
+        });
+    });
+
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
 
@@ -989,8 +1004,12 @@ async function addScreenerToWatchlist(isin) {
         successAlert.style.display = 'none';
         errorAlert.style.display = 'none';
 
+        const brokerRadio = form.querySelector('input[name="broker"]:checked');
+        const brokerValue = brokerRadio ? brokerRadio.value : 'auto';
+
         const formData = new FormData();
         formData.append('file', fileInput.files[0]);
+        formData.append('broker', brokerValue);
 
         try {
             // csrfFetch doesn't set Content-Type for FormData — browser sets it with boundary automatically
@@ -1025,10 +1044,9 @@ async function addScreenerToWatchlist(isin) {
                 if (skipped.length) {
                     errorAlert.style.display = '';
                     errorList.innerHTML = skipped.map(s => `<li>${window.Common.escapeHtml(s)}</li>`).join('');
+                } else {
+                    errorAlert.style.display = 'none';
                 }
-
-                historyLoaded = false;
-                await loadDashboard();
             } else {
                 successAlert.style.display = 'none';
                 errorAlert.style.display = '';
@@ -1043,6 +1061,9 @@ async function addScreenerToWatchlist(isin) {
         } finally {
             submitBtn.disabled = false;
             submitBtn.textContent = 'Загрузить и импортировать';
+            // Обновляем дашборд отдельно — его ошибки не должны портить результат импорта
+            historyLoaded = false;
+            loadDashboard().catch(() => {});
         }
     });
 })();

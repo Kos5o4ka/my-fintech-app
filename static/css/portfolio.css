@@ -174,3 +174,27 @@ body {
         padding-right: 0.75rem;
     }
 }
+
+/* ── Broker chip selector ───────────────────────────────────────────── */
+.broker-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: .35rem .75rem;
+  border-radius: 2rem;
+  border: 1.5px solid var(--border-color, rgba(255,255,255,.12));
+  font-size: .8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color .15s, color .15s, background .15s;
+  user-select: none;
+}
+.broker-chip:hover {
+  border-color: var(--accent-color, #3b82f6);
+  color: var(--text-primary);
+}
+.broker-chip.active {
+  border-color: var(--accent-color, #3b82f6);
+  background: rgba(59,130,246,.1);
+  color: var(--accent-color, #3b82f6);
+}

@@ -1096,168 +1096,407 @@ def portfolio_stats():
 @portfolio_bp.route("/api/portfolio/import", methods=["POST"])
 @login_required
 def import_portfolio():
-    """Импортирует сделки из файла брокерского отчета (CSV/Excel) или JSON-массива (Stage 10)."""
-    import csv
-    import io
-    import openpyxl
-    
+    """Импортирует сделки из брокерского отчёта (CSV/XLSX) или JSON-массива.
+
+    Поддерживаемые форматы:
+    - Т-Инвестиции (broker=tinkoff): стандартный XLSX-отчёт по сделкам
+    - Авто (broker=auto): универсальный парсер, ищет заголовки сам
+    - JSON-массив: прямая передача данных через API
+
+    Принципиально НЕ вызывает MOEX API во время импорта — это исключает
+    таймаут воркера (gunicorn default 30 s) при большом числе ISINs.
+    Актуальные цены/данные MOEX подтянутся при следующей загрузке портфеля.
+    """
+
+    # ── утилиты ───────────────────────────────────────────────────────────────
+
+    def _norm_hdr(v):
+        """Нормализует заголовок: убирает переносы, лишние пробелы, lowercase."""
+        if v is None:
+            return ""
+        return " ".join(str(v).replace("\n", " ").replace("\r", " ").split()).lower()
+
+    def _parse_num(v):
+        """Парсит число в русском формате: '100,70' / '2 014,00' → float."""
+        if isinstance(v, (int, float)):
+            return float(v)
+        if v is None:
+            return None
+        s = str(v).strip().replace("\xa0", "").replace(" ", "").replace(" ", "").replace(",", ".")
+        try:
+            return float(s) if s else None
+        except ValueError:
+            return None
+
+    def _parse_date(v):
+        """Парсит дату из строки/datetime; понимает DD.MM.YYYY и ISO."""
+        if isinstance(v, datetime):
+            return v.date()
+        if isinstance(v, date):
+            return v
+        if not v:
+            return date.today()
+        s = str(v).strip().split()[0].split("/")[0].strip()
+        for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y", "%Y/%m/%d", "%d-%m-%Y"):
+            try:
+                return datetime.strptime(s, fmt).date()
+            except ValueError:
+                continue
+        return date.today()
+
+    def _is_valid_isin(s):
+        """ISIN — ровно 12 alphanumeric символов, начинается с 2 букв."""
+        return len(s) == 12 and s.isalnum() and s[:2].isalpha()
+
+    def _tx_type(val):
+        if not val:
+            return "buy"
+        v = str(val).strip().lower()
+        if v in ("продажа", "sell", "s", "-", "реализация", "погашение"):
+            return "sell"
+        return "buy"
+
+    def _is_repo(val):
+        """Возвращает True для РЕПО-сделок (не нужны в портфеле)."""
+        if not val:
+            return False
+        return "репо" in str(val).lower() or "repo" in str(val).lower()
+
+    def _is_cancelled(val):
+        if not val:
+            return False
+        v = str(val).strip().lower()
+        return v in ("отменена", "отменено", "cancelled", "canceled", "rejected")
+
+    # ── имена столбцов (стандарт + брокерские форматы) ────────────────────────
+    _ISIN   = ["isin", "isin код", "код актива", "код бумаги", "код инструмента", "code"]
+    _AMT    = ["количество", "кол-во", "кол.", "amount", "qty", "объем", "объём"]
+    _PRICE  = ["цена за единицу", "цена сделки", "цена", "price", "курс"]
+    _DATE   = ["дата заключения", "дата сделки", "дата", "date", "дата операции", "дата торгов"]
+    _TYPE   = ["вид сделки", "тип сделки", "операция", "тип операции", "направление", "type"]
+    _NAME   = ["наименование актива", "наименование инструмента", "наименование", "название", "инструмент", "name"]
+    _COMM   = ["комиссия брокера", "сумма комиссии брокера", "комиссия", "commission", "broker_commission"]
+    _CURR   = ["валюта расчетов", "валюта расчётов", "валюта", "currency"]
+    _STATUS = ["признак исполнения", "статус", "status"]
+    _ANCHORS = _ISIN + _AMT + _PRICE  # якорные столбцы для поиска строки заголовка
+
+    def _find_header_row_xlsx(sheet, max_scan=50):
+        """Возвращает (row_idx, {norm_name: col_idx}) или (None, {})."""
+        anchors = {_norm_hdr(a) for a in _ANCHORS}
+        for ri in range(1, min(max_scan + 1, sheet.max_row + 1)):
+            hdrs = {}
+            for cell in sheet[ri]:
+                n = _norm_hdr(cell.value)
+                if n:
+                    hdrs[n] = cell.column
+            if sum(1 for a in anchors if a in hdrs) >= 2:
+                return ri, hdrs
+        return None, {}
+
+    def _find_col(hdrs, candidates):
+        """Первый совпадающий индекс столбца (1-based) или None."""
+        for name in candidates:
+            n = _norm_hdr(name)
+            if n in hdrs:
+                return hdrs[n]
+        # Запасной вариант: начало строки совпадает
+        for name in candidates:
+            n = _norm_hdr(name)
+            for hn, hc in hdrs.items():
+                if hn.startswith(n) or n.startswith(hn):
+                    return hc
+        return None
+
+    # ── читаем брокера из формы ────────────────────────────────────────────────
+    broker = (request.form.get("broker") or "auto").strip().lower()
+    # Т-Инвестиции: фильтруем РЕПО-строки дополнительно по типу сделки
+    filter_repo = broker in ("tinkoff", "tbank", "auto")
+
+    # ── чтение файла ──────────────────────────────────────────────────────────
     deals = []
+    skipped_repo = 0
+
     if "file" in request.files:
         f = request.files["file"]
-        filename = f.filename.lower()
-        if filename.endswith(".csv"):
-            try:
-                stream = io.StringIO(f.read().decode("utf-8-sig"), newline=None)
-                reader = csv.DictReader(stream)
-                for row in reader:
-                    isin = row.get("ISIN") or row.get("isin") or row.get("Код бумаги") or row.get("Код")
-                    amount_str = row.get("Amount") or row.get("amount") or row.get("Количество") or row.get("Кол-во")
-                    price_str = row.get("Price") or row.get("price") or row.get("Цена") or row.get("Цена сделки")
-                    date_str = row.get("Date") or row.get("date") or row.get("Дата") or row.get("Дата сделки")
-                    notes = row.get("Notes") or row.get("notes") or row.get("Комментарий") or ""
-                    
-                    if not isin or not amount_str or not price_str:
-                        continue
-                    deals.append({
-                        "isin": isin.strip().upper(),
-                        "amount": amount_str,
-                        "price": price_str,
-                        "date": date_str,
-                        "notes": notes
-                    })
-            except Exception as e:
-                logger.error("Failed to parse CSV import report: %s", e)
-                return jsonify({"status": "error", "message": f"Ошибка обработки CSV: {str(e)}"}), 400
-        elif filename.endswith(".xlsx"):
+        filename = (f.filename or "").lower()
+
+        # ── XLSX ──────────────────────────────────────────────────────────────
+        if filename.endswith((".xlsx", ".xls")):
             try:
                 wb = openpyxl.load_workbook(io.BytesIO(f.read()), data_only=True)
+                # Ищем нужный лист: первый, или с ключевым словом «сделки»/«trades»
                 sheet = wb.active
-                headers = [str(cell.value).strip().lower() if cell.value is not None else "" for cell in sheet[1]]
-                
-                def find_col_idx(names):
-                    for name in names:
-                        if name.lower() in headers:
-                            return headers.index(name.lower()) + 1
+                for sh in wb.worksheets:
+                    sn = sh.title.lower()
+                    if any(k in sn for k in ("сделк", "trade", "операц")):
+                        sheet = sh
+                        break
+
+                header_row, hdrs = _find_header_row_xlsx(sheet)
+                if not hdrs:
+                    return jsonify({
+                        "status": "error",
+                        "message": (
+                            "Не найдена строка заголовков. "
+                            "Убедитесь, что отчёт содержит столбцы: "
+                            "«Код актива» (ISIN), «Количество», «Цена за единицу»."
+                        ),
+                    }), 400
+
+                isin_col   = _find_col(hdrs, _ISIN)
+                amt_col    = _find_col(hdrs, _AMT)
+                price_col  = _find_col(hdrs, _PRICE)
+                date_col   = _find_col(hdrs, _DATE)
+                type_col   = _find_col(hdrs, _TYPE)
+                name_col   = _find_col(hdrs, _NAME)
+                comm_col   = _find_col(hdrs, _COMM)
+                curr_col   = _find_col(hdrs, _CURR)
+                status_col = _find_col(hdrs, _STATUS)
+
+                if not isin_col or not amt_col or not price_col:
+                    missing = []
+                    if not isin_col:  missing.append("ISIN / Код актива")
+                    if not amt_col:   missing.append("Количество")
+                    if not price_col: missing.append("Цена за единицу")
+                    return jsonify({
+                        "status": "error",
+                        "message": f"Не найдены обязательные столбцы: {', '.join(missing)}.",
+                    }), 400
+
+                for ri in range(header_row + 1, sheet.max_row + 1):
+                    isin_v = sheet.cell(row=ri, column=isin_col).value
+                    if isin_v is None:
+                        continue
+                    isin_s = str(isin_v).strip().upper()
+                    if not _is_valid_isin(isin_s):
+                        continue  # пропускаем тикеры акций, РЕПО-тикеры и т.д.
+
+                    gc = lambda col: sheet.cell(row=ri, column=col).value if col else None  # noqa
+
+                    # Пропускаем РЕПО-сделки
+                    type_v = gc(type_col)
+                    if filter_repo and _is_repo(type_v):
+                        skipped_repo += 1
+                        continue
+
+                    # Пропускаем отменённые
+                    if status_col and _is_cancelled(gc(status_col)):
+                        continue
+
+                    raw_curr = str(gc(curr_col) or "").strip().upper()
+                    currency = raw_curr if raw_curr.isalpha() and len(raw_curr) == 3 else "RUB"
+
+                    deals.append({
+                        "isin":       isin_s,
+                        "amount":     gc(amt_col),
+                        "price":      gc(price_col),
+                        "date":       gc(date_col),
+                        "tx_type":    _tx_type(type_v),
+                        "name":       str(gc(name_col)).strip() if gc(name_col) else None,
+                        "commission": gc(comm_col),
+                        "currency":   currency,
+                        "notes":      "",
+                    })
+            except Exception as exc:
+                logger.error("XLSX import parse error: %s", exc, exc_info=True)
+                return jsonify({"status": "error", "message": f"Ошибка обработки XLSX: {exc}"}), 400
+
+        # ── CSV ───────────────────────────────────────────────────────────────
+        elif filename.endswith(".csv"):
+            try:
+                raw = f.read()
+                text = None
+                for enc in ("utf-8-sig", "cp1251", "utf-8"):
+                    try:
+                        text = raw.decode(enc); break
+                    except UnicodeDecodeError:
+                        continue
+                if text is None:
+                    text = raw.decode("utf-8", errors="replace")
+
+                lines = text.splitlines()
+                first_line = lines[0] if lines else ""
+                delim = "\t" if "\t" in first_line else (";" if ";" in first_line else ",")
+
+                # Ищем строку с заголовками
+                header_idx = 0
+                for i, line in enumerate(lines):
+                    ln = line.lower()
+                    if any(k in ln for k in ["isin", "код актива", "код бумаги"]):
+                        header_idx = i
+                        break
+
+                import csv as _csv
+                reader = _csv.DictReader(
+                    [lines[header_idx]] + lines[header_idx + 1:],
+                    delimiter=delim,
+                )
+
+                def _csv_get(rn, candidates):
+                    for name in candidates:
+                        v = rn.get(_norm_hdr(name))
+                        if v is not None and str(v).strip():
+                            return v
                     return None
-                
-                isin_col = find_col_idx(["isin", "код бумаги", "isin код", "код"])
-                amount_col = find_col_idx(["amount", "количество", "кол-во", "колво"])
-                price_col = find_col_idx(["price", "цена", "цена сделки"])
-                date_col = find_col_idx(["date", "дата", "дата сделки", "день"])
-                notes_col = find_col_idx(["notes", "комментарий", "заметка", "примечание"])
-                
-                if isin_col and amount_col and price_col:
-                    for row_idx in range(2, sheet.max_row + 1):
-                        isin_val = sheet.cell(row=row_idx, column=isin_col).value
-                        amount_val = sheet.cell(row=row_idx, column=amount_col).value
-                        price_val = sheet.cell(row=row_idx, column=price_col).value
-                        date_val = sheet.cell(row=row_idx, column=date_col).value if date_col else None
-                        notes_val = sheet.cell(row=row_idx, column=notes_col).value if notes_col else None
-                        
-                        if isin_val is None or amount_val is None or price_val is None:
-                            continue
-                        
-                        if isinstance(date_val, (datetime, date)):
-                            date_str = date_val.strftime("%Y-%m-%d")
-                        else:
-                            date_str = str(date_val) if date_val else None
-                            
-                        deals.append({
-                            "isin": str(isin_val).strip().upper(),
-                            "amount": str(amount_val),
-                            "price": str(price_val),
-                            "date": date_str,
-                            "notes": str(notes_val).strip() if notes_val else ""
-                        })
-            except Exception as e:
-                logger.error("Failed to parse Excel import report: %s", e)
-                return jsonify({"status": "error", "message": f"Ошибка обработки Excel: {str(e)}"}), 400
+
+                for raw_row in reader:
+                    rn = {_norm_hdr(k): v for k, v in raw_row.items()}
+                    isin_v = _csv_get(rn, _ISIN)
+                    if not isin_v:
+                        continue
+                    isin_s = str(isin_v).strip().upper()
+                    if not _is_valid_isin(isin_s):
+                        continue
+                    type_v = _csv_get(rn, _TYPE)
+                    if filter_repo and _is_repo(type_v):
+                        skipped_repo += 1
+                        continue
+                    if _is_cancelled(_csv_get(rn, _STATUS)):
+                        continue
+
+                    raw_curr = str(_csv_get(rn, _CURR) or "").strip().upper()
+                    currency = raw_curr if raw_curr.isalpha() and len(raw_curr) == 3 else "RUB"
+
+                    deals.append({
+                        "isin":       isin_s,
+                        "amount":     _csv_get(rn, _AMT),
+                        "price":      _csv_get(rn, _PRICE),
+                        "date":       _csv_get(rn, _DATE),
+                        "tx_type":    _tx_type(type_v),
+                        "name":       _csv_get(rn, _NAME),
+                        "commission": _csv_get(rn, _COMM),
+                        "currency":   currency,
+                        "notes":      "",
+                    })
+            except Exception as exc:
+                logger.error("CSV import parse error: %s", exc, exc_info=True)
+                return jsonify({"status": "error", "message": f"Ошибка обработки CSV: {exc}"}), 400
+
         else:
-            return jsonify({"status": "error", "message": "Поддерживаются только форматы .csv и .xlsx"}), 400
+            return jsonify({"status": "error", "message": "Поддерживаются только .csv и .xlsx"}), 400
+
     else:
-        data = request.get_json() or {}
-        deals = data.get("deals", [])
+        deals = (request.get_json() or {}).get("deals", [])
 
     if not deals:
-        return jsonify({"status": "error", "message": "Не найдено ни одной сделки для импорта."}), 400
+        hint = ""
+        if skipped_repo:
+            hint = f" (отфильтровано РЕПО-сделок: {skipped_repo})"
+        return jsonify({
+            "status": "error",
+            "message": (
+                f"Сделки с облигациями не найдены{hint}. "
+                "Убедитесь, что файл содержит покупки/продажи облигаций."
+            ),
+        }), 400
 
+    # ── обработка сделок — БЕЗ вызовов MOEX API (предотвращает таймаут) ───────
+    # Цены/secid обновятся автоматически при следующей загрузке портфеля.
     imported_count = 0
-    errors = []
+    errors: list = []
 
     for deal in deals:
-        isin = deal.get("isin", "").strip().upper()
-        amount_str = deal.get("amount")
-        price_str = deal.get("price")
-        date_val = deal.get("date")
-        notes = deal.get("notes", "")
+        isin    = str(deal.get("isin", "")).strip().upper()
+        tx_type = deal.get("tx_type", "buy")
+        notes   = deal.get("notes") or ""
 
-        if not isin or not amount_str or not price_str:
-            errors.append(f"Пропущено: неполные данные сделки для ISIN: {isin or 'не указан'}")
+        if not isin:
             continue
 
-        try:
-            amount = int(float(amount_str))
-            price = float(price_str)
-            if amount <= 0 or price <= 0:
-                errors.append(f"Пропущено {isin}: некорректное кол-во ({amount}) или цена ({price})")
-                continue
-        except (ValueError, TypeError):
-            errors.append(f"Пропущено {isin}: кол-во или цена не являются числами")
+        raw_amt = _parse_num(deal.get("amount"))
+        if raw_amt is None or raw_amt <= 0:
+            errors.append(f"Пропущено {isin}: некорректное количество ({deal.get('amount')!r})")
+            continue
+        amount = int(raw_amt)
+
+        price = _parse_num(deal.get("price"))
+        if price is None or price <= 0:
+            errors.append(f"Пропущено {isin}: некорректная цена ({deal.get('price')!r})")
             continue
 
-        purchase_date = date.today()
-        if date_val:
-            try:
-                if isinstance(date_val, str):
-                    date_val_clean = date_val.split(" ")[0].split("T")[0]
-                    purchase_date = datetime.strptime(date_val_clean, "%Y-%m-%d").date()
-                elif isinstance(date_val, (date, datetime)):
-                    purchase_date = date_val
-            except Exception:
-                pass
+        trade_date = _parse_date(deal.get("date"))
+        commission = _parse_num(deal.get("commission"))
+        currency   = deal.get("currency") or "RUB"
+        bond_title = deal.get("name") or isin
 
-        moex_data = get_moex_bond(isin)
-        if not moex_data:
-            errors.append(f"Пропущено {isin}: не найдена на Мосбирже")
-            continue
+        if tx_type == "buy":
+            db.session.add(BondPortfolio(
+                user_id=current_user.id,
+                isin=isin,
+                secid=isin,           # обновится при загрузке портфеля
+                name=bond_title,
+                amount=amount,
+                buy_price=price,
+                last_price=price,     # обновится при загрузке портфеля
+                purchase_date=trade_date,
+                is_sold=False,
+                currency=currency,
+                broker_commission=commission,
+                notes=notes or None,
+            ))
+            db.session.add(Transaction(
+                user_id=current_user.id,
+                isin=isin,
+                name=bond_title,
+                tx_type="buy",
+                amount=amount,
+                price=price,
+                commission=commission,
+                currency=currency,
+                tx_date=trade_date,
+            ))
+            imported_count += 1
 
-        secid = moex_data["secid"]
-        bond_title = moex_data.get("name", "Облигация")
-        live_price = moex_data.get("price", price)
-        currency = moex_data.get("currency", "RUB")
-
-        new_bond = BondPortfolio(
-            user_id=current_user.id,
-            isin=isin,
-            secid=secid,
-            name=bond_title,
-            amount=amount,
-            buy_price=price,
-            last_price=live_price,
-            purchase_date=purchase_date,
-            is_sold=False,
-            currency=currency,
-            notes=notes if notes else None,
-        )
-        db.session.add(new_bond)
-        db.session.add(Transaction(
-            user_id=current_user.id,
-            isin=isin,
-            name=bond_title,
-            tx_type="buy",
-            amount=amount,
-            price=price,
-            currency=currency,
-            tx_date=purchase_date,
-        ))
-        imported_count += 1
+        else:  # sell
+            active = BondPortfolio.query.filter_by(
+                user_id=current_user.id, isin=isin, is_sold=False
+            ).first()
+            if active:
+                active.is_sold    = True
+                active.sell_price = price
+                active.sell_date  = trade_date
+                if commission:
+                    active.broker_commission = commission
+            else:
+                db.session.add(BondPortfolio(
+                    user_id=current_user.id,
+                    isin=isin,
+                    secid=isin,
+                    name=bond_title,
+                    amount=amount,
+                    buy_price=price,
+                    last_price=price,
+                    purchase_date=trade_date,
+                    is_sold=True,
+                    sell_price=price,
+                    sell_date=trade_date,
+                    currency=currency,
+                    broker_commission=commission,
+                ))
+            db.session.add(Transaction(
+                user_id=current_user.id,
+                isin=isin,
+                name=bond_title,
+                tx_type="sell",
+                amount=amount,
+                price=price,
+                commission=commission,
+                currency=currency,
+                tx_date=trade_date,
+            ))
+            imported_count += 1
 
     db.session.commit()
     _bust_user_cache(current_user.id)
 
+    msg = f"Импортировано {imported_count} сделок."
+    if skipped_repo:
+        msg += f" РЕПО-сделок пропущено: {skipped_repo}."
+    if errors:
+        msg += f" Ошибок: {len(errors)}."
     return jsonify({
         "status": "success",
-        "message": f"Успешно импортировано {imported_count} сделок.",
+        "message": msg,
         "imported_count": imported_count,
-        "errors": errors
+        "errors": errors,
     }), 200

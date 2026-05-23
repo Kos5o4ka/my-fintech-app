@@ -30,6 +30,19 @@ def _get_user_agent() -> str:
     return (request.headers.get("User-Agent") or "")[:255]
 
 
+def _refresh_tg_username(user) -> None:
+    """Обновляет telegram_username пользователя через Telegram API (без commit)."""
+    if not user.telegram_chat_id:
+        return
+    try:
+        from services.telegram_service import get_telegram_username
+        username = get_telegram_username(user.telegram_chat_id)
+        if username is not None and user.telegram_username != username:
+            user.telegram_username = username
+    except Exception as exc:
+        logger.warning("Could not refresh telegram username for user %s: %s", user.id, exc)
+
+
 def _audit(action: str, user_id: Optional[int] = None, details: Optional[str] = None) -> None:
     """Записывает событие в журнал аудита (без commit — вызывать до commit сессии)."""
     try:
@@ -78,6 +91,7 @@ def api_login():
     session.permanent = True
     login_user(user, remember=True)
     _audit("login_ok", user_id=user.id)
+    _refresh_tg_username(user)
     db.session.commit()
     return jsonify({
         "status": "success",
@@ -119,6 +133,7 @@ def verify_2fa():
     session.permanent = True
     login_user(user, remember=True)
     _audit("login_ok", user_id=user.id, details="2fa=telegram")
+    _refresh_tg_username(user)
     db.session.commit()
     return jsonify({
         "status": "success",

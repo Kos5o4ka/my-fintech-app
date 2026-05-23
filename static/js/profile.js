@@ -62,16 +62,29 @@ document.addEventListener('DOMContentLoaded', () => {
       if (data.linked) {
         icon.textContent = '✅';
         text.textContent = 'Telegram привязан';
-        desc.textContent = `Бот @${data.bot_username}`;
+        const tgUser = data.telegram_username ? `@${data.telegram_username}` : '';
+        desc.textContent = tgUser ? `${tgUser} · Бот @${data.bot_username}` : `Бот @${data.bot_username}`;
         document.getElementById('tgLinkedBlock').style.display = '';
         document.getElementById('tgUnlinkedBlock').style.display = 'none';
         document.getElementById('tgNotifCheck').checked = data.notifications;
+        // Обновляем строку @username в панели «Учётная запись»
+        const profileTgEl = document.getElementById('profileTgUsername');
+        if (profileTgEl) {
+          profileTgEl.textContent = tgUser || 'привязан';
+          profileTgEl.style.color = tgUser ? '' : 'var(--text-tertiary)';
+        }
       } else {
         icon.textContent = '🔗';
         text.textContent = 'Telegram не привязан';
         desc.textContent = 'Привяжите бот для уведомлений и 2FA';
         document.getElementById('tgLinkedBlock').style.display  = 'none';
         document.getElementById('tgUnlinkedBlock').style.display = '';
+        // Сбрасываем строку @username
+        const profileTgEl = document.getElementById('profileTgUsername');
+        if (profileTgEl) {
+          profileTgEl.textContent = 'не привязан';
+          profileTgEl.style.color = 'var(--text-tertiary)';
+        }
       }
     } catch {
       document.getElementById('tgStatusText').textContent = 'Ошибка загрузки';

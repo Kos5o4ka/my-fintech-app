@@ -113,7 +113,18 @@
           <span class="info-label">Роль</span>
           <span class="info-value">{% if current_user.is_admin %}Администратор{% else %}Инвестор{% endif %}</span>
         </div>
-
+        <div class="info-row">
+          <span class="info-label">Telegram</span>
+          <span class="info-value" id="profileTgUsername">
+            {% if current_user.telegram_username %}
+              @{{ current_user.telegram_username }}
+            {% elif current_user.telegram_chat_id %}
+              <span style="color:var(--text-tertiary)">привязан</span>
+            {% else %}
+              <span style="color:var(--text-tertiary)">не привязан</span>
+            {% endif %}
+          </span>
+        </div>
       </div>
 
       <div class="prf-section-label" style="margin-top:1.75rem">Сессия</div>

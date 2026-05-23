@@ -36,16 +36,22 @@ def webhook(secret=None):
 
     chat_id = str(message.get("chat", {}).get("id", ""))
     text = (message.get("text") or "").strip()
+    tg_username = message.get("from", {}).get("username")  # может быть None
 
     if not chat_id or not text:
         return jsonify({"ok": True})
+
+    # Обновляем сохранённый @username при любом входящем сообщении
+    # (пользователь мог сменить логин в Telegram)
+    if tg_username:
+        _refresh_username(chat_id, tg_username)
 
     # /start <token> — привязка аккаунта
     if text.startswith("/start"):
         parts = text.split(maxsplit=1)
         if len(parts) == 2:
             token = parts[1].strip()
-            _handle_link(chat_id, token)
+            _handle_link(chat_id, token, tg_username)
         else:
             send_message(
                 chat_id,
@@ -78,7 +84,19 @@ def webhook(secret=None):
     return jsonify({"ok": True})
 
 
-def _handle_link(chat_id: str, token: str) -> None:
+def _refresh_username(chat_id: str, tg_username: str) -> None:
+    """Обновляет telegram_username у пользователя если он изменился."""
+    user = User.query.filter_by(telegram_chat_id=chat_id).first()
+    if user and user.telegram_username != tg_username:
+        user.telegram_username = tg_username
+        db.session.commit()
+        logger.info(
+            "Telegram username updated: user_id=%s chat_id=%s username=%s",
+            user.id, chat_id, tg_username,
+        )
+
+
+def _handle_link(chat_id: str, token: str, tg_username: str | None = None) -> None:
     """Привязывает Telegram chat_id к пользователю по токену."""
     user_id = verify_link_token(token)
     if user_id is None:
@@ -106,6 +124,8 @@ def _handle_link(chat_id: str, token: str) -> None:
 
     user.telegram_chat_id = chat_id
     user.telegram_notifications = True
+    if tg_username:
+        user.telegram_username = tg_username
     db.session.commit()
 
     send_message(
@@ -116,7 +136,7 @@ def _handle_link(chat_id: str, token: str) -> None:
         f"• Коды подтверждения при входе (2FA)\n\n"
         f"Управление уведомлениями — в профиле InvestTrack.",
     )
-    logger.info("Telegram linked: user_id=%s chat_id=%s", user_id, chat_id)
+    logger.info("Telegram linked: user_id=%s chat_id=%s username=%s", user_id, chat_id, tg_username)
 
 
 def _handle_unlink(chat_id: str) -> None:
@@ -128,6 +148,7 @@ def _handle_unlink(chat_id: str) -> None:
 
     user.telegram_chat_id = None
     user.telegram_notifications = False
+    user.telegram_username = None
     db.session.commit()
 
     send_message(

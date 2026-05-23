@@ -61,6 +61,7 @@ def telegram_status():
         "linked": bool(current_user.telegram_chat_id),
         "notifications": bool(current_user.telegram_notifications),
         "bot_username": bot_username,
+        "telegram_username": current_user.telegram_username or None,
     })
 
 
@@ -107,6 +108,7 @@ def telegram_unlink():
 
     current_user.telegram_chat_id = None
     current_user.telegram_notifications = False
+    current_user.telegram_username = None
     db.session.commit()
     return jsonify({
         "status": "success",

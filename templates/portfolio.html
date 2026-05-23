@@ -531,23 +531,46 @@
       {# ── Import Deals ────────────────────────────────────────────── #}
       <div class="tab-pane fade" id="import-pane" role="tabpanel">
         <div style="padding: 1.5rem; max-width: 600px; margin: 0 auto;">
-          <h5 class="fw-bold mb-3" style="color:var(--text-primary)">Импорт сделок из брокерского отчета</h5>
-          <p style="font-size: .85rem; color: var(--text-tertiary);" class="mb-4">
-            Выберите файл брокерского отчета в формате <b>.csv</b> или <b>.xlsx</b>.
-            Система автоматически распознает столбцы (ISIN, Количество, Цена сделки, Дата сделки) и добавит операции в ваш портфель.
+          <h5 class="fw-bold mb-1" style="color:var(--text-primary)">Импорт сделок из брокерского отчёта</h5>
+          <p style="font-size:.82rem;color:var(--text-tertiary);margin-bottom:1.25rem">
+            Загрузите файл отчёта в формате <b>.csv</b> или <b>.xlsx</b>.
+            Выберите брокера — система распознает столбцы и добавит покупки/продажи облигаций в портфель.
           </p>
-          
+
           <form id="importBrokerForm" enctype="multipart/form-data">
-            <div class="mb-4">
-              <label class="form-label small fw-semibold" style="color:var(--text-secondary)">Файл отчета</label>
-              <input type="file" id="importFile" class="form-control" accept=".csv, .xlsx" required>
+
+            {# ── Broker selector ── #}
+            <div class="mb-3">
+              <label class="form-label small fw-semibold" style="color:var(--text-secondary)">Брокер</label>
+              <div style="display:flex;flex-wrap:wrap;gap:.5rem" id="brokerRadioGroup">
+                <label class="broker-chip active" data-value="tinkoff">
+                  <input type="radio" name="broker" value="tinkoff" checked style="display:none">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="margin-right:.3rem;vertical-align:-.1em"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+                  Т&#8209;Инвестиции
+                </label>
+                <label class="broker-chip" data-value="auto">
+                  <input type="radio" name="broker" value="auto" style="display:none">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="margin-right:.3rem;vertical-align:-.1em"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  Авто
+                </label>
+              </div>
+              <div id="brokerHint" style="font-size:.75rem;color:var(--text-tertiary);margin-top:.4rem">
+                Отчёт по сделкам из личного кабинета Т&#8209;Инвестиций (.xlsx)
+              </div>
             </div>
-            
-            <button type="submit" id="importSubmitBtn" class="btn btn-primary btn-sm px-4" style="border-radius:var(--radius-sm)">
+
+            {# ── File input ── #}
+            <div class="mb-4">
+              <label class="form-label small fw-semibold" style="color:var(--text-secondary)">Файл отчёта</label>
+              <input type="file" id="importFile" class="form-control" accept=".csv,.xlsx" required>
+            </div>
+
+            <button type="submit" id="importSubmitBtn" class="btn btn-primary btn-sm px-4"
+                    style="border-radius:var(--radius-sm)">
               Загрузить и импортировать
             </button>
           </form>
-          
+
           <div id="importResult" class="mt-4" style="display:none">
             <div class="alert alert-success d-flex align-items-center" role="alert" id="importSuccessAlert">
               <div>
@@ -556,8 +579,9 @@
               </div>
             </div>
             <div class="alert alert-danger" role="alert" id="importErrorAlert" style="display:none">
-              <b style="font-size:.85rem">Ошибки импорта:</b>
-              <ul id="importErrorList" class="mb-0 mt-1 pl-3" style="font-size:.78rem; max-height: 180px; overflow-y: auto;"></ul>
+              <b style="font-size:.85rem">Пропущено (подробности):</b>
+              <ul id="importErrorList" class="mb-0 mt-1 ps-3"
+                  style="font-size:.78rem;max-height:180px;overflow-y:auto"></ul>
             </div>
           </div>
         </div>

@@ -113,3 +113,22 @@ def get_bot_deep_link(token: str) -> str:
     """Формирует deep-link для открытия бота с параметром start."""
     bot_username = current_app.config.get("TELEGRAM_BOT_USERNAME", "InvestTrackBot")
     return f"https://t.me/{bot_username}?start={token}"
+
+
+def get_telegram_username(chat_id: str) -> Optional[str]:
+    """Запрашивает актуальный @username через Telegram getChat API.
+
+    Возвращает строку без '@', либо None если не удалось получить.
+    """
+    bot_token = current_app.config.get("TELEGRAM_BOT_TOKEN")
+    if not bot_token:
+        return None
+    url = f"https://api.telegram.org/bot{bot_token}/getChat"
+    try:
+        resp = http_requests.post(url, json={"chat_id": chat_id}, timeout=10)
+        if resp.ok:
+            result = resp.json().get("result", {})
+            return result.get("username") or None
+    except http_requests.RequestException as exc:
+        logger.warning("get_telegram_username failed for chat_id=%s: %s", chat_id, exc)
+    return None
