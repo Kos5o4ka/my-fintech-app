@@ -7,6 +7,8 @@
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
 [![Flask](https://img.shields.io/badge/Flask-3.1-000000?style=flat-square&logo=flask&logoColor=white)](https://flask.palletsprojects.com)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white)](https://postgresql.org)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white)](https://docker.com)
+[![CI](https://img.shields.io/github/actions/workflow/status/Kos5o4ka/my-fintech-app/ci.yml?style=flat-square&label=CI)](https://github.com/Kos5o4ka/my-fintech-app/actions)
 [![License](https://img.shields.io/badge/License-MIT-22c55e?style=flat-square)](LICENSE)
 
 Добавляй облигации → следи за P&L и купонами → получай данные с MOEX в реальном времени
@@ -19,41 +21,44 @@
 
 | Функция | Описание |
 |---|---|
-| 📊 **Портфель** | Учёт активных и закрытых позиций, цена покупки, количество, брокерская комиссия |
-| 📈 **P&L в реальном времени** | Нереализованная и зафиксированная прибыль по каждой бумаге |
-| 💸 **Купонный календарь** | Предстоящие выплаты с суммой по каждой позиции |
-| 🎯 **YTM** | Доходность к погашению (средняя по портфелю) |
-| 🔎 **Скринер MOEX** | Поиск облигаций по ISIN или названию прямо из интерфейса |
-| ⭐ **Вотчлист** | Список наблюдения — следи за бумагами до покупки |
-| 📥 **Экспорт** | Выгрузка портфеля в Excel (CSV и XLSX) одним кликом |
-| 🌓 **Тёмная тема** | Переключение с сохранением в localStorage |
-| 🔔 **Email-уведомления** | Напоминание о купонных выплатах за день до даты |
-| 🔄 **Автообновление цен** | APScheduler обновляет котировки каждые 15 минут |
+| 📊 **Портфель** | Учёт активных и закрытых позиций, P&L, YTM, брокерская комиссия |
+| 📈 **Аналитика** | Нереализованный и реализованный P&L, Sharpe Ratio, бенчмарк RGBI |
+| 💸 **Купонный календарь** | Предстоящие выплаты на 60 дней вперёд, in-app уведомления |
+| 🔎 **Скринер MOEX** | Фильтрация по YTM, дюрации, типу эмитента (ОФЗ / корпоративные / муниципальные) |
+| ⚖️ **Сравнение облигаций** | Нормализованный price chart по двум бумагам за выбранный период |
+| 🧾 **Налоговый отчёт** | НДФЛ 13% по реализованным сделкам за любой год |
+| 📥 **Экспорт** | Портфель и история сделок в Excel (XLSX) и CSV одним кликом |
+| ⭐ **Вотчлист** | Список наблюдения с актуальными ценами и YTM с MOEX |
+| 🔐 **2FA через Telegram** | Двухфакторная аутентификация — OTP-код в личный бот |
+| 🔔 **Уведомления** | Email за день до купонной выплаты + Telegram-уведомления |
+| 🌓 **Тёмная тема** | Переключение с анти-FOUC и сохранением в localStorage |
+| 🖨️ **PDF-отчёт** | Отчёт портфеля с Sharpe и налогами через `window.print()` |
 
 ---
 
 ## 🏗️ Стек технологий
 
 **Backend**
-- [Flask 3.1](https://flask.palletsprojects.com) — веб-фреймворк
-- [SQLAlchemy 2](https://sqlalchemy.org) + [Flask-Migrate](https://flask-migrate.readthedocs.io) — ORM и миграции
-- [Flask-Login](https://flask-login.readthedocs.io) — аутентификация
+- [Flask 3.1](https://flask.palletsprojects.com) + Blueprints + сервисный слой
+- [SQLAlchemy 2](https://sqlalchemy.org) + [Flask-Migrate](https://flask-migrate.readthedocs.io) — ORM и Alembic-миграции
+- [Pydantic v2](https://docs.pydantic.dev) — валидация входящих данных
+- [Flask-Login](https://flask-login.readthedocs.io) — сессии и аутентификация
 - [Flask-WTF](https://flask-wtf.readthedocs.io) — CSRF-защита
-- [APScheduler](https://apscheduler.readthedocs.io) — фоновые задачи
 - [Flask-Limiter](https://flask-limiter.readthedocs.io) — rate limiting
-- [Gunicorn](https://gunicorn.org) — WSGI-сервер
+- [APScheduler](https://apscheduler.readthedocs.io) — обновление цен + купонные уведомления
+- [Gunicorn](https://gunicorn.org) — WSGI production сервер
 
 **Frontend**
-- [Bootstrap 5.3](https://getbootstrap.com) — UI-компоненты
-- Vanilla JS (ES2020) — без тяжёлых фреймворков
-- CSS-переменные — полная поддержка тёмной темы
+- [Bootstrap 5.3](https://getbootstrap.com) + CSS-переменные (design tokens)
+- [Chart.js](https://chartjs.org) — P&L chart, donut, бенчмарк, сравнение
+- Vanilla JS (ES2020), no framework — все скрипты минифицируются через `build_assets.py`
 
-**База данных**
-- [PostgreSQL 16](https://postgresql.org) — основная БД
-- SQLite — для локальной разработки
-
-**Данные**
-- [MOEX ISS API](https://iss.moex.com) — котировки, купоны, параметры бумаг
+**Инфраструктура**
+- [PostgreSQL 16](https://postgresql.org) — основная БД (SQLite для локальной разработки)
+- [Redis 7](https://redis.io) — кэш цен MOEX (опционально, FileSystemCache по умолчанию)
+- [Nginx 1.27](https://nginx.org) — статика, rate limit, reverse proxy
+- [Docker](https://docker.com) + docker-compose — 4 сервиса: app + db + redis + nginx
+- [GitHub Actions](https://github.com/features/actions) — CI: lint → test → docker smoke test
 
 ---
 
@@ -63,71 +68,73 @@
 - Python 3.10+
 - PostgreSQL 16 (или SQLite для разработки)
 
-### Установка
+### Локальный запуск
 
 ```bash
 # 1. Клонировать репозиторий
 git clone https://github.com/Kos5o4ka/my-fintech-app.git
 cd my-fintech-app
 
-# 2. Создать виртуальное окружение
+# 2. Виртуальное окружение
 python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 
-# 3. Установить зависимости
+# 3. Зависимости
 pip install -r requirements.txt
 
-# 4. Настроить переменные окружения
+# 4. Переменные окружения
 cp .env.example .env
-# Отредактировать .env — указать DATABASE_URL и SECRET_KEY
-```
+# Открой .env и задай SECRET_KEY (обязательно)
 
-### Запуск (разработка)
-
-```bash
-# Применить миграции
+# 5. Применить миграции и создать первого пользователя
 flask db upgrade
+flask shell
+>>> from extensions import db
+>>> from models import User
+>>> from werkzeug.security import generate_password_hash
+>>> db.session.add(User(username="admin", password_hash=generate_password_hash("password"), is_admin=True))
+>>> db.session.commit()
 
-# Создать первого администратора (опционально)
-python scripts/init_db.py
-
-# Пересобрать минифицированные ассеты
+# 6. Пересобрать статику
 python build_assets.py
 
-# Запустить сервер
+# 7. Запустить
 flask run
 ```
 
-Открой [http://localhost:5000](http://localhost:5000)
+Открой [http://localhost:5000](http://localhost:5000) — войди с `admin` / `password`.
 
-### Запуск через Docker
+### Docker (production)
 
 ```bash
-# Скопировать и заполнить .env
-cp .env.example .env
+cp .env.production.example .env
+# Задай SECRET_KEY, DATABASE_URL и другие переменные
 
-# Поднять контейнеры
 docker compose up -d
 ```
 
-Сервис будет доступен на порту `5000`.
+Сервис поднимает app + PostgreSQL + Redis + Nginx. Порт 80 (и 443 при наличии сертификата).
 
 ---
 
 ## ⚙️ Конфигурация
 
-Все настройки через переменные окружения в файле `.env`:
+Все настройки через переменные окружения в `.env`:
 
-| Переменная | Описание | Пример |
+| Переменная | Обязательна | Описание |
 |---|---|---|
-| `SECRET_KEY` | Секретный ключ Flask (обязательно!) | `openssl rand -hex 32` |
-| `DATABASE_URL` | URL базы данных | `postgresql://user:pass@localhost/db` |
-| `REDIS_URL` | URL Redis (опционально, для кэша) | `redis://localhost:6379/0` |
-| `MAIL_SERVER` | SMTP-сервер для уведомлений | `smtp.gmail.com` |
-| `MAIL_PORT` | Порт SMTP | `587` |
-| `MAIL_USERNAME` | Логин почты | `you@gmail.com` |
-| `MAIL_PASSWORD` | Пароль / App Password | `••••••••` |
-| `CORS_ORIGINS` | Разрешённые источники | `http://localhost:5000` |
+| `SECRET_KEY` | ✅ | Секрет Flask — `python -c "import secrets; print(secrets.token_hex(32))"` |
+| `DATABASE_URL` | ✅ prod | `postgresql://user:pass@host/db` (SQLite по умолчанию для dev) |
+| `REDIS_URL` | — | `redis://localhost:6379/0` (FileSystemCache если не задан) |
+| `TELEGRAM_BOT_TOKEN` | — | Токен бота для 2FA и уведомлений |
+| `TELEGRAM_BOT_USERNAME` | — | `@username` бота без `@` |
+| `MAIL_SERVER` | — | SMTP-сервер для email-уведомлений |
+| `MAIL_PORT` | — | Порт SMTP (обычно 587) |
+| `MAIL_USERNAME` | — | Email отправителя |
+| `MAIL_PASSWORD` | — | Пароль / App Password |
+| `SENTRY_DSN` | — | DSN для Sentry error tracking |
+
+Полный список: [`.env.production.example`](.env.production.example)
 
 ---
 
@@ -135,64 +142,108 @@ docker compose up -d
 
 ```
 my-fintech-app/
-├── app.py                  # Точка входа, инициализация Flask
-├── config.py               # Конфигурации (Dev / Test / Prod)
-├── models.py               # SQLAlchemy-модели
-├── extensions.py           # Инициализация расширений
-├── moex.py                 # Интеграция с MOEX ISS API
+├── app.py                   # Фабрика приложения, APScheduler, Sentry
+├── config.py                # Dev / Test / Production конфиги
+├── models.py                # User, BondPortfolio, WatchlistItem, AuditLog
+├── extensions.py            # db, login_manager, cache, limiter, mail
+├── moex.py                  # MOEX ISS API: цены, купоны, история, RGBI
+├── constants.py             # Магические числа (TTL, NDFL_RATE, …)
+│
 ├── blueprints/
-│   ├── auth.py             # Аутентификация
-│   ├── main.py             # Главная / dashboard
-│   ├── portfolio.py        # Портфель, вотчлист, скринер
-│   ├── profile.py          # Профиль пользователя
-│   └── admin.py            # Управление пользователями
-├── templates/              # Jinja2-шаблоны
+│   ├── auth.py              # Вход, 2FA, смена пароля, AuditLog
+│   ├── portfolio.py         # CRUD портфеля, скринер, экспорт, watchlist
+│   ├── profile.py           # Профиль, Telegram, activity feed
+│   ├── admin.py             # Управление пользователями
+│   ├── main.py              # Лендинг, дашборд, dashboard API
+│   └── telegram_bot.py      # Telegram webhook: /start, OTP
+│
+├── services/
+│   ├── portfolio_service.py # P&L, YTM, Sharpe, Tax, купонный доход
+│   ├── moex_service.py      # Кэшированный доступ к MOEX
+│   ├── user_service.py      # Аватары (Pillow), email, telegram settings
+│   └── telegram_service.py  # Bot API, OTP, deep-link
+│
+├── schemas/
+│   ├── portfolio.py         # AddBondRequest, SellBondRequest, ScreenerRequest
+│   ├── auth.py              # LoginRequest, ChangePasswordRequest
+│   └── profile.py           # EmailSettingsRequest
+│
+├── templates/               # Jinja2: base, index, dashboard, portfolio, profile, admin
 ├── static/
-│   ├── css/                # Стили (с minified-версиями)
-│   └── js/                 # Скрипты (с minified-версиями)
-├── migrations/             # Alembic-миграции
-├── tests/                  # Тесты
-├── scripts/                # Утилиты (init_db.py)
-├── build_assets.py         # Минификация CSS/JS
-├── update.sh               # Скрипт обновления на сервере
-├── Dockerfile
-└── docker-compose.yml
+│   ├── css/                 # Исходники + *.min.css (10 файлов)
+│   └── js/                  # Исходники + *.min.js (10 файлов)
+│
+├── migrations/              # Alembic-миграции (8 ревизий)
+├── tests/
+│   ├── test_app.py          # 36 интеграционных тестов
+│   └── test_properties.py   # 17 Hypothesis property-based тестов
+│
+├── bruno/                   # API коллекция Bruno (42 запроса)
+│   ├── auth/                # login, verify_2fa, logout, change_password
+│   ├── portfolio/           # 26 эндпоинтов: CRUD, export, screener, …
+│   ├── profile/             # 7 эндпоинтов: stats, email, telegram
+│   ├── admin/               # get_users, add_user, delete_user
+│   └── misc/                # health, init
+│
+├── docs/
+│   └── architecture.md      # C4 Level 2 диаграммы (Mermaid)
+│
+├── nginx/
+│   ├── nginx.conf           # Gzip, rate-limit zones, security
+│   └── conf.d/app.conf      # Статика, proxy, HTTPS-блок
+│
+├── .github/workflows/ci.yml # CI: lint → test → docker smoke test
+├── build_assets.py          # Минификация CSS/JS → *.min.*
+├── gunicorn.conf.py         # Auto workers, timeouts, logging
+├── Dockerfile               # Multi-stage build (~200 МБ меньше)
+├── docker-compose.yml       # app + db + redis + nginx
+├── CONTRIBUTING.md          # Гайд разработчика
+├── CHANGELOG.md             # История версий
+└── ROADMAP.md               # Полный план разработки
 ```
 
 ---
 
 ## 🔒 Безопасность
 
-- CSRF-защита на всех POST-запросах (Flask-WTF + XSRF-TOKEN cookie)
-- Rate limiting на API и форме входа
-- Валидация загружаемых файлов (расширение + MIME-тип)
-- Security headers: `X-Frame-Options`, `Content-Security-Policy`, `X-Content-Type-Options`
-- Пароли — bcrypt/scrypt через Werkzeug
-- `.env` исключён из git
+- CSRF-защита на всех POST-запросах (Flask-WTF + `XSRF-TOKEN` cookie)
+- **2FA через Telegram** — OTP-код в личный бот при входе
+- Rate limiting: `/api/auth/login` — 5 req/min, API — 60 req/min
+- Pydantic v2 — строгая валидация всех входящих данных
+- HSTS, `X-Content-Type-Options`, `X-Frame-Options`, `Permissions-Policy`
+- Аватары: Pillow re-encode + strip EXIF, UUID-имена, проверка MIME
+- AuditLog — полный журнал входов, 2FA, смены пароля, Telegram
+- `.env` и `instance/` исключены из git
 
 ---
 
 ## 🧪 Тесты
 
 ```bash
-# Запустить тест-сьют (36 тестов)
+# Запустить все тесты
 python -m pytest tests/ -v
 
 # С отчётом о покрытии
-python -m pytest tests/ --cov=. --cov-omit="*/.venv/*,migrations/*" --cov-report=term-missing
+python -m pytest tests/ --cov=. --cov-report=term-missing
+
+# Только property-based тесты
+python -m pytest tests/test_properties.py -v
 ```
+
+**53 теста:** 36 интеграционных + 17 Hypothesis property-based.
+MOEX API мокируется через `@patch` — тесты не требуют сети.
 
 ---
 
-## 🖥️ Деплой на сервер
+## 📖 Документация
 
-На сервере используется Gunicorn + systemd. Для обновления после `git push`:
-
-```bash
-bash update.sh
-```
-
-Скрипт: `git pull` → `pip install` → `flask db upgrade` → `systemctl restart`
+| Файл | Описание |
+|---|---|
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Локальный запуск, code style, PR flow |
+| [`CHANGELOG.md`](CHANGELOG.md) | История версий (Keep a Changelog) |
+| [`docs/architecture.md`](docs/architecture.md) | C4 Level 2 диаграммы |
+| [`bruno/`](bruno/) | Bruno API коллекция — 42 запроса |
+| [`.env.production.example`](.env.production.example) | Все переменные окружения |
 
 ---
 

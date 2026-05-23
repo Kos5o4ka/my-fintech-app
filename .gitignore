@@ -1,11 +1,36 @@
 venv/
 .venv/
-.claude/settings.local.json
+.claude/
 .idea/
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment & secrets
 .env
+.env.local
+.env.*.local
+
+# Flask / app runtime
+instance/
+.cache/
+uploads/
+
+# Coverage & test artifacts
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Static user uploads (keep placeholder)
 static/avatars/*
 !static/avatars/default_avatar.png
+
+# OS
+.DS_Store
+Thumbs.db
+
 # migrations/ — tracked in git so the server can run flask db upgrade
-instance/.cache/
