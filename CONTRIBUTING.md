@@ -34,7 +34,7 @@
 
 ```bash
 # 1. Клонировать репозиторий
-git clone <repo-url>
+git clone https://github.com/Kos5o4ka/my-fintech-app.git
 cd my-fintech-app
 
 # 2. Создать виртуальное окружение
