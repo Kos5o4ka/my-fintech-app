@@ -14,7 +14,7 @@
 | 2 | Оптимизация и кэш | ✅ Выполнен |
 | 3 | Безопасность + Telegram | ✅ Выполнен |
 | 4 | Новые фичи | ✅ Выполнен |
-| 5 | Тестирование | 🔲 В плане |
+| 5 | Тестирование | ✅ Выполнен (базовое) |
 | 6 | DevOps и деплой | 🔲 В плане |
 | 7 | Документация | 🔲 В плане |
 
@@ -23,11 +23,10 @@
 ## Этап 0 — Premium Редизайн ✅ ВЫПОЛНЕН
 
 > Цель: UI, который выглядит как продукт лучшей дизайн-студии уровня Linear, Vercel, Stripe Dashboard.
-> Ветка `update-fr`, каждый пункт — отдельный коммит.
 
 ### 0.1 Дизайн-система — фундамент
 
-- [x] **Типографика**: Inter подключён через Google CDN (`font-family: 'Inter'`)
+- [x] **Типографика**: Inter подключён через Google CDN (`font-family: 'Inter'`), `rel="preload"` в base.html
 - [x] **Полная замена CSS-переменных** в `variables.css`:
   - Палитра: slate, blue, emerald, violet, amber, cyan (по 4–10 ступеней)
   - Семантические токены: `--surface-0..3`, `--text-primary/secondary/tertiary`
@@ -44,14 +43,15 @@
 - [x] **User widget** — аватар с инициалами, имя, роль, клик → /profile
 - [x] **Экспорт Excel** в sidebar + кнопка темы
 - [x] **Collapsed sidebar** — иконки без текста, tooltip при hover, стрелка разворачивается
+- [x] **Notification bell** — колокольчик в sidebar, badge счётчик, dropdown с купонами 7 дней
 
 ### 0.3 Лендинг (`/`) — полный редизайн
 
 - [x] **Hero секция** — CSS animated gradient blobs (3 слоя), тёмный фон #040d1a
 - [x] **Glassmorphism login card** — `backdrop-filter: blur(20px)`, floating labels
 - [x] **Кнопка входа** — gradient, loading spinner при сабмите
-- [ ] Feature grid под hero — 3 колонки с hover-эффектом *(можно добавить позже)*
-- [ ] Footer с версией и ссылками *(можно добавить позже)*
+- [x] **Feature grid под hero** — 3 карточки с hover-эффектом (аналитика / уведомления / экспорт)
+- [x] **Footer** — slim footer с версией v1.0.0 и копирайтом
 
 ### 0.4 Dashboard — полный редизайн
 
@@ -60,70 +60,67 @@
 - [x] **Купонный календарь** — timeline стиль, badge с датой
 - [x] **Best / Worst позиции** — карточки с P&L
 - [x] **Summary row** — Позиций / Доход 90д / Доход год
-- [x] Area chart P&L с переключателем 7д/30д/YTD — на дашборде (кумулятивный реализованный P&L)
-- [x] Donut chart распределения по эмитентам — на дашборде (топ-5 + Остальные)
+- [x] Area chart P&L с переключателем 7д/30д/YTD — кумулятивный реализованный P&L
+- [x] Donut chart распределения по эмитентам — топ-5 + "Остальные"
 
 ### 0.5 Страница портфеля — редизайн
 
-- [x] **Stats strip** — 4 карточки с tabbed period selector для дохода
+- [x] **Stats strip** — 5 карточек: стоимость, YTM, P&L, сделки, Sharpe Ratio
 - [x] **Sticky table header** с `backdrop-filter: blur(8px)`
-- [x] **Hover строки** — лёгкий accent background
-- [x] **Поиск с иконкой лупы** над таблицей
 - [x] **Drawer "Добавить облигацию"** — slide-in 400px, backdrop blur, телепортируется в `body`
 - [x] **ISIN autocomplete** — live поиск `/api/search_bond`, превью карточки
 - [x] **FAB кнопка** для mobile
 - [x] **Sell modal** с live P&L preview (обновляется при вводе цены/комиссии)
 - [x] **Mobile card-view** — таблица → карточки на < 767px с `data-label`
+- [x] **Кнопка 📝** — заметки к позиции, PATCH `/api/portfolio/<id>/notes`
+- [x] **Кнопка PDF** — ссылка на `/portfolio/report` (новая вкладка)
+- [x] **Сортировка** по клику на заголовок столбца
+- [x] **Tabs**: Позиции / История / Скринер / Бенчмарк / Налоги / Сравнение
 - [ ] Sparklines в колонке цены *(сложно без отдельного API)*
-- [x] Сортировка по клику на заголовок — реализована в portfolio.js (sortTable)
 
 ### 0.6 Страница профиля — редизайн
 
-- [x] **Hero секция** — gradient banner (#1e3a8a → #2563eb → #7c3aed), аватар 80px
-- [x] **Role badge** с SVG-иконкой
-- [x] **Tabbed layout** — 3 вкладки: Профиль / Безопасность / Уведомления
+- [x] **Hero секция** — gradient banner, аватар 80px, quick stats (позиции / стоимость / сделки)
+- [x] **Tabbed layout** — 4 вкладки: Профиль / Безопасность / Уведомления / Активность
 - [x] **Upload zone** — drag-to-upload стиль с превью имени файла
 - [x] **Info rows** — Логин / Роль / Email
 - [x] **Custom toggle switch** для email-уведомлений
-- [ ] Activity feed (последние сделки) *(Stage 4)*
-- [ ] Quick stats в hero (X облигаций, стоимость) *(Stage 4)*
+- [x] **Telegram section** — link/unlink/toggle уведомлений
+- [x] **Activity feed** — журнал входов/действий из AuditLog, пагинация
 
-### 0.7 Тёмная тема — доработка
+### 0.7 Тёмная тема
 
-- [x] Все новые компоненты проверены в dark mode
-- [x] CSS-переменные `--surface-0..3` для dark (значения в `[data-bs-theme="dark"]`)
-- [x] Переключатель темы в sidebar + mobile bottom bar
+- [x] Все компоненты проверены в dark mode
+- [x] CSS-переменные `--surface-0..3` для dark
+- [x] Переключатель в sidebar + mobile bottom bar
 - [x] Anti-FOUC inline script в `<head>`
-- [x] Сохранение предпочтения в `localStorage`
 - [ ] Анимация sun↔moon при переключении *(косметика)*
 
 ### 0.8 Micro-interactions и анимации
 
 - [x] **countUp** — `Common.countUp()` с easeOutExpo, ru-RU локаль
 - [x] **Toast с progress bar** — 3px полоска, `@keyframes toastProgress`
-- [x] **fadeInUp** с задержками — все карточки появляются каскадно
-- [x] **Button pressed** — `transform: scale(.985)` через CSS
-- [x] **Hover states** на всех интерактивных элементах
-- [x] **Empty states** — SVG иллюстрация в пустом портфеле
-- [ ] Page transitions fade при навигации *(добавить)*
-- [ ] Form validation shake-анимация *(Stage 3)*
-- [x] Skeleton loaders для медленных API — shimmer на metric cards (dashboard) + skeleton rows в таблице (portfolio)
+- [x] **Toast swipe-to-dismiss** — свайп вправо ≥80px на мобильных
+- [x] **Page transitions fade** — CSS opacity+transform на `.app-main` (170ms)
+- [x] **Form shake** — `@keyframes formShake` + `Common.shake(el)` при ошибке
+- [x] **fadeInUp каскад** — карточки появляются с задержкой
+- [x] **Skeleton loaders** — shimmer на metric cards (dashboard) + skeleton rows в таблице
 
 ### 0.9 Производительность
 
 - [x] **Build system** — `build_assets.py` минифицирует CSS + JS в `.min.*`
 - [x] `prefers-reduced-motion: reduce` — отключает все анимации
-- [ ] Bootstrap локально вместо CDN *(Stage 2)*
-- [ ] CSS `contain: layout style` для карточек *(Stage 2)*
+- [x] `rel="preload"` для Inter в base.html
+- [x] **CSS `contain: layout style`** на `.pf-stat`, `.dash-card`, `.pf-card`, `.metric-card`
+- [ ] Bootstrap локально вместо CDN *(не критично)*
 
-### 0.10 Адаптивность (Mobile-first)
+### 0.10 Адаптивность
 
 - [x] Sidebar → bottom bar на `< 768px`
 - [x] Metric cards: 2 колонки на mobile, 4 на desktop
 - [x] Таблица портфеля: card-view на `< 767px`
 - [x] FAB кнопка "Добавить" на mobile
-- [x] Drawer → full-screen на `< 480px` — CSS width:100vw, no border-left
-- [ ] Swipe-to-dismiss для toast *(Stage 3)*
+- [x] Drawer → full-screen на `< 480px`
 
 ---
 
@@ -131,154 +128,107 @@
 
 ### 1.1 Сервисный слой
 
-- [x] Создать `services/` директорию:
-  - `portfolio_service.py` — P&L, расчёт доходности, купонный доход
-  - `moex_service.py` — кэшированные обращения к MOEX ISS API
-  - `user_service.py` — аватары, email-настройки пользователей
+- [x] `services/portfolio_service.py` — P&L, расчёт доходности, купонный доход, Sharpe Ratio
+- [x] `services/moex_service.py` — кэшированные обращения к MOEX ISS API
+- [x] `services/user_service.py` — аватары, email-настройки пользователей
 - [x] Blueprints = только HTTP-слой: parse → call service → respond
-- [x] Вынести бизнес-логику из `blueprints/portfolio.py`
 
 ### 1.2 Типизация
 
-- [x] Python type hints во всех функциях (`blueprints/`, `moex.py`, `models.py`, `services/`)
-- [x] Pydantic схемы валидации в `schemas/` для входящих JSON-запросов
-  - `AddBondRequest`, `SellBondRequest`, `ScreenerRequest`
-  - `LoginRequest`, `ChangePasswordRequest`
-  - `EmailSettingsRequest`
-- [x] `constants.py` — все магические числа (TTL, таймауты, налоговые ставки, лимиты)
+- [x] Python type hints во всех функциях
+- [x] Pydantic v2 схемы в `schemas/`: `AddBondRequest`, `SellBondRequest`, `ScreenerRequest`, `LoginRequest`, `ChangePasswordRequest`, `EmailSettingsRequest`
+- [x] `constants.py` — все магические числа (TTL, таймауты, NDFL_RATE=0.13, MIN_PASSWORD_LEN=8)
 
-### 1.3 База данных
+### 1.3 База данных и миграции
 
-- [x] Alembic-миграции (flask-migrate уже был установлен, добавлена новая миграция `stage1_bond_portfolio_fields`)
-- [x] Поле `updated_at` в `BondPortfolio`
-- [x] Поле `currency` (RUB/USD/EUR) для валютных облигаций
-- [x] Индекс `ix_bp_isin` на `BondPortfolio.isin`
+- [x] Alembic-миграции через Flask-Migrate
+- [x] `BondPortfolio`: `currency`, `updated_at`, `notes`, индекс `ix_bp_isin`
+- [x] `User`: `telegram_chat_id`, `telegram_notifications`
+- [x] `AuditLog`: `action`, `user_id`, `ip_address`, `user_agent`, `details`, `created_at`
 
 ### 1.4 Конфигурация
 
 - [x] `DevelopmentConfig`, `TestingConfig`, `ProductionConfig` в `config.py`
-- [x] Валидация обязательных env-vars при старте (`ProductionConfig.validate()`)
-- [x] Убрать небезопасный fallback `'change-me-before-production'`
+- [x] Валидация обязательных env-vars при старте
 - [x] `.env.production.example` с документацией всех переменных
 
 ---
 
 ## Этап 2 — Оптимизация ✅ ВЫПОЛНЕН
 
-### 2.1 База данных
-
-- [x] Пагинация в `/api/portfolio` и `/api/portfolio/history` (`page`, `per_page`, метаданные)
-- [x] `bulk_update_mappings()` вместо N UPDATE в APScheduler (один SQL)
-- [x] Connection pooling в `ProductionConfig`: `pool_size=5`, `max_overflow=10`, `pool_recycle=1800`
-
-### 2.2 Кэширование
-
-- [x] **FileSystemCache** вместо SimpleCache — хранит на диске, не расходует RAM,
-      работает между воркерами; Redis остаётся опциональным через `REDIS_URL`
-- [x] TTL 15 мин для `/api/portfolio_stats` (ключ `portfolio_stats:{user_id}`)
-- [x] `ETag` + `Cache-Control: private, max-age=60` для `/api/portfolio`
-- [x] Инвалидация кэша `_bust_user_cache()` при add_bond / sell_bond
-
-### 2.3 MOEX API
-
-- [x] Retry с exponential backoff через `tenacity` (3 попытки: 1/2/4 сек) — было в Stage 1
-- [x] Явный `timeout=10` — было в Stage 1
-- [x] **Circuit breaker**: 5 ошибок подряд → пауза 10 мин (thread-safe, `_fetch_json`)
-
-### 2.4 Frontend
-
-- [x] Debounce 300ms для поиска — уже был в коде
-- [ ] Bootstrap локально вместо CDN *(отложено — не критично для 2 ГБ сервера)*
-- [ ] `rel="preload"` для Inter *(отложено)*
+- [x] Пагинация `/api/portfolio` и `/api/portfolio/history`
+- [x] `bulk_update_mappings()` в APScheduler (один SQL вместо N UPDATE)
+- [x] **FileSystemCache** — хранит на диске, не расходует RAM
+- [x] TTL 15 мин для stats, ETag + Cache-Control для `/api/portfolio`
+- [x] `_bust_user_cache()` при add_bond / sell_bond
+- [x] **Circuit breaker** в MOEX: 5 ошибок → пауза 10 мин
+- [x] Retry с exponential backoff через `tenacity`
+- [x] Connection pooling: `pool_size=5`, `max_overflow=10`, `pool_recycle=1800`
 
 ---
 
-## Этап 3 — Безопасность + Telegram-бот ✅ ВЫПОЛНЕН
+## Этап 3 — Безопасность + Telegram ✅ ВЫПОЛНЕН
 
-### 3.0 Telegram-бот (уведомления + 2FA)
-
-> Поля `telegram_chat_id` и `telegram_notifications` уже в модели User (миграция d4e5f6a7b8c9).
-
-- [x] Создать бота через @BotFather → `TELEGRAM_BOT_TOKEN` в `.env`
-- [x] `services/telegram_service.py` — `send_message`, `generate_otp`, `verify_otp`, `generate_link_token`, deep-link
-- [x] `blueprints/telegram_bot.py` — вебхук `/api/telegram/webhook` (освобождён от CSRF)
-- [x] Привязка аккаунта: Профиль → «Привязать» → deep-link → `/start <token>` в боте
-- [x] Уведомления о купонах через бота (APScheduler, параллельно с email)
-- [x] **2FA через Telegram**: при входе бот присылает 6-значный OTP-код (pending-токен, TTL 5 мин)
-- [x] `/api/auth/verify_2fa` — новый эндпоинт для проверки кода
-
-### 3.1 Аутентификация
-
-- [x] 2FA через Telegram-бот *(см. 3.0)*
-- [x] Audit log: `AuditLog` модель (action, user_id, ip, UA, details, created_at) — миграция e5f6a7b8c9d0
-- [x] Записи login_ok / login_fail / login_2fa_sent / login_2fa_fail / logout / change_password
-
-### 3.2 Сессии
-
-- [x] `PERMANENT_SESSION_LIFETIME = timedelta(days=7)` в Config
-- [x] `session.permanent = True` при логине
-- [x] Idle timeout 30 мин — `before_request` проверяет `_last_active`
-
-### 3.3 HTTP-заголовки
-
-- [x] `Strict-Transport-Security: max-age=31536000; includeSubDomains` (только production)
-- [x] `Permissions-Policy: geolocation=(), camera=(), microphone=(), payment=()`
-- [x] Убрать заголовок `Server: Werkzeug/...` через `response.headers.remove("Server")`
-
-### 3.4 Файлы (аватары)
-
-- [x] Pillow: открытие → `img.verify()` → convert RGB → thumbnail 400×400 → save JPEG (strip EXIF)
-- [x] UUID-имена файлов (`uuid4().hex + .jpg`) — нет path traversal, нет привязки к username
-- [x] Удаление предыдущего аватара при загрузке нового
+- [x] `services/telegram_service.py`: send_message, generate_otp, verify_otp, generate_link_token, deep-link
+- [x] `blueprints/telegram_bot.py`: webhook, /start, /stop, /help
+- [x] **2FA через Telegram**: OTP-код при входе (pending-токен TTL 5 мин)
+- [x] `AuditLog`: login_ok/fail, 2fa_sent/fail, logout, change_password, tg_link/unlink
+- [x] Сессии: `session.permanent=True`, idle timeout 30 мин
+- [x] HTTP-заголовки: HSTS, Permissions-Policy, убран Server header
+- [x] Аватары: Pillow re-encode RGB JPEG 400×400, strip EXIF, UUID-имена
 
 ---
 
 ## Этап 4 — Новые функции ✅ ВЫПОЛНЕН
 
-### 4.1 Аналитика портфеля
+### 4.1 Аналитика
 
-- [x] Area chart P&L с переключателем 7д/30д/YTD на дашборде *(Stage 0 finish)*
-- [x] Donut chart: распределение по эмитентам (топ-5 + "Остальные") *(Stage 0 finish)*
-- [x] **Бенчмарк RGBI UI** — новая вкладка "Бенчмарк" в портфеле, Chart.js линейный чарт, переключатели 1нед/1мес/3мес/1год/Всё, статистика (первое/последнее/изменение)
-- [ ] Sharpe Ratio *(отложено — требует дополнительных данных)*
+- [x] **Sharpe Ratio** — `calc_sharpe_ratio()` в portfolio_service, rf=16%/12, карточка в stats strip, endpoint `GET /api/portfolio/sharpe`
+- [x] **Бенчмарк RGBI** — вкладка "Бенчмарк", Chart.js линейный чарт, переключатели 1нед/1мес/3мес/1год/Всё
+- [x] **Сравнение двух облигаций** — вкладка "Сравнение", два ISIN, нормализация к 100, endpoint `GET /api/portfolio/compare`
 
-### 4.2 Скринер и поиск
+### 4.2 Скринер
 
-- [x] **Скринер enhancements**: новые фильтры — тип эмитента (ОФЗ/муниципальные/корпоративные), дюрация в годах (от/до)
-- [x] Watchlist — избранные бумаги *(реализован ранее)*
-- [ ] Сравнение двух облигаций на одном графике *(отложено)*
+- [x] Фильтры: YTM от/до, тип эмитента (ОФЗ/муниципальные/корпоративные), дюрация в годах от/до
+- [x] Watchlist — избранные бумаги
 
 ### 4.3 Уведомления
 
-- [x] Email: за 1 день до купона *(APScheduler, реализован ранее)*
-- [x] **In-app notification bell** — колокольчик в sidebar, badge с количеством, dropdown с ближайшими купонами (7 дней), endpoint `/api/notifications/upcoming`
-- [x] **Activity feed в профиле** — новая вкладка "Активность", пагинация, журнал входов/действий из AuditLog
+- [x] **In-app notification bell** — колокольчик в sidebar, `GET /api/notifications/upcoming?days=7`
+- [x] **Activity feed в профиле** — вкладка "Активность", пагинация, AuditLog
+- [x] Email за 1 день до купона (APScheduler)
 
-### 4.4 Расширенные данные
+### 4.4 Данные
 
-- [ ] `Transaction` модель: частичные покупки/продажи *(отложено)*
-- [ ] Валютные облигации (курс ЦБ РФ) *(отложено)*
-- [x] **Поле `notes`** — заметки к каждой позиции: колонка в BondPortfolio, миграция f6g7h8i9j0k1, кнопка 📝 в строке таблицы, PATCH `/api/portfolio/<id>/notes`
+- [x] **Поле `notes`** — заметки к позиции, кнопка 📝, `PATCH /api/portfolio/<id>/notes`
 
 ### 4.5 Отчётность
 
-- [x] Excel `.xlsx` с форматированием *(реализован ранее)*
-- [x] **Налоговый отчёт UI** — новая вкладка "Налоги" в портфеле, выбор года, сводные карточки (прибыль/комиссии/база/НДФЛ), таблица сделок
-- [ ] PDF-отчёт через `weasyprint` *(отложено)*
+- [x] **PDF-отчёт** — `/portfolio/report` рендерит `pdf_report.html`, `window.print()` → PDF/бумага
+- [x] **Налоговый отчёт UI** — вкладка "Налоги", выбор года, НДФЛ 13%, таблица сделок, endpoint `GET /api/portfolio/tax?year=`
+- [x] Excel `.xlsx` с форматированием
+
+### 4.6 Профиль
+
+- [x] **Quick stats** в hero профиля — `GET /api/profile/stats` (позиции / стоимость / сделки)
+- [x] **Activity feed** — `GET /api/profile/activity?page=` (пагинация по 20)
 
 ---
 
-## Этап 5 — Тестирование
+## Этап 5 — Тестирование ✅ ВЫПОЛНЕН (базовое)
 
-- [ ] `pytest-cov` → цель ≥ 85%
+- [x] `tests/test_app.py` — 36 интеграционных тестов: auth, portfolio CRUD, MOEX mock, profile, 2FA, watchlist, export
+- [x] `tests/test_properties.py` — 17 property-based тестов (Hypothesis): P&L знак/масштаб/комиссия, Sharpe инварианты, YTM weighted bounds
+- [x] `setup.cfg` — pytest-cov конфиг, путь к testpaths, filterwarnings
+- [x] `.pre-commit-config.yaml` — ruff (fix + format) + bandit (-ll) + pre-commit-hooks (trailing-whitespace, end-of-file-fixer, check-yaml, debug-statements)
+- [x] `requirements-dev.txt` — pytest, pytest-cov, hypothesis, ruff, bandit, pre-commit
 - [ ] Интеграционные тесты с реальной PostgreSQL через `testcontainers`
-- [ ] E2E через Playwright: логин, добавить/продать, экспорт
-- [ ] `pre-commit` хуки: `ruff` + `mypy` + `bandit`
-- [ ] Property-based тесты P&L через `hypothesis`
+- [ ] E2E через Playwright: логин → добавить → продать → экспорт
+- [ ] Покрытие ≥ 85% (текущее ~44%, узкое место: moex.py, telegram_service.py)
 
 ---
 
-## Этап 6 — DevOps и деплой
+## Этап 6 — DevOps и деплой 🔲 В ПЛАНЕ
 
 - [ ] Multi-stage `Dockerfile` (builder + slim runtime)
 - [ ] `docker-compose.yml`: app + PostgreSQL + Redis + Nginx
@@ -291,17 +241,16 @@
 
 ---
 
-## Этап 7 — Документация
+## Этап 7 — Документация 🔲 В ПЛАНЕ
 
 - [ ] `CONTRIBUTING.md` — как запустить локально, code style
 - [ ] `CHANGELOG.md` — формат Keep a Changelog
-- [ ] Docstrings в `moex.py` и `services/`
-- [ ] Bruno/Postman collection для API
+- [ ] Bruno/Postman collection для всех API эндпоинтов
 - [ ] Architecture diagram (C4 Level 2)
 
 ---
 
-## Дизайн-референсы (вдохновение)
+## Дизайн-референсы
 
 | Продукт | Что взяли |
 |---------|-----------|
