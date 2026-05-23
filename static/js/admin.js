@@ -3,6 +3,7 @@ const _currentUserId = parseInt(document.body.dataset.userId || '0', 10);
 
 // State for password change modal
 let _changePwTargetId = null;
+let _changePwModal = null;
 
 async function loadUsersList() {
   const tbody = document.getElementById('admin-users-table');
@@ -48,8 +49,10 @@ function changePasswordTrigger(userId, name) {
   document.getElementById('changePwUsername').textContent = name;
   document.getElementById('changePwNew').value = '';
   document.getElementById('changePwConfirm').value = '';
-  const modal = new bootstrap.Modal(document.getElementById('changePwModal'));
-  modal.show();
+  if (!_changePwModal) {
+    _changePwModal = new bootstrap.Modal(document.getElementById('changePwModal'));
+  }
+  _changePwModal.show();
 }
 
 document.getElementById('changePwSubmitBtn').addEventListener('click', async () => {
@@ -73,7 +76,7 @@ document.getElementById('changePwSubmitBtn').addEventListener('click', async () 
     });
     const data = await res.json();
     if (res.ok) {
-      bootstrap.Modal.getInstance(document.getElementById('changePwModal')).hide();
+      if (_changePwModal) _changePwModal.hide();
       window.Common.showToast(data.message);
     } else {
       window.Common.showToast(data.message, true);

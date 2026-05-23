@@ -9,6 +9,7 @@ class AddBondRequest(BaseModel):
     amount: int = Field(..., gt=0)
     buy_price: float = Field(..., gt=0)
     purchase_date: Optional[str] = None
+    notes: Optional[str] = None
 
     @field_validator("isin")
     @classmethod
@@ -30,6 +31,8 @@ class AddBondRequest(BaseModel):
 class SellBondRequest(BaseModel):
     sell_price: Optional[float] = Field(None, gt=0)
     broker_commission: Optional[float] = Field(None, ge=0)
+    amount: Optional[int] = Field(None, gt=0)
+
 
 
 class ScreenerRequest(BaseModel):

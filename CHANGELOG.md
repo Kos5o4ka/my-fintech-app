@@ -9,15 +9,32 @@
 
 ## [Unreleased]
 
+### Planned (v1.4.0 — Архитектура и Безопасность)
+- **Security**: Строгий одноразовый сброс OTP в `verify_otp` при любой попытке верификации для исключения brute-force.
+- **Security**: Аутентификация вебхука Telegram с использованием секретного ключа в URL.
+- **Fixed**: Коррекция расчета налоговой базы (`calc_tax_report`) — учет купонных доходов по проданным за год бумагам.
+- **Fixed**: Математическая формула средневзвешенного YTM портфеля — исключение стоимости бумаг без доходности из знаменателя.
+- **Fixed**: Баг "Limit before Filter" в скринере облигаций.
+- **Performance**: Кэширование купонного календаря на 12 часов для ликвидации N+1 HTTP-запросов к MOEX ISS.
+- **Performance**: Перенос Circuit Breaker в Redis для предотвращения сплит-брейна в Gunicorn воркерах.
+- **Architecture**: Вынос фонового планировщика APScheduler из процесса Flask во избежание дублирования фоновых задач.
+
 ---
 
-## [1.4.0] — 2026-05-23
+## [1.3.3] — 2026-05-24
 
-### Added (Stage 7 — Документация и API-коллекция)
+### Added
+- **Импорт брокерских отчётов Excel**: поддержка загрузки `.xlsx`-файлов на вкладке «Импорт» — автоматическое распознавание столбцов (ISIN, Количество, Цена, Дата, Заметка) в форматах разных брокеров
 - `CONTRIBUTING.md` — руководство для разработчиков: локальный запуск, code style, PR flow
 - `CHANGELOG.md` — история изменений в формате Keep a Changelog
 - `bruno/` — коллекция REST-запросов для Bruno API-клиента (42 эндпоинта)
 - `docs/architecture.md` — C4 Level 2 диаграммы (Mermaid): container, layers, ER, sequence (2FA, MOEX)
+
+### Fixed
+- **Скринер**: опечатка `"МУНИЦИN"` (латинская N) в фильтре муниципальных облигаций — фильтр по типу «Муниципальные» теперь работает корректно
+- **Сравнение облигаций**: легенда `compareLegend` всегда отображалась из-за конфликта `display:none` и `display:flex` в одном атрибуте style — теперь скрывается до первого запроса
+- **Таблица портфеля**: пустое состояние рендерилось с `colspan="8"` при 9 столбцах — исправлено на `colspan="9"`
+- **Импорт брокерских отчётов**: ошибки частичного импорта (не найденные ISIN, некорректные данные) не отображались в UI из-за чтения поля `data.skipped` вместо `data.errors` — исправлено
 
 ---
 
@@ -127,8 +144,8 @@
 
 ---
 
-[Unreleased]: https://github.com/Kos5o4ka/my-fintech-app/compare/v1.4.0...HEAD
-[1.4.0]: https://github.com/Kos5o4ka/my-fintech-app/compare/v1.3.0...v1.4.0
+[Unreleased]: https://github.com/Kos5o4ka/my-fintech-app/compare/v1.3.3...HEAD
+[1.3.3]: https://github.com/Kos5o4ka/my-fintech-app/compare/v1.3.0...v1.3.3
 [1.3.0]: https://github.com/Kos5o4ka/my-fintech-app/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/Kos5o4ka/my-fintech-app/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/Kos5o4ka/my-fintech-app/compare/v1.0.0...v1.1.0

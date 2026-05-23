@@ -173,6 +173,16 @@
         </svg>
         Сравнение
       </button>
+      <button class="pf-tab" id="import-tab"
+              data-bs-toggle="tab" data-bs-target="#import-pane"
+              type="button" role="tab">
+        <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+          <path d="M1 9v3a1 1 0 001 1h10a1 1 0 001-1V9"/>
+          <polyline points="4,4 7,1 10,4"/>
+          <line x1="7" y1="1" x2="7" y2="9"/>
+        </svg>
+        Импорт
+      </button>
     </div>
 
     {# Tab content #}
@@ -204,6 +214,9 @@
                 <th class="sortable-col" onclick="sortTable('buy_price')">
                   Цена покупки <span class="sort-icon" data-col="buy_price"></span>
                 </th>
+                <th class="sortable-col" onclick="sortTable('last_price')">
+                  Текущая цена <span class="sort-icon" data-col="last_price"></span>
+                </th>
                 <th class="sortable-col" onclick="sortTable('nkd')">
                   НКД <span class="sort-icon" data-col="nkd"></span>
                 </th>
@@ -220,7 +233,7 @@
               {# Skeleton rows #}
               {% for _ in range(3) %}
               <tr>
-                {% for _ in range(8) %}
+                {% for _ in range(9) %}
                 <td><span class="skeleton-cell" style="height:13px;width:80%"></span></td>
                 {% endfor %}
               </tr>
@@ -240,6 +253,12 @@
           <input type="date" id="historyDateTo" class="form-control form-control-sm"
                  style="width:148px" onchange="applyHistoryFilter()" aria-label="Дата до">
           <button class="btn btn-outline-secondary btn-sm" onclick="clearHistoryFilter()">✕</button>
+
+          <div class="btn-group btn-group-sm ms-3" id="historyTxTypeGroup" role="group">
+            <button type="button" class="btn btn-outline-secondary active" onclick="setHistoryTxType('', this)">Все</button>
+            <button type="button" class="btn btn-outline-secondary" onclick="setHistoryTxType('buy', this)">Покупки</button>
+            <button type="button" class="btn btn-outline-secondary" onclick="setHistoryTxType('sell', this)">Продажи</button>
+          </div>
         </div>
         <div id="history-loading" class="text-center py-4" style="display:none;color:var(--text-tertiary)">
           <div class="spinner-border spinner-border-sm me-2" role="status"></div>Загрузка…
@@ -248,13 +267,13 @@
           <table class="pf-table">
             <thead>
               <tr>
-                <th>Название</th><th>ISIN</th><th>Кол-во</th>
+                <th>Название</th><th>ISIN</th><th>Тип</th><th>Кол-во</th>
                 <th>Цена покупки</th><th>Цена продажи</th>
-                <th>P&amp;L ₽</th><th>P&amp;L %</th><th>Дата продажи</th>
+                <th>P&amp;L ₽</th><th>P&amp;L %</th><th>Дата</th>
               </tr>
             </thead>
             <tbody id="history-table-body">
-              <tr><td colspan="8" class="text-center py-4" style="color:var(--text-tertiary)">
+              <tr><td colspan="9" class="text-center py-4" style="color:var(--text-tertiary)">
                 Нажмите на вкладку, чтобы загрузить историю.
               </td></tr>
             </tbody>
@@ -387,7 +406,7 @@
         <div id="compare-loading" class="text-center py-4" style="display:none;color:var(--text-tertiary)">
           <div class="spinner-border spinner-border-sm me-2" role="status"></div>Загрузка данных с MOEX…
         </div>
-        <div id="compareLegend" style="display:none;padding:.5rem 1rem;display:flex;gap:1.5rem;flex-wrap:wrap">
+        <div id="compareLegend" style="display:none;padding:.5rem 1rem;flex-wrap:wrap">
           <div style="display:flex;align-items:center;gap:.4rem">
             <div style="width:22px;height:3px;background:#3b82f6;border-radius:2px"></div>
             <span id="compareName1" style="font-size:.82rem;font-weight:600"></span>
@@ -509,6 +528,40 @@
         </div>
       </div>
 
+      {# ── Import Deals ────────────────────────────────────────────── #}
+      <div class="tab-pane fade" id="import-pane" role="tabpanel">
+        <div style="padding: 1.5rem; max-width: 600px; margin: 0 auto;">
+          <h5 class="fw-bold mb-3" style="color:var(--text-primary)">Импорт сделок из брокерского отчета</h5>
+          <p style="font-size: .85rem; color: var(--text-tertiary);" class="mb-4">
+            Выберите файл брокерского отчета в формате <b>.csv</b> или <b>.xlsx</b>.
+            Система автоматически распознает столбцы (ISIN, Количество, Цена сделки, Дата сделки) и добавит операции в ваш портфель.
+          </p>
+          
+          <form id="importBrokerForm" enctype="multipart/form-data">
+            <div class="mb-4">
+              <label class="form-label small fw-semibold" style="color:var(--text-secondary)">Файл отчета</label>
+              <input type="file" id="importFile" class="form-control" accept=".csv, .xlsx" required>
+            </div>
+            
+            <button type="submit" id="importSubmitBtn" class="btn btn-primary btn-sm px-4" style="border-radius:var(--radius-sm)">
+              Загрузить и импортировать
+            </button>
+          </form>
+          
+          <div id="importResult" class="mt-4" style="display:none">
+            <div class="alert alert-success d-flex align-items-center" role="alert" id="importSuccessAlert">
+              <div>
+                <b id="importSuccessTitle">Успешно!</b>
+                <div id="importSuccessMsg" style="font-size:.82rem" class="mt-1"></div>
+              </div>
+            </div>
+            <div class="alert alert-danger" role="alert" id="importErrorAlert" style="display:none">
+              <b style="font-size:.85rem">Ошибки импорта:</b>
+              <ul id="importErrorList" class="mb-0 mt-1 pl-3" style="font-size:.78rem; max-height: 180px; overflow-y: auto;"></ul>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>{# /tab-content #}
   </div>{# /pf-card #}
 
@@ -572,9 +625,15 @@
                placeholder="10" min="1" required>
       </div>
       <div class="mb-3">
-        <label class="form-label small fw-semibold">Цена покупки (₽)</label>
+        <label class="form-label small fw-semibold">Цена покупки (<span id="buyPriceCurrencyLabel">₽</span>)</label>
         <input type="number" id="bondBuyPrice" class="form-control form-control-sm"
                placeholder="985.50" step="0.01" min="1" required>
+        <div class="form-check mt-1">
+          <input class="form-check-input" type="checkbox" id="bondUseMarketPrice" style="width:13px;height:13px;margin-top:.2rem">
+          <label class="form-check-label text-muted" for="bondUseMarketPrice" style="font-size:.72rem">
+            Использовать текущую рыночную цену Мосбиржи
+          </label>
+        </div>
       </div>
       <div class="mb-3">
         <label class="form-label small fw-semibold">Дата покупки</label>
@@ -655,6 +714,12 @@
           Позиция: <strong id="sellModalBondName"></strong>
         </p>
         <div class="mb-3">
+          <label class="form-label small fw-semibold">Количество для продажи (шт.)</label>
+          <input type="number" id="sellAmountInput" class="form-control form-control-sm"
+                 step="1" min="1" required>
+          <div style="font-size:.72rem;color:var(--text-tertiary);margin-top:.2rem" id="sellMaxAmountHint">Доступно: 0 шт.</div>
+        </div>
+        <div class="mb-3">
           <label class="form-label small fw-semibold">Цена продажи (₽)</label>
           <input type="number" id="sellPriceInput" class="form-control form-control-sm"
                  step="0.01" min="0" required>
@@ -677,6 +742,28 @@
                 style="background:var(--surface-2);border:1px solid var(--border-default);color:var(--text-primary)"
                 data-bs-dismiss="modal">Отмена</button>
         <button type="button" id="sellModalConfirmBtn" class="btn btn-success btn-sm px-4">Продать</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Notes modal ───────────────────────────────────────────────────── #}
+<div class="modal fade" id="notesModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:420px">
+    <div class="modal-content">
+      <div class="modal-header" style="background:var(--slate-800);color:#fff">
+        <h5 class="modal-title" style="font-size:.9rem" id="notesModalTitle">Заметка к облигации</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+      </div>
+      <div class="modal-body py-3">
+        <div class="mb-0">
+          <label class="form-label small fw-semibold">Текст заметки</label>
+          <textarea id="modalNoteText" class="form-control form-control-sm" rows="5" maxlength="1000" placeholder="Ваши наблюдения, стратегия, напоминания..." style="resize:vertical"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer border-0 pt-0 gap-2">
+        <button type="button" class="btn btn-sm px-3" style="background:var(--surface-2);border:1px solid var(--border-default);color:var(--text-primary)" data-bs-dismiss="modal">Отмена</button>
+        <button type="button" id="saveModalNoteBtn" class="btn btn-primary btn-sm px-4">Сохранить</button>
       </div>
     </div>
   </div>

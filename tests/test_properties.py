@@ -167,7 +167,7 @@ class TestSharpeRatioProperties:
         # avg_factor > 1 → average return > 0 → mean_return_pct > 0
         # avg_factor < 1 → average return < 0 → mean_return_pct < 0
         expected_positive = avg_factor > 1.0
-        if abs(avg_factor - 1.0) > 1e-6:  # avoid floating point edge at exactly 1.0
+        if abs(avg_factor - 1.0) > 1e-4:  # avoid floating point edge at exactly 1.0 / rounding to -0.0
             if expected_positive:
                 assert result["mean_return_pct"] > 0
             else:

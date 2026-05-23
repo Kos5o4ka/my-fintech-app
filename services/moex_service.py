@@ -39,6 +39,7 @@ def get_bond_preview(isin: str) -> Optional[dict]:
         "ytm": moex_data.get("ytm"),
         "nkd": moex_data.get("nkd"),
         "facevalue": moex_data.get("facevalue"),
+        "currency": moex_data.get("currency", "RUB"),
         **details,
     }
     try:
@@ -46,3 +47,19 @@ def get_bond_preview(isin: str) -> Optional[dict]:
     except Exception:
         pass
     return result
+
+
+def get_coupon_calendar_cached(secid: str) -> list[dict]:
+    """Возвращает купонный календарь облигации с 12-часовым кэшем."""
+    secid = secid.strip().upper()
+    key = f"moex_coupons:{secid}"
+    result = cache.get(key)
+    if result is None:
+        from moex import get_coupon_calendar
+        result = get_coupon_calendar(secid)
+        if result:
+            try:
+                cache.set(key, result, timeout=43200)  # 12 часов
+            except Exception:
+                pass
+    return result or []

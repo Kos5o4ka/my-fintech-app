@@ -105,9 +105,6 @@ FLASK_ENV=development
 | `REDIS_URL` | нет | Redis DSN для кэша (по умолчанию FileSystemCache) |
 | `TELEGRAM_BOT_TOKEN` | нет | Токен бота для 2FA и уведомлений |
 | `TELEGRAM_BOT_USERNAME` | нет | Username бота без @ |
-| `MAIL_SERVER` | нет | SMTP-сервер для email-уведомлений |
-| `MAIL_USERNAME` | нет | SMTP login |
-| `MAIL_PASSWORD` | нет | SMTP password |
 | `SENTRY_DSN` | нет | DSN для Sentry error tracking |
 
 ---
@@ -135,13 +132,12 @@ my-fintech-app/
 ├── services/
 │   ├── portfolio_service.py    # Бизнес-логика: P&L, YTM, Sharpe, налоги, купоны
 │   ├── moex_service.py         # Кэшированный доступ к MOEX
-│   ├── user_service.py         # Аватары, email-настройки
+│   ├── user_service.py         # Аватары, telegram-настройки
 │   └── telegram_service.py     # OTP, привязка, deep-link
 │
 ├── schemas/
 │   ├── portfolio.py            # AddBondRequest, SellBondRequest, ScreenerRequest
-│   ├── auth.py                 # LoginRequest, ChangePasswordRequest
-│   └── profile.py              # EmailSettingsRequest
+│   └── auth.py                 # LoginRequest, ChangePasswordRequest
 │
 ├── templates/                  # Jinja2 HTML-шаблоны (без inline CSS/JS!)
 │   ├── base.html               # Авторизованный лейаут (sidebar, bell, theme)

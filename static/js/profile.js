@@ -24,27 +24,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }).catch(() => {});
 
-  document.getElementById('emailNotifForm').addEventListener('submit', async e => {
-    e.preventDefault();
-    const btn = document.getElementById('saveEmailBtn');
-    btn.disabled = true; btn.textContent = 'Сохранение…';
-    try {
-      const res = await window.Common.csrfFetch('/api/profile/email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: document.getElementById('emailInput').value.trim(),
-          email_notifications: document.getElementById('notifCheck').checked,
-        }),
-      });
-      const data = await res.json();
-      if (res.ok) window.Common.showToast(data.message);
-      else window.Common.showSystemMessage(data.message, true);
-    } finally {
-      btn.disabled = false; btn.textContent = 'Сохранить настройки';
-    }
-  });
-
   document.getElementById('changePasswordForm').addEventListener('submit', async e => {
     e.preventDefault();
     const btn = document.getElementById('changePwBtn');

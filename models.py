@@ -75,6 +75,7 @@ class Transaction(db.Model):
     amount = db.Column(db.Integer, nullable=False)
     price = db.Column(db.Numeric(10, 2), nullable=False)
     commission = db.Column(db.Numeric(10, 4), nullable=True)
+    currency = db.Column(db.String(3), nullable=False, default='RUB')
     tx_date = db.Column(db.Date, nullable=False, default=date.today)
 
 

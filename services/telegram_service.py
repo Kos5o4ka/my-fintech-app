@@ -57,15 +57,14 @@ def generate_otp(chat_id: str) -> str:
 
 
 def verify_otp(chat_id: str, code: str) -> bool:
-    """Проверяет OTP код. Одноразовый — удаляется после первой проверки."""
+    """Проверяет OTP код. Одноразовый — удаляется сразу при первой проверке."""
     stored = cache.get(f"tg_otp:{chat_id}")
     if stored is None:
         return False
+    # Удаляем код сразу из кэша (сгорает при любой попытке проверки)
+    cache.delete(f"tg_otp:{chat_id}")
     # Сравниваем через secrets.compare_digest для защиты от timing attacks
-    is_valid = secrets.compare_digest(str(stored), str(code).strip())
-    if is_valid:
-        cache.delete(f"tg_otp:{chat_id}")
-    return is_valid
+    return secrets.compare_digest(str(stored), str(code).strip())
 
 
 # ── Pending 2FA сессия ────────────────────────────────────────────────────────

@@ -19,10 +19,10 @@ from flask_login import login_required, current_user
 from extensions import db, cache
 from models import BondPortfolio, Watchlist, Transaction
 from moex import (
-    get_moex_bond, get_bond_history_all, get_coupon_calendar,
+    get_moex_bond, get_bond_history_all,
     search_bonds, _fetch_json, get_rgbi_history, get_screener_bonds,
 )
-from services.moex_service import get_bond_cached, get_bond_preview
+from services.moex_service import get_bond_cached, get_bond_preview, get_coupon_calendar_cached
 from services.portfolio_service import (
     build_portfolio_list, calc_portfolio_ytm,
     build_trade_entry, calc_coupon_income,
@@ -120,6 +120,54 @@ def update_bond_notes(bond_id: int):
     return jsonify({"status": "success", "notes": bond.notes or ""})
 
 
+def build_transaction_entry(t: Transaction) -> dict:
+    buy_p = float(t.price)
+    sell_p = float(t.price)
+    commission = float(t.commission) if t.commission else 0.0
+    pnl = 0.0
+    pnl_pct = 0.0
+    sell_date = None
+    purchase_date = None
+
+    if t.tx_type == "sell":
+        sell_date = t.tx_date.strftime("%Y-%m-%d")
+        # Try to find corresponding BondPortfolio record to get buy_price
+        bond = BondPortfolio.query.filter_by(
+            user_id=t.user_id,
+            isin=t.isin,
+            is_sold=True,
+            amount=t.amount,
+            sell_date=t.tx_date
+        ).first()
+        if bond:
+            buy_p = float(bond.buy_price)
+            sell_p = float(bond.sell_price) if bond.sell_price else float(t.price)
+            commission = float(bond.broker_commission) if bond.broker_commission else commission
+            pnl = (sell_p - buy_p) * t.amount - commission
+            pnl_pct = (pnl / (buy_p * t.amount) * 100) if buy_p else 0.0
+            if bond.purchase_date:
+                purchase_date = bond.purchase_date.strftime("%Y-%m-%d")
+    else:
+        purchase_date = t.tx_date.strftime("%Y-%m-%d")
+
+    return {
+        "id": t.id,
+        "isin": t.isin,
+        "name": t.name or "Облигация",
+        "tx_type": t.tx_type,
+        "amount": t.amount,
+        "buy_price": buy_p,
+        "sell_price": round(sell_p, 2),
+        "commission": round(commission, 2),
+        "pnl": round(pnl, 2),
+        "pnl_pct": round(pnl_pct, 2),
+        "purchase_date": purchase_date,
+        "sell_date": sell_date,
+        "date": t.tx_date.strftime("%Y-%m-%d"),
+        "currency": t.currency or "RUB",
+    }
+
+
 # ── История сделок ────────────────────────────────────────────────────────────
 
 @portfolio_bp.route("/api/portfolio/history", methods=["GET"])
@@ -129,28 +177,65 @@ def portfolio_history():
     per_page = min(request.args.get("per_page", DEFAULT_PAGE_SIZE, type=int), MAX_PAGE_SIZE)
     date_from_str = request.args.get("date_from", "").strip()
     date_to_str = request.args.get("date_to", "").strip()
+    tx_type = request.args.get("tx_type")
 
-    query = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=True)
+    # Dynamic self-healing synthesis from BondPortfolio if Transactions are empty
+    tx_count = Transaction.query.filter_by(user_id=current_user.id).count()
+    if tx_count == 0:
+        bonds = BondPortfolio.query.filter_by(user_id=current_user.id).all()
+        for b in bonds:
+            buy_tx = Transaction(
+                user_id=current_user.id,
+                isin=b.isin,
+                name=b.name,
+                tx_type="buy",
+                amount=b.amount,
+                price=b.buy_price,
+                tx_date=b.purchase_date,
+                commission=0.0
+            )
+            db.session.add(buy_tx)
+            if b.is_sold:
+                sell_tx = Transaction(
+                    user_id=current_user.id,
+                    isin=b.isin,
+                    name=b.name,
+                    tx_type="sell",
+                    amount=b.amount,
+                    price=b.sell_price if b.sell_price is not None else b.buy_price,
+                    tx_date=b.sell_date if b.sell_date is not None else b.purchase_date,
+                    commission=b.broker_commission
+                )
+                db.session.add(sell_tx)
+        db.session.commit()
+
+    if tx_type is None:
+        tx_type = "sell"
+
+    query = Transaction.query.filter_by(user_id=current_user.id)
+    if tx_type in ("buy", "sell"):
+        query = query.filter_by(tx_type=tx_type)
+    
     if date_from_str:
         try:
             query = query.filter(
-                BondPortfolio.sell_date >= datetime.strptime(date_from_str, "%Y-%m-%d").date()
+                Transaction.tx_date >= datetime.strptime(date_from_str, "%Y-%m-%d").date()
             )
         except ValueError:
             pass
     if date_to_str:
         try:
             query = query.filter(
-                BondPortfolio.sell_date <= datetime.strptime(date_to_str, "%Y-%m-%d").date()
+                Transaction.tx_date <= datetime.strptime(date_to_str, "%Y-%m-%d").date()
             )
         except ValueError:
             pass
 
     total_count = query.count()
-    closed = query.order_by(BondPortfolio.sell_date.desc()).offset((page - 1) * per_page).limit(per_page).all()
+    tx_list = query.order_by(Transaction.tx_date.desc(), Transaction.id.desc()).offset((page - 1) * per_page).limit(per_page).all()
     return jsonify({
         "status": "success",
-        "trades": [build_trade_entry(b) for b in closed],
+        "trades": [build_transaction_entry(t) for t in tx_list],
         "pagination": {
             "page": page,
             "per_page": per_page,
@@ -236,6 +321,7 @@ def add_bond():
     existing_amount = existing.amount if existing else 0
 
     live_price = moex_data.get("price", float(req.buy_price))
+    currency = moex_data.get("currency", "RUB")
     new_bond = BondPortfolio(
         user_id=current_user.id,
         isin=isin,
@@ -246,6 +332,8 @@ def add_bond():
         last_price=live_price,
         purchase_date=purchase_date,
         is_sold=False,
+        currency=currency,
+        notes=req.notes.strip() if req.notes else None,
     )
     db.session.add(new_bond)
     db.session.add(Transaction(
@@ -255,6 +343,7 @@ def add_bond():
         tx_type="buy",
         amount=int(req.amount),
         price=float(req.buy_price),
+        currency=currency,
         tx_date=purchase_date,
     ))
     db.session.commit()
@@ -284,30 +373,60 @@ def sell_bond(bond_id: int):
         first_error = e.errors()[0]["msg"].replace("Value error, ", "")
         return jsonify({"status": "error", "message": first_error}), 400
 
-    bond.is_sold = True
-    bond.sell_date = date.today()
-    bond.sell_price = (
+    if req.amount and req.amount > bond.amount:
+        return jsonify({"status": "error", "message": f"Нельзя продать больше, чем есть в наличии ({bond.amount} шт.)."}), 400
+
+    sell_price = (
         req.sell_price
         if req.sell_price
         else (float(bond.last_price) if bond.last_price else float(bond.buy_price))
     )
-    commission_val = req.broker_commission
-    if commission_val is not None:
-        bond.broker_commission = commission_val
+
+    if req.amount and req.amount < bond.amount:
+        sell_qty = req.amount
+        bond.amount -= sell_qty
+        sold_bond = BondPortfolio(
+            user_id=bond.user_id,
+            isin=bond.isin,
+            secid=bond.secid,
+            name=bond.name,
+            amount=sell_qty,
+            buy_price=bond.buy_price,
+            last_price=bond.last_price,
+            purchase_date=bond.purchase_date,
+            is_sold=True,
+            sell_date=date.today(),
+            sell_price=sell_price,
+            broker_commission=req.broker_commission,
+            notes=bond.notes,
+        )
+        db.session.add(sold_bond)
+        message = f"Частично продано {sell_qty} шт. облигации {bond.name}."
+    else:
+        sell_qty = bond.amount
+        bond.is_sold = True
+        bond.sell_date = date.today()
+        bond.sell_price = sell_price
+        if req.broker_commission is not None:
+            bond.broker_commission = req.broker_commission
+        sold_bond = bond
+        message = f"Облигация {bond.name} полностью продана и переведена в архив."
 
     db.session.add(Transaction(
         user_id=current_user.id,
         isin=bond.isin,
         name=bond.name,
         tx_type="sell",
-        amount=bond.amount,
-        price=bond.sell_price,
-        commission=commission_val,
-        tx_date=bond.sell_date,
+        amount=sell_qty,
+        price=sell_price,
+        commission=req.broker_commission,
+        tx_date=sold_bond.sell_date,
+        currency=bond.currency or 'RUB',
     ))
     db.session.commit()
     _bust_user_cache(current_user.id)
-    return jsonify({"status": "success", "message": f"Облигация {bond.name} переведена в архив продаж."})
+    return jsonify({"status": "success", "message": message})
+
 
 
 # ── График цены облигации ─────────────────────────────────────────────────────
@@ -379,7 +498,7 @@ def get_portfolio_calendar():
     events = []
     for bond in active:
         target = bond.secid or bond.isin
-        for c in get_coupon_calendar(target):
+        for c in get_coupon_calendar_cached(target):
             events.append({
                 "name": bond.name or bond.isin,
                 "isin": bond.isin,
@@ -574,7 +693,7 @@ def screener():
             if itype == "ofz":
                 return "ОФЗ" in name or name.startswith("SU") or name.startswith("RU000A0")
             if itype == "muni":
-                return any(k in name for k in ("МУН", "МУНИЦИN", "ОБЛИГАЦ", "РЕГИОН", "ОБЛАСТЬ", "КРАЙ", "ГОРОД"))
+                return any(k in name for k in ("МУН", "МУНИЦИПАЛ", "ОБЛИГАЦ", "РЕГИОН", "ОБЛАСТЬ", "КРАЙ", "ГОРОД"))
             if itype == "corp":
                 return "ОФЗ" not in name and not any(
                     k in name for k in ("МУН", "РЕГИОН", "ОБЛАСТЬ", "КРАЙ", "ГОРОД")
@@ -921,7 +1040,7 @@ def upcoming_notifications():
     events: list[dict] = []
     for bond in active_bonds:
         try:
-            coupons = get_coupon_calendar(bond.isin) or []
+            coupons = get_coupon_calendar_cached(bond.isin) or []
         except Exception:
             continue
         for c in coupons:
@@ -972,3 +1091,173 @@ def portfolio_stats():
     }
     cache.set(cache_key, result, timeout=STATS_TTL)
     return jsonify(result)
+
+
+@portfolio_bp.route("/api/portfolio/import", methods=["POST"])
+@login_required
+def import_portfolio():
+    """Импортирует сделки из файла брокерского отчета (CSV/Excel) или JSON-массива (Stage 10)."""
+    import csv
+    import io
+    import openpyxl
+    
+    deals = []
+    if "file" in request.files:
+        f = request.files["file"]
+        filename = f.filename.lower()
+        if filename.endswith(".csv"):
+            try:
+                stream = io.StringIO(f.read().decode("utf-8-sig"), newline=None)
+                reader = csv.DictReader(stream)
+                for row in reader:
+                    isin = row.get("ISIN") or row.get("isin") or row.get("Код бумаги") or row.get("Код")
+                    amount_str = row.get("Amount") or row.get("amount") or row.get("Количество") or row.get("Кол-во")
+                    price_str = row.get("Price") or row.get("price") or row.get("Цена") or row.get("Цена сделки")
+                    date_str = row.get("Date") or row.get("date") or row.get("Дата") or row.get("Дата сделки")
+                    notes = row.get("Notes") or row.get("notes") or row.get("Комментарий") or ""
+                    
+                    if not isin or not amount_str or not price_str:
+                        continue
+                    deals.append({
+                        "isin": isin.strip().upper(),
+                        "amount": amount_str,
+                        "price": price_str,
+                        "date": date_str,
+                        "notes": notes
+                    })
+            except Exception as e:
+                logger.error("Failed to parse CSV import report: %s", e)
+                return jsonify({"status": "error", "message": f"Ошибка обработки CSV: {str(e)}"}), 400
+        elif filename.endswith(".xlsx"):
+            try:
+                wb = openpyxl.load_workbook(io.BytesIO(f.read()), data_only=True)
+                sheet = wb.active
+                headers = [str(cell.value).strip().lower() if cell.value is not None else "" for cell in sheet[1]]
+                
+                def find_col_idx(names):
+                    for name in names:
+                        if name.lower() in headers:
+                            return headers.index(name.lower()) + 1
+                    return None
+                
+                isin_col = find_col_idx(["isin", "код бумаги", "isin код", "код"])
+                amount_col = find_col_idx(["amount", "количество", "кол-во", "колво"])
+                price_col = find_col_idx(["price", "цена", "цена сделки"])
+                date_col = find_col_idx(["date", "дата", "дата сделки", "день"])
+                notes_col = find_col_idx(["notes", "комментарий", "заметка", "примечание"])
+                
+                if isin_col and amount_col and price_col:
+                    for row_idx in range(2, sheet.max_row + 1):
+                        isin_val = sheet.cell(row=row_idx, column=isin_col).value
+                        amount_val = sheet.cell(row=row_idx, column=amount_col).value
+                        price_val = sheet.cell(row=row_idx, column=price_col).value
+                        date_val = sheet.cell(row=row_idx, column=date_col).value if date_col else None
+                        notes_val = sheet.cell(row=row_idx, column=notes_col).value if notes_col else None
+                        
+                        if isin_val is None or amount_val is None or price_val is None:
+                            continue
+                        
+                        if isinstance(date_val, (datetime, date)):
+                            date_str = date_val.strftime("%Y-%m-%d")
+                        else:
+                            date_str = str(date_val) if date_val else None
+                            
+                        deals.append({
+                            "isin": str(isin_val).strip().upper(),
+                            "amount": str(amount_val),
+                            "price": str(price_val),
+                            "date": date_str,
+                            "notes": str(notes_val).strip() if notes_val else ""
+                        })
+            except Exception as e:
+                logger.error("Failed to parse Excel import report: %s", e)
+                return jsonify({"status": "error", "message": f"Ошибка обработки Excel: {str(e)}"}), 400
+        else:
+            return jsonify({"status": "error", "message": "Поддерживаются только форматы .csv и .xlsx"}), 400
+    else:
+        data = request.get_json() or {}
+        deals = data.get("deals", [])
+
+    if not deals:
+        return jsonify({"status": "error", "message": "Не найдено ни одной сделки для импорта."}), 400
+
+    imported_count = 0
+    errors = []
+
+    for deal in deals:
+        isin = deal.get("isin", "").strip().upper()
+        amount_str = deal.get("amount")
+        price_str = deal.get("price")
+        date_val = deal.get("date")
+        notes = deal.get("notes", "")
+
+        if not isin or not amount_str or not price_str:
+            errors.append(f"Пропущено: неполные данные сделки для ISIN: {isin or 'не указан'}")
+            continue
+
+        try:
+            amount = int(float(amount_str))
+            price = float(price_str)
+            if amount <= 0 or price <= 0:
+                errors.append(f"Пропущено {isin}: некорректное кол-во ({amount}) или цена ({price})")
+                continue
+        except (ValueError, TypeError):
+            errors.append(f"Пропущено {isin}: кол-во или цена не являются числами")
+            continue
+
+        purchase_date = date.today()
+        if date_val:
+            try:
+                if isinstance(date_val, str):
+                    date_val_clean = date_val.split(" ")[0].split("T")[0]
+                    purchase_date = datetime.strptime(date_val_clean, "%Y-%m-%d").date()
+                elif isinstance(date_val, (date, datetime)):
+                    purchase_date = date_val
+            except Exception:
+                pass
+
+        moex_data = get_moex_bond(isin)
+        if not moex_data:
+            errors.append(f"Пропущено {isin}: не найдена на Мосбирже")
+            continue
+
+        secid = moex_data["secid"]
+        bond_title = moex_data.get("name", "Облигация")
+        live_price = moex_data.get("price", price)
+        currency = moex_data.get("currency", "RUB")
+
+        new_bond = BondPortfolio(
+            user_id=current_user.id,
+            isin=isin,
+            secid=secid,
+            name=bond_title,
+            amount=amount,
+            buy_price=price,
+            last_price=live_price,
+            purchase_date=purchase_date,
+            is_sold=False,
+            currency=currency,
+            notes=notes if notes else None,
+        )
+        db.session.add(new_bond)
+        db.session.add(Transaction(
+            user_id=current_user.id,
+            isin=isin,
+            name=bond_title,
+            tx_type="buy",
+            amount=amount,
+            price=price,
+            currency=currency,
+            tx_date=purchase_date,
+        ))
+        imported_count += 1
+
+    db.session.commit()
+    _bust_user_cache(current_user.id)
+
+    return jsonify({
+        "status": "success",
+        "message": f"Успешно импортировано {imported_count} сделок.",
+        "imported_count": imported_count,
+        "errors": errors
+    }), 200

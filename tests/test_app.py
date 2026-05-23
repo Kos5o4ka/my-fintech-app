@@ -407,6 +407,82 @@ class PortfolioTests(BaseTest):
         )
         self.assertEqual(r.status_code, 403)
 
+    def test_sell_bond_partial_success(self):
+        uid = self._make_user()
+        self._set_logged_in(uid)
+        bond_id = self._make_bond(uid, amount=10, buy_price=900.0)
+        
+        r = self.client.post(
+            f"/api/sell_bond/{bond_id}",
+            json={"sell_price": 950.0, "amount": 4, "broker_commission": 2.5},
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.get_json()["status"], "success")
+        
+        with app.app_context():
+            from models import BondPortfolio, Transaction
+            orig_bond = db.session.get(BondPortfolio, bond_id)
+            self.assertEqual(orig_bond.amount, 6)
+            self.assertFalse(orig_bond.is_sold)
+            
+            sold_bonds = BondPortfolio.query.filter_by(user_id=uid, is_sold=True).all()
+            self.assertEqual(len(sold_bonds), 1)
+            self.assertEqual(sold_bonds[0].amount, 4)
+            self.assertEqual(float(sold_bonds[0].sell_price), 950.0)
+            self.assertEqual(float(sold_bonds[0].broker_commission), 2.5)
+            
+            txs = Transaction.query.filter_by(user_id=uid, tx_type="sell").all()
+            self.assertEqual(len(txs), 1)
+            self.assertEqual(txs[0].amount, 4)
+            self.assertEqual(float(txs[0].price), 950.0)
+
+    def test_sell_bond_partial_excessive_amount(self):
+        uid = self._make_user()
+        self._set_logged_in(uid)
+        bond_id = self._make_bond(uid, amount=10)
+        
+        r = self.client.post(
+            f"/api/sell_bond/{bond_id}",
+            json={"sell_price": 950.0, "amount": 15},
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.get_json()["status"], "error")
+        self.assertIn("Нельзя продать больше", r.get_json()["message"])
+
+    def test_update_bond_notes_success(self):
+        uid = self._make_user()
+        self._set_logged_in(uid)
+        bond_id = self._make_bond(uid)
+        
+        r = self.client.patch(
+            f"/api/portfolio/{bond_id}/notes",
+            json={"notes": "Great long term investment"},
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.get_json()["status"], "success")
+        self.assertEqual(r.get_json()["notes"], "Great long term investment")
+        
+        with app.app_context():
+            from models import BondPortfolio
+            bond = db.session.get(BondPortfolio, bond_id)
+            self.assertEqual(bond.notes, "Great long term investment")
+
+    def test_update_bond_notes_wrong_owner(self):
+        uid1 = self._make_user(username="owner", password="pass123")
+        uid2 = self._make_user(username="hacker", password="pass456")
+        self._set_logged_in(uid2)
+        bond_id = self._make_bond(uid1)
+        
+        r = self.client.patch(
+            f"/api/portfolio/{bond_id}/notes",
+            json={"notes": "Hacked"},
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 404)
+
     def test_portfolio_history_empty(self):
         uid = self._make_user()
         self._set_logged_in(uid)
@@ -475,6 +551,300 @@ class PortfolioTests(BaseTest):
         )
         self.assertEqual(r.status_code, 400)
         self.assertIn("error", r.get_json()["status"])
+
+
+# ── MOEX Currency Rates tests ─────────────────────────────────────────────────
+class MoexCurrencyRatesTests(BaseTest):
+    """Tests for get_currency_rates() and get_gold_price() in moex.py."""
+
+    def test_currency_rates_fallback_on_error(self):
+        """When MOEX is unreachable, fallback static rates are returned and valid."""
+        from moex import get_currency_rates
+        with patch("moex._fetch_json", side_effect=Exception("Network error")):
+            rates = get_currency_rates()
+        self.assertIsInstance(rates, dict)
+        self.assertIn("USD", rates)
+        self.assertIn("CNY", rates)
+        self.assertIn("EUR", rates)
+        self.assertIn("RUB", rates)
+        self.assertEqual(rates["RUB"], 1.0)
+        # Fallback values must be positive and reasonable
+        self.assertGreater(rates["USD"], 0)
+        self.assertGreater(rates["CNY"], 0)
+        self.assertGreater(rates["EUR"], 0)
+
+    def test_currency_rates_parses_moex_response(self):
+        """When MOEX returns a price, it overrides the fallback."""
+        from moex import get_currency_rates
+        fake_response = {
+            "marketdata": {
+                "columns": ["LAST", "CURRENTVALUE"],
+                "data": [[91.5, None]],
+            },
+            "securities": {"columns": [], "data": []},
+        }
+        # Cache miss → _fetch_json called for each currency
+        with patch("moex._fetch_json", return_value=fake_response), \
+             patch("moex.get_currency_rates.__wrapped__", create=True):
+            # Clear cache before test
+            try:
+                from extensions import cache
+                cache.delete("moex_currency_rates")
+            except Exception:
+                pass
+            rates = get_currency_rates()
+        self.assertIn("USD", rates)
+        # 91.5 should have been parsed from LAST column
+        self.assertAlmostEqual(rates["USD"], 91.5, places=2)
+
+    def test_gold_price_fallback_on_error(self):
+        """When MOEX gold endpoint fails, the static fallback 7000.0 is returned."""
+        from moex import get_gold_price
+        # Clear cache so the cached value from a previous test doesn't leak in
+        try:
+            from extensions import cache
+            cache.delete("moex_gold_price")
+        except Exception:
+            pass
+        with patch("moex._fetch_json", side_effect=Exception("Timeout")):
+            price = get_gold_price()
+        self.assertIsInstance(price, float)
+        self.assertEqual(price, 7000.0)
+
+    def test_gold_price_parses_moex_response(self):
+        """When MOEX returns a valid gold spot price, it is returned correctly."""
+        from moex import get_gold_price
+        fake_response = {
+            "marketdata": {
+                "columns": ["LAST", "WAPRICE"],
+                "data": [[8500.0, None]],
+            },
+            "securities": {"columns": [], "data": []},
+        }
+        try:
+            from extensions import cache
+            cache.delete("moex_gold_price")
+        except Exception:
+            pass
+        with patch("moex._fetch_json", return_value=fake_response):
+            price = get_gold_price()
+        self.assertIsInstance(price, float)
+        self.assertAlmostEqual(price, 8500.0, places=1)
+
+
+# ── Gold Bond Valuation tests ─────────────────────────────────────────────────
+class GoldBondValuationTests(BaseTest):
+    """Tests for correct valuation of GLD (gold-denominated) bonds."""
+
+    def _make_gld_bond(self, user_id, buy_price=100.0, amount=5):
+        """Helper: inserts a BondPortfolio entry with currency='GLD'."""
+        from models import BondPortfolio
+        with app.app_context():
+            bond = BondPortfolio(
+                user_id=user_id,
+                isin="RU000GOLD001",
+                secid="GOLD001",
+                name="Золотая облигация",
+                amount=amount,
+                buy_price=buy_price,
+                last_price=None,
+                currency="GLD",
+                purchase_date=date.today(),
+                is_sold=False,
+            )
+            db.session.add(bond)
+            db.session.commit()
+            return bond.id
+
+    def test_gold_bond_stored_currency_is_gld(self):
+        """A bond with currency='GLD' is persisted correctly in DB."""
+        uid = self._make_user()
+        bond_id = self._make_gld_bond(uid)
+        with app.app_context():
+            from models import BondPortfolio
+            bond = db.session.get(BondPortfolio, bond_id)
+            self.assertEqual(bond.currency, "GLD")
+            self.assertFalse(bond.is_sold)
+
+    def test_portfolio_api_handles_gld_bond(self):
+        """GET /api/portfolio succeeds even when a GLD bond is present."""
+        uid = self._make_user()
+        self._set_logged_in(uid)
+        self._make_gld_bond(uid)
+
+        mock_gld_moex = {
+            "secid": "GOLD001",
+            "name": "Золотая облигация",
+            "price": 8400.0,   # gold_price * last_pct / 100
+            "facevalue": 8000.0,
+            "nkd": 0.0,
+            "ytm": 0.0,
+            "currency": "GLD",
+        }
+        with patch("services.moex_service.get_bond_cached", return_value=mock_gld_moex):
+            r = self.client.get("/api/portfolio")
+        self.assertEqual(r.status_code, 200)
+        data = r.get_json()
+        self.assertIn("bonds", data)
+        # total_value should be a positive float (GLD bond contributes in RUB)
+        self.assertIsInstance(data["total_value"], float)
+        self.assertGreaterEqual(data["total_value"], 0.0)
+
+    @patch("blueprints.portfolio.get_bond_preview")
+    def test_bond_preview_returns_gld_currency(self, mock_preview):
+        """GET /api/bond_preview/<isin> returns currency='GLD' for gold bonds."""
+        mock_preview.return_value = {
+            "status": "ok",
+            "name": "Золотая облигация",
+            "price": 8200.0,
+            "facevalue": 7800.0,
+            "nkd": 0.0,
+            "ytm": 0.0,
+            "currency": "GLD",
+        }
+        uid = self._make_user()
+        self._set_logged_in(uid)
+
+        r = self.client.get("/api/bond_preview/RU000GOLD001")
+        self.assertEqual(r.status_code, 200)
+        data = r.get_json()
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["currency"], "GLD")
+
+
+
+# ── Broker Import tests ───────────────────────────────────────────────────────
+class BrokerImportTests(BaseTest):
+    """Tests for POST /api/portfolio/import (CSV and JSON payloads)."""
+
+    def _csv_bytes(self, rows: list[dict]) -> bytes:
+        """Helper: serialise list-of-dicts into UTF-8 CSV bytes."""
+        import io as _io
+        import csv as _csv
+        buf = _io.StringIO()
+        fieldnames = list(rows[0].keys())
+        writer = _csv.DictWriter(buf, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+        return buf.getvalue().encode("utf-8")
+
+    @patch("blueprints.portfolio.get_moex_bond")
+    def test_import_csv_single_deal_success(self, mock_moex):
+        """Uploading a valid one-row CSV creates one BondPortfolio + Transaction."""
+        mock_moex.return_value = {
+            "secid": "SU26238RMFS4",
+            "name": "ОФЗ 26238",
+            "price": 905.0,
+            "facevalue": 1000,
+            "nkd": 5.0,
+            "ytm": 8.2,
+            "currency": "RUB",
+        }
+        uid = self._make_user()
+        self._set_logged_in(uid)
+
+        csv_data = self._csv_bytes([
+            {"ISIN": "SU26238RMFS4", "Amount": "10", "Price": "900.00", "Date": "2025-01-15"}
+        ])
+        r = self.client.post(
+            "/api/portfolio/import",
+            data={"file": (io.BytesIO(csv_data), "deals.csv")},
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(r.status_code, 200)
+        data = r.get_json()
+        self.assertEqual(data["status"], "success")
+        self.assertEqual(data["imported_count"], 1)
+        self.assertEqual(data["errors"], [])
+
+        with app.app_context():
+            from models import BondPortfolio, Transaction
+            bonds = BondPortfolio.query.filter_by(user_id=uid, is_sold=False).all()
+            self.assertEqual(len(bonds), 1)
+            self.assertEqual(bonds[0].isin, "SU26238RMFS4")
+            self.assertEqual(bonds[0].amount, 10)
+            self.assertAlmostEqual(float(bonds[0].buy_price), 900.0)
+
+            txs = Transaction.query.filter_by(user_id=uid, tx_type="buy").all()
+            self.assertEqual(len(txs), 1)
+            self.assertEqual(txs[0].isin, "SU26238RMFS4")
+
+    @patch("blueprints.portfolio.get_moex_bond")
+    def test_import_json_deals_success(self, mock_moex):
+        """Sending JSON deals array via POST body imports correctly."""
+        mock_moex.return_value = {
+            "secid": "SU26238RMFS4",
+            "name": "ОФЗ 26238",
+            "price": 905.0,
+            "facevalue": 1000,
+            "nkd": 5.0,
+            "ytm": 8.2,
+            "currency": "RUB",
+        }
+        uid = self._make_user()
+        self._set_logged_in(uid)
+
+        r = self.client.post(
+            "/api/portfolio/import",
+            json={"deals": [
+                {"isin": "SU26238RMFS4", "amount": "5", "price": "910.00", "date": "2025-03-10"},
+            ]},
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 200)
+        data = r.get_json()
+        self.assertEqual(data["status"], "success")
+        self.assertEqual(data["imported_count"], 1)
+
+    def test_import_no_file_no_json_returns_error(self):
+        """POST /api/portfolio/import without any payload returns 400."""
+        uid = self._make_user()
+        self._set_logged_in(uid)
+        r = self.client.post(
+            "/api/portfolio/import",
+            json={"deals": []},
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 400)
+        data = r.get_json()
+        self.assertEqual(data["status"], "error")
+
+    def test_import_unsupported_file_extension_returns_error(self):
+        """Uploading a .txt file returns 400 with a clear error message."""
+        uid = self._make_user()
+        self._set_logged_in(uid)
+        r = self.client.post(
+            "/api/portfolio/import",
+            data={"file": (io.BytesIO(b"some data"), "report.txt")},
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("error", r.get_json()["status"])
+
+    @patch("blueprints.portfolio.get_moex_bond")
+    def test_import_csv_unknown_isin_recorded_as_error(self, mock_moex):
+        """Rows with ISINs not found on MOEX are skipped and reported in errors."""
+        mock_moex.return_value = None  # simulate MOEX not finding the bond
+        uid = self._make_user()
+        self._set_logged_in(uid)
+
+        csv_data = self._csv_bytes([
+            {"ISIN": "UNKNOWN00001", "Amount": "3", "Price": "500.00"}
+        ])
+        r = self.client.post(
+            "/api/portfolio/import",
+            data={"file": (io.BytesIO(csv_data), "deals.csv")},
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(r.status_code, 200)
+        data = r.get_json()
+        self.assertEqual(data["imported_count"], 0)
+        self.assertTrue(len(data["errors"]) > 0)
+
+    def test_import_requires_auth(self):
+        """POST /api/portfolio/import redirects unauthenticated users."""
+        r = self.client.post("/api/portfolio/import", json={"deals": []})
+        self.assertIn(r.status_code, [302, 401])
 
 
 if __name__ == "__main__":
