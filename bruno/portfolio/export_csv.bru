@@ -1,0 +1,27 @@
+meta {
+  name: Export Portfolio CSV
+  type: http
+  seq: 17
+}
+
+get {
+  url: {{baseUrl}}/api/portfolio/export
+  body: none
+  auth: none
+}
+
+docs {
+  ## Export Portfolio as CSV
+
+  Скачивает активные позиции портфеля в формате CSV (UTF-8 BOM для корректного
+  открытия в Excel на Windows).
+
+  **Ответ:** файл `portfolio_report.csv`
+
+  **Заголовки CSV:**
+  `Название бумаги`, `ISIN код`, `Количество (шт)`, `Цена покупки (руб)`, `Дата сделки`
+
+  **Заголовки ответа:**
+  - `Content-Type: text/csv; charset=utf-8-sig`
+  - `Content-Disposition: attachment; filename=portfolio_report.csv`
+}

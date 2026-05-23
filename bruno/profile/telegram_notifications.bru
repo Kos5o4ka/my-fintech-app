@@ -1,0 +1,39 @@
+meta {
+  name: Toggle Telegram Notifications
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/profile/telegram/notifications
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "enabled": true
+  }
+}
+
+docs {
+  ## Toggle Telegram Notifications
+
+  Включает или выключает Telegram-уведомления о предстоящих купонных выплатах.
+  Telegram должен быть предварительно привязан.
+
+  **Тело запроса:**
+  - `enabled` — `true` (включить) / `false` (выключить)
+
+  **Ответ:**
+  ```json
+  { "status": "success", "message": "Telegram-уведомления включены." }
+  ```
+
+  **Ошибки:**
+  - `400` — Telegram не привязан
+}

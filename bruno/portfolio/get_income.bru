@@ -1,0 +1,35 @@
+meta {
+  name: Get Income
+  type: http
+  seq: 15
+}
+
+get {
+  url: {{baseUrl}}/api/portfolio/income
+  body: none
+  auth: none
+}
+
+docs {
+  ## Get Coupon Income
+
+  Сводка купонного дохода по активным позициям (годовой купон × кол-во бумаг).
+  Используется в карточке «Купонный доход» на странице портфеля.
+
+  **Ответ:**
+  ```json
+  {
+    "annual_income": 12450.0,
+    "monthly_income": 1037.5,
+    "positions": [
+      {
+        "isin": "RU000A105104",
+        "name": "ОФЗ 26238",
+        "coupon_rate": 7.1,
+        "amount": 10,
+        "annual": 710.0
+      }
+    ]
+  }
+  ```
+}

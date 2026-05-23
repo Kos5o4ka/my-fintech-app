@@ -1,0 +1,31 @@
+meta {
+  name: Get Stats
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/api/portfolio/stats
+  body: none
+  auth: none
+}
+
+docs {
+  ## Get Portfolio Stats
+
+  Сводная статистика портфеля (кэш 15 мин).
+
+  **Ответ:**
+  ```json
+  {
+    "total_value": 125000.0,
+    "active_count": 5,
+    "sold_count": 3,
+    "portfolio_ytm": 14.2,
+    "total_pnl": 8500.0,
+    "income_30d": 1250.0,
+    "income_90d": 3750.0,
+    "income_365d": 15000.0
+  }
+  ```
+}

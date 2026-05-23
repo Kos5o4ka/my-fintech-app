@@ -1,0 +1,50 @@
+meta {
+  name: Get Portfolio
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/portfolio
+  body: none
+  auth: none
+}
+
+query {
+  page: 1
+  per_page: 50
+}
+
+docs {
+  ## Get Portfolio
+
+  Список активных позиций текущего пользователя с пагинацией.
+  Поддерживает ETag (If-None-Match) и Cache-Control.
+
+  **Ответ:**
+  ```json
+  {
+    "bonds": [
+      {
+        "id": 1,
+        "isin": "RU000A105104",
+        "name": "ОФЗ 26238",
+        "amount": 10,
+        "buy_price": 60.5,
+        "last_price": 62.1,
+        "pnl": 160.0,
+        "pnl_pct": 2.64,
+        "ytm": 14.5,
+        "nkd": 12.35,
+        "currency": "RUB",
+        "notes": "Куплено на просадке"
+      }
+    ],
+    "total_value": 62100.0,
+    "portfolio_ytm": 14.2,
+    "page": 1,
+    "pages": 1,
+    "total": 1
+  }
+  ```
+}

@@ -1,0 +1,25 @@
+meta {
+  name: Telegram Unlink
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/profile/telegram/unlink
+  body: none
+  auth: none
+}
+
+docs {
+  ## Unlink Telegram Account
+
+  Отвязывает Telegram от аккаунта пользователя и отключает уведомления.
+
+  **Ответ:**
+  ```json
+  { "status": "success", "message": "Telegram успешно отвязан." }
+  ```
+
+  **Ошибки:**
+  - `400` — Telegram не был привязан
+}

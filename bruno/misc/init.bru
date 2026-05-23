@@ -1,0 +1,23 @@
+meta {
+  name: Init (Visit Counter)
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/init
+  body: none
+  auth: none
+}
+
+docs {
+  ## Init / Visit Counter
+
+  Увеличивает счётчик посещений главной страницы и возвращает текущее значение.
+  Вызывается JavaScript'ом лендинга при первой загрузке.
+
+  **Ответ:**
+  ```json
+  { "visits": 1024 }
+  ```
+}

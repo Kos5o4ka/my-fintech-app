@@ -1,0 +1,34 @@
+meta {
+  name: Update Notes
+  type: http
+  seq: 5
+}
+
+patch {
+  url: {{baseUrl}}/api/portfolio/1/notes
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  X-CSRFToken: {{csrfToken}}
+}
+
+body:json {
+  {
+    "notes": "Куплено на просадке. Держать до погашения."
+  }
+}
+
+docs {
+  ## Update Bond Notes
+
+  Обновить текстовую заметку к позиции.
+  Передать пустую строку для удаления заметки.
+
+  **Успех:**
+  ```json
+  { "status": "success", "notes": "Куплено на просадке. Держать до погашения." }
+  ```
+}

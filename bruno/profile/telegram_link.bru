@@ -1,0 +1,34 @@
+meta {
+  name: Telegram Link (Generate)
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/profile/telegram/link
+  body: none
+  auth: none
+}
+
+docs {
+  ## Generate Telegram Link Token
+
+  Генерирует one-time deep-link для привязки Telegram-аккаунта к профилю.
+  Пользователь переходит по ссылке и нажимает Start в боте — бот автоматически
+  привязывает chat_id.
+
+  **Требования:** TELEGRAM_BOT_TOKEN должен быть настроен на сервере.
+
+  **Ответ:**
+  ```json
+  {
+    "status": "success",
+    "deep_link": "https://t.me/InvestTrackBot?start=abc123token",
+    "message": "Перейдите по ссылке и нажмите Start в боте."
+  }
+  ```
+
+  **Ошибки:**
+  - `400` — Telegram уже привязан
+  - `503` — TELEGRAM_BOT_TOKEN не настроен
+}

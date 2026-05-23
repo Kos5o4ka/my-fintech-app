@@ -1,0 +1,45 @@
+meta {
+  name: Get Tax Report
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/api/portfolio/tax
+  body: none
+  auth: none
+}
+
+query {
+  year: 2024
+}
+
+docs {
+  ## Get Tax Report
+
+  Налоговый отчёт по НДФЛ за выбранный год.
+  Расчёт: (доход от продаж + купоны) × 13%.
+
+  **Ответ:**
+  ```json
+  {
+    "year": 2024,
+    "gross_profit": 15000.0,
+    "total_commission": 450.0,
+    "taxable_base": 14550.0,
+    "tax_amount": 1891.5,
+    "trades": [
+      {
+        "isin": "RU000A105104",
+        "name": "ОФЗ 26238",
+        "amount": 10,
+        "buy_price": 60.5,
+        "sell_price": 65.2,
+        "pnl": 265.0,
+        "commission": 0.3,
+        "sell_date": "2024-06-01"
+      }
+    ]
+  }
+  ```
+}

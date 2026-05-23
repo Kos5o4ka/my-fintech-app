@@ -1,0 +1,38 @@
+meta {
+  name: Bond Preview
+  type: http
+  seq: 25
+}
+
+get {
+  url: {{baseUrl}}/api/bond_preview/RU000A105104
+  body: none
+  auth: none
+}
+
+docs {
+  ## Bond Preview
+
+  Детальная карточка облигации для drawer добавления.
+  Возвращает актуальные данные с MOEX: цена, YTM, купон, НКД, дюрация.
+
+  **URL-параметр:** `<isin>` — ISIN облигации
+
+  **Ответ:**
+  ```json
+  {
+    "isin": "RU000A105104",
+    "secid": "SU26238RMFS4",
+    "name": "ОФЗ 26238",
+    "last_price": 62.1,
+    "ytm": 14.5,
+    "coupon_rate": 7.1,
+    "nkd": 18.3,
+    "duration": 3.2,
+    "maturity_date": "2041-05-15"
+  }
+  ```
+
+  **Ошибки:**
+  - `404` — облигация не найдена на MOEX
+}

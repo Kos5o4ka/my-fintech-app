@@ -1,0 +1,29 @@
+meta {
+  name: Health Check
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/health
+  body: none
+  auth: none
+}
+
+docs {
+  ## Health Check
+
+  Проверка доступности приложения и подключения к базе данных.
+  Используется load balancer'ом и мониторингом (Sentry, Uptime Robot).
+  Не требует аутентификации.
+
+  **Ответ (200):**
+  ```json
+  { "status": "ok", "db": "ok" }
+  ```
+
+  **Ответ (500):**
+  ```json
+  { "status": "error", "db": "unavailable" }
+  ```
+}

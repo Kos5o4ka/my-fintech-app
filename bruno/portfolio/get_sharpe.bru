@@ -1,0 +1,37 @@
+meta {
+  name: Get Sharpe Ratio
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/api/portfolio/sharpe
+  body: none
+  auth: none
+}
+
+docs {
+  ## Get Sharpe Ratio
+
+  Коэффициент Шарпа по закрытым сделкам.
+  Безрисковая ставка: rf = 16%/12 (ставка ЦБ РФ).
+  Требует минимум 3 закрытых сделки.
+
+  **Ответ (достаточно сделок):**
+  ```json
+  {
+    "sharpe": 1.42,
+    "mean_return_pct": "2.35",
+    "volatility_pct": "1.65",
+    "sample_size": 8
+  }
+  ```
+
+  **Ответ (недостаточно сделок):**
+  ```json
+  {
+    "sharpe": null,
+    "reason": "Нужно минимум 3 закрытые сделки"
+  }
+  ```
+}

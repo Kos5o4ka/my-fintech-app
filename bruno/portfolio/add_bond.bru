@@ -1,0 +1,50 @@
+meta {
+  name: Add Bond
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/portfolio
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  X-CSRFToken: {{csrfToken}}
+}
+
+body:json {
+  {
+    "isin": "RU000A105104",
+    "amount": 10,
+    "buy_price": 60.5,
+    "purchase_date": "2024-01-15",
+    "broker_commission": 0.3
+  }
+}
+
+docs {
+  ## Add Bond to Portfolio
+
+  Добавить облигацию в портфель.
+
+  | Поле | Тип | Обязательное | Описание |
+  |------|-----|-------------|---------|
+  | isin | string | да | ISIN облигации (12 символов) |
+  | amount | int | да | Количество (> 0) |
+  | buy_price | float | да | Цена покупки в % от номинала (> 0) |
+  | purchase_date | string | да | Дата покупки (YYYY-MM-DD) |
+  | broker_commission | float | нет | Комиссия брокера в % (≥ 0, default 0) |
+
+  **Успех:**
+  ```json
+  { "status": "success", "message": "Облигация добавлена", "id": 42 }
+  ```
+
+  **Ошибка (ISIN не найден):**
+  ```json
+  { "status": "error", "message": "Облигация не найдена на MOEX" }
+  ```
+}

@@ -1,0 +1,41 @@
+meta {
+  name: Sell Bond
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/portfolio/1/sell
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  X-CSRFToken: {{csrfToken}}
+}
+
+body:json {
+  {
+    "sell_price": 65.2,
+    "sell_date": "2024-06-01",
+    "broker_commission": 0.3
+  }
+}
+
+docs {
+  ## Sell Bond
+
+  Зафиксировать продажу облигации. Позиция переходит в историю (is_sold=true).
+  Кэш портфеля инвалидируется.
+
+  **Успех:**
+  ```json
+  {
+    "status": "success",
+    "message": "Продажа зафиксирована",
+    "pnl": 265.0,
+    "pnl_pct": 7.77
+  }
+  ```
+}

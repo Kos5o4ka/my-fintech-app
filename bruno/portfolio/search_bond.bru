@@ -1,0 +1,36 @@
+meta {
+  name: Search Bond (MOEX)
+  type: http
+  seq: 13
+}
+
+get {
+  url: {{baseUrl}}/api/search_bond
+  body: none
+  auth: none
+}
+
+query {
+  q: ОФЗ 26238
+}
+
+docs {
+  ## Search Bond on MOEX
+
+  Живой поиск облигаций на MOEX по названию или ISIN.
+  Используется в autocomplete drawer добавления.
+
+  **Ответ:**
+  ```json
+  [
+    {
+      "isin": "RU000A105104",
+      "secid": "SU26238RMFS4",
+      "name": "ОФЗ 26238",
+      "last_price": 62.1,
+      "ytm": 14.5,
+      "maturity_date": "2041-05-15"
+    }
+  ]
+  ```
+}

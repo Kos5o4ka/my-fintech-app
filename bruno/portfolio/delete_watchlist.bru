@@ -1,0 +1,27 @@
+meta {
+  name: Remove from Watchlist
+  type: http
+  seq: 21
+}
+
+delete {
+  url: {{baseUrl}}/api/watchlist/RU000A1038V6
+  body: none
+  auth: none
+}
+
+docs {
+  ## Remove Bond from Watchlist
+
+  Удаляет облигацию из избранного по ISIN.
+
+  **URL-параметр:** `<isin>` — ISIN облигации (регистронезависимый)
+
+  **Ответ:**
+  ```json
+  { "status": "success", "message": "Удалено из избранного." }
+  ```
+
+  **Ошибки:**
+  - `404` — облигация не найдена в избранном
+}

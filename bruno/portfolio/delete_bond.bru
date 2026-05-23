@@ -1,0 +1,27 @@
+meta {
+  name: Delete Bond
+  type: http
+  seq: 4
+}
+
+delete {
+  url: {{baseUrl}}/api/portfolio/1
+  body: none
+  auth: none
+}
+
+headers {
+  X-CSRFToken: {{csrfToken}}
+}
+
+docs {
+  ## Delete Bond
+
+  Удалить позицию из портфеля (необратимо).
+  Работает только для активных (не проданных) позиций.
+
+  **Успех:**
+  ```json
+  { "status": "success", "message": "Позиция удалена" }
+  ```
+}

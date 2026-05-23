@@ -1,0 +1,38 @@
+meta {
+  name: Get RGBI Benchmark
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/api/portfolio/benchmark
+  body: none
+  auth: none
+}
+
+query {
+  range: month
+}
+
+docs {
+  ## Get RGBI Benchmark
+
+  История индекса MOEX Государственных облигаций (RGBI) для сравнения с портфелем.
+
+  **Параметр `range`:**
+  - `week` — последние 7 дней
+  - `month` — последние 30 дней (по умолчанию)
+  - `3month` — последние 90 дней
+  - `year` — последний год
+  - `all` — максимальная история
+
+  **Ответ:**
+  ```json
+  {
+    "rgbi": [
+      { "date": "2024-05-01", "close": 107.5 },
+      { "date": "2024-05-02", "close": 107.8 }
+    ]
+  }
+  ```
+}

@@ -1,0 +1,31 @@
+meta {
+  name: Bond Price Chart
+  type: http
+  seq: 26
+}
+
+get {
+  url: {{baseUrl}}/api/bond_chart/RU000A105104
+  body: none
+  auth: none
+}
+
+docs {
+  ## Bond Price Chart
+
+  История котировок облигации с MOEX для мини-чарта в drawer.
+  Возвращает данные в формате Chart.js.
+
+  **URL-параметр:** `<isin>` — ISIN облигации
+
+  **Ответ:**
+  ```json
+  {
+    "labels": ["2024-01-10", "2024-01-11", "2024-01-12"],
+    "data": [63.5, 63.2, 62.8]
+  }
+  ```
+
+  **Ошибки:**
+  - `404` — история котировок недоступна
+}

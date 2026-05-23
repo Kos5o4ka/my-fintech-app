@@ -1,0 +1,39 @@
+meta {
+  name: Compare Two Bonds
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{baseUrl}}/api/portfolio/compare
+  body: none
+  auth: none
+}
+
+query {
+  isin1: RU000A105104
+  isin2: RU000A1038V6
+  range: month
+}
+
+docs {
+  ## Compare Two Bonds
+
+  Сравнение динамики цен двух облигаций.
+  Оба ряда нормализуются к 100 на дату начала периода.
+
+  **Параметры:**
+  - `isin1` — ISIN первой облигации (обязателен)
+  - `isin2` — ISIN второй облигации (обязателен, должен отличаться от isin1)
+  - `range` — период: `week` / `month` / `3month` / `year` / `all`
+
+  **Ответ:**
+  ```json
+  {
+    "status": "success",
+    "labels": ["2024-05-01", "2024-05-02"],
+    "bond1": { "name": "ОФЗ 26238", "data": [100.0, 100.28] },
+    "bond2": { "name": "ОФЗ 26244", "data": [100.0, 99.85] }
+  }
+  ```
+}

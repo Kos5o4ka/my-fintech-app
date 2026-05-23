@@ -1,0 +1,30 @@
+meta {
+  name: Delete User
+  type: http
+  seq: 3
+}
+
+delete {
+  url: {{baseUrl}}/api/admin/delete_user/2
+  body: none
+  auth: none
+}
+
+docs {
+  ## Delete User (Admin only)
+
+  Удаляет пользователя по ID. Администратор не может удалить сам себя.
+  Требует прав администратора.
+
+  **URL-параметр:** `<user_id>` — числовой ID пользователя
+
+  **Ответ:**
+  ```json
+  { "status": "success", "message": "Пользователь alice удален." }
+  ```
+
+  **Ошибки:**
+  - `400` — попытка удалить себя
+  - `403` — нет прав администратора
+  - `404` — пользователь не найден
+}

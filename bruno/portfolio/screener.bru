@@ -1,0 +1,50 @@
+meta {
+  name: Bond Screener
+  type: http
+  seq: 12
+}
+
+get {
+  url: {{baseUrl}}/api/portfolio/screener
+  body: none
+  auth: none
+}
+
+query {
+  min_ytm: 12
+  max_ytm: 18
+  issuer_type: ОФЗ
+  min_duration: 0.5
+  max_duration: 5
+  query: 26
+}
+
+docs {
+  ## Bond Screener
+
+  Поиск облигаций по фильтрам с данными MOEX.
+
+  **Параметры (все необязательны):**
+  - `min_ytm` / `max_ytm` — YTM от/до (%)
+  - `issuer_type` — тип эмитента: `ОФЗ` / `муниципальные` / `корпоративные`
+  - `min_duration` / `max_duration` — дюрация в годах
+  - `query` — поиск по названию или ISIN
+
+  **Ответ:**
+  ```json
+  {
+    "results": [
+      {
+        "isin": "RU000A105104",
+        "name": "ОФЗ 26238",
+        "last_price": 62.1,
+        "ytm": 14.5,
+        "duration": 3.2,
+        "coupon_rate": 7.1,
+        "maturity_date": "2041-05-15"
+      }
+    ],
+    "total": 1
+  }
+  ```
+}

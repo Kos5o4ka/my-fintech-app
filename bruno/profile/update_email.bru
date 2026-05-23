@@ -1,0 +1,40 @@
+meta {
+  name: Update Email Settings
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/profile/email
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "email": "user@example.com",
+    "email_notifications": true
+  }
+}
+
+docs {
+  ## Update Email Notification Settings
+
+  Обновляет email и настройку email-уведомлений пользователя.
+
+  **Тело запроса:**
+  - `email` — адрес электронной почты (должен быть валидным email или пустой строкой)
+  - `email_notifications` — `true` / `false`
+
+  **Ответ:**
+  ```json
+  { "status": "success", "message": "Настройки уведомлений сохранены." }
+  ```
+
+  **Ошибки:**
+  - `400` — невалидный email или другие ошибки валидации Pydantic
+}

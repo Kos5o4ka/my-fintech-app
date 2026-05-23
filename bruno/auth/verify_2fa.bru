@@ -1,0 +1,41 @@
+meta {
+  name: Verify 2FA
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/auth/verify_2fa
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  X-CSRFToken: {{csrfToken}}
+}
+
+body:json {
+  {
+    "token": "pending-2fa-token-from-login-response",
+    "code": "123456"
+  }
+}
+
+docs {
+  ## Verify 2FA OTP
+
+  Проверка одноразового кода из Telegram.
+  `token` — UUID, полученный из ответа /api/auth/login при status=2fa_required.
+  `code` — 6-значный числовой код.
+
+  **Успех:**
+  ```json
+  { "status": "success" }
+  ```
+
+  **Ошибка:**
+  ```json
+  { "status": "error", "message": "Неверный или истёкший код" }
+  ```
+}

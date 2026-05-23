@@ -1,0 +1,27 @@
+meta {
+  name: Get Profile Stats
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/profile/stats
+  body: none
+  auth: none
+}
+
+docs {
+  ## Get Profile Stats
+
+  Быстрая статистика для hero-секции страницы профиля:
+  количество активных и закрытых позиций, общая стоимость портфеля.
+
+  **Ответ:**
+  ```json
+  {
+    "bond_count": 5,
+    "sold_count": 12,
+    "total_value": 62450.0
+  }
+  ```
+}

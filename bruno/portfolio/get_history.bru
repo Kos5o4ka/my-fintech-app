@@ -1,0 +1,46 @@
+meta {
+  name: Get Trade History
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/portfolio/history
+  body: none
+  auth: none
+}
+
+query {
+  page: 1
+  per_page: 20
+}
+
+docs {
+  ## Get Trade History
+
+  История закрытых сделок с пагинацией.
+
+  **Ответ:**
+  ```json
+  {
+    "trades": [
+      {
+        "id": 5,
+        "isin": "RU000A105104",
+        "name": "ОФЗ 26238",
+        "amount": 10,
+        "buy_price": 60.5,
+        "sell_price": 65.2,
+        "pnl": 265.0,
+        "pnl_pct": 7.77,
+        "commission": 0.3,
+        "purchase_date": "2024-01-15",
+        "sell_date": "2024-06-01"
+      }
+    ],
+    "page": 1,
+    "pages": 1,
+    "total": 1
+  }
+  ```
+}

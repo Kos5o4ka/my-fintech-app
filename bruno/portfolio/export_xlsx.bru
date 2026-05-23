@@ -1,0 +1,28 @@
+meta {
+  name: Export Portfolio XLSX
+  type: http
+  seq: 18
+}
+
+get {
+  url: {{baseUrl}}/api/portfolio/export/xlsx
+  body: none
+  auth: none
+}
+
+docs {
+  ## Export Portfolio as Excel (XLSX)
+
+  Скачивает полный отчёт портфеля в формате Excel (.xlsx).
+  Файл содержит два листа:
+
+  **Лист «Портфель»** — активные позиции:
+  `Название`, `ISIN`, `Кол-во`, `Цена покупки (₽)`, `Посл. цена (₽)`, `P&L (₽)`, `Дата покупки`
+
+  **Лист «История сделок»** — закрытые позиции:
+  `Название`, `ISIN`, `Кол-во`, `Цена покупки (₽)`, `Цена продажи (₽)`, `Комиссия (₽)`, `P&L (₽)`, `P&L %`, `Дата продажи`
+
+  **Заголовки ответа:**
+  - `Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
+  - `Content-Disposition: attachment; filename=portfolio_report.xlsx`
+}

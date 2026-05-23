@@ -16,7 +16,7 @@
 | 4 | Новые фичи | ✅ Выполнен |
 | 5 | Тестирование | ✅ Выполнен (базовое) |
 | 6 | DevOps и деплой | ✅ Выполнен |
-| 7 | Документация | 🔲 В плане |
+| 7 | Документация | ✅ Выполнен |
 
 ---
 
@@ -274,12 +274,12 @@
 
 ---
 
-## Этап 7 — Документация 🔲 В ПЛАНЕ
+## Этап 7 — Документация ✅ ВЫПОЛНЕН
 
-- [ ] `CONTRIBUTING.md` — как запустить локально, code style
-- [ ] `CHANGELOG.md` — формат Keep a Changelog
-- [ ] Bruno/Postman collection для всех API эндпоинтов
-- [ ] Architecture diagram (C4 Level 2)
+- [x] `CONTRIBUTING.md` — локальный запуск, переменные окружения, директория проекта, static assets workflow, тесты, code style, PR flow
+- [x] `CHANGELOG.md` — формат Keep a Changelog, история версий 1.0.0 → 1.3.0 + Unreleased
+- [x] Bruno API collection — 35 эндпоинтов в `bruno/` (auth/, portfolio/, profile/, admin/, misc/) + environments (local/production)
+- [x] `docs/architecture.md` — C4 Level 2: container diagram, application layers, ER-диаграмма, sequence диаграммы (auth 2FA, MOEX update), cache strategy, security flow
 
 ---
 

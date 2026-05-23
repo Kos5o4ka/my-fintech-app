@@ -1,0 +1,41 @@
+meta {
+  name: Upcoming Notifications
+  type: http
+  seq: 23
+}
+
+get {
+  url: {{baseUrl}}/api/notifications/upcoming
+  body: none
+  auth: none
+}
+
+query {
+  days: 7
+}
+
+docs {
+  ## Upcoming Coupon Notifications
+
+  Возвращает купонные выплаты по активным позициям в ближайшие N дней.
+  Используется в колокольчике уведомлений на дашборде.
+
+  **Параметр `days`:** горизонт в днях (1–90, по умолчанию 7)
+
+  **Ответ:**
+  ```json
+  {
+    "count": 2,
+    "events": [
+      {
+        "isin": "RU000A105104",
+        "name": "ОФЗ 26238",
+        "coupon_date": "2024-05-28",
+        "coupon_value": 35.4,
+        "amount": 10,
+        "days_left": 5
+      }
+    ]
+  }
+  ```
+}

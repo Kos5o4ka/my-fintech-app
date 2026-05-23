@@ -1,0 +1,31 @@
+meta {
+  name: Telegram Status
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/profile/telegram/status
+  body: none
+  auth: none
+}
+
+docs {
+  ## Get Telegram Link Status
+
+  Возвращает текущий статус привязки Telegram-аккаунта.
+
+  **Ответ:**
+  ```json
+  {
+    "status": "success",
+    "linked": true,
+    "notifications": false,
+    "bot_username": "InvestTrackBot"
+  }
+  ```
+
+  `linked` — привязан ли Telegram к аккаунту
+  `notifications` — включены ли уведомления в Telegram
+  `bot_username` — имя бота для формирования deep-link
+}

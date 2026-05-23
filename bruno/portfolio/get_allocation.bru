@@ -1,0 +1,26 @@
+meta {
+  name: Get Allocation
+  type: http
+  seq: 16
+}
+
+get {
+  url: {{baseUrl}}/api/portfolio/allocation
+  body: none
+  auth: none
+}
+
+docs {
+  ## Get Portfolio Allocation
+
+  Распределение портфеля по бумагам (для donut-диаграммы).
+  Значение каждого среза — текущая рыночная стоимость позиции.
+
+  **Ответ:**
+  ```json
+  [
+    { "name": "ОФЗ 26238", "value": 6210.0 },
+    { "name": "ОФЗ 26244", "value": 5480.0 }
+  ]
+  ```
+}

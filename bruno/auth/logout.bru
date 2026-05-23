@@ -1,0 +1,26 @@
+meta {
+  name: Logout
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/auth/logout
+  body: none
+  auth: none
+}
+
+headers {
+  X-CSRFToken: {{csrfToken}}
+}
+
+docs {
+  ## Logout
+
+  Завершение сессии. Требует аутентификации.
+
+  **Успех:**
+  ```json
+  { "status": "success", "message": "Выход выполнен" }
+  ```
+}

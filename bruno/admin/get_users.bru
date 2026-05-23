@@ -1,0 +1,29 @@
+meta {
+  name: Get All Users
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/admin/users
+  body: none
+  auth: none
+}
+
+docs {
+  ## Get All Users (Admin only)
+
+  Возвращает список всех зарегистрированных пользователей.
+  Требует is_admin = true у текущего пользователя.
+
+  **Ответ:**
+  ```json
+  [
+    { "id": 1, "username": "admin", "is_admin": true },
+    { "id": 2, "username": "alice", "is_admin": false }
+  ]
+  ```
+
+  **Ошибки:**
+  - `403` — нет прав администратора
+}

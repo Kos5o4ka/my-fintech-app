@@ -1,0 +1,31 @@
+meta {
+  name: Get Coupon Calendar
+  type: http
+  seq: 14
+}
+
+get {
+  url: {{baseUrl}}/api/portfolio/calendar
+  body: none
+  auth: none
+}
+
+docs {
+  ## Get Coupon Calendar
+
+  Ближайшие купонные выплаты по активным позициям (до 60 дней вперёд).
+  Используется на дашборде.
+
+  **Ответ:**
+  ```json
+  [
+    {
+      "isin": "RU000A105104",
+      "name": "ОФЗ 26238",
+      "date": "2024-06-20",
+      "coupon_value": 35.4,
+      "total_payout": 354.0
+    }
+  ]
+  ```
+}

@@ -1,0 +1,32 @@
+meta {
+  name: Get Watchlist
+  type: http
+  seq: 19
+}
+
+get {
+  url: {{baseUrl}}/api/watchlist
+  body: none
+  auth: none
+}
+
+docs {
+  ## Get Watchlist
+
+  Возвращает список облигаций в избранном текущего пользователя,
+  обогащённых актуальными данными с MOEX (цена, YTM, НКД).
+
+  **Ответ:**
+  ```json
+  [
+    {
+      "isin": "RU000A105104",
+      "name": "ОФЗ 26238",
+      "added_at": "2024-05-01",
+      "price": 62.1,
+      "ytm": 14.5,
+      "nkd": 18.3
+    }
+  ]
+  ```
+}

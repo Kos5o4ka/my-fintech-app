@@ -1,0 +1,48 @@
+meta {
+  name: Add User
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/admin/add_user
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "username": "newuser",
+    "password": "securepassword123",
+    "is_admin": false
+  }
+}
+
+docs {
+  ## Add User (Admin only)
+
+  Создаёт нового пользователя системы. Требует прав администратора.
+  Лимит: 30 запросов в час.
+
+  **Тело запроса:**
+  - `username` — логин: только латинские буквы и цифры, 3–20 символов (обязателен)
+  - `password` — пароль (обязателен)
+  - `is_admin` — выдать права администратора (по умолчанию false)
+
+  **Ответ (201):**
+  ```json
+  {
+    "status": "success",
+    "message": "Пользователь newuser успешно создан!",
+    "user_id": 3
+  }
+  ```
+
+  **Ошибки:**
+  - `400` — пустой логин/пароль, невалидный формат логина или пользователь уже существует
+  - `403` — нет прав администратора
+}

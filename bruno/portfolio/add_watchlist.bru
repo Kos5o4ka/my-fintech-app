@@ -1,0 +1,40 @@
+meta {
+  name: Add to Watchlist
+  type: http
+  seq: 20
+}
+
+post {
+  url: {{baseUrl}}/api/watchlist
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "isin": "RU000A1038V6"
+  }
+}
+
+docs {
+  ## Add Bond to Watchlist
+
+  Добавляет облигацию в избранное. ISIN верифицируется на MOEX.
+
+  **Тело запроса:**
+  - `isin` — ISIN облигации (обязателен)
+
+  **Ответ (201):**
+  ```json
+  { "status": "success", "message": "ОФЗ 26244 добавлена в избранное." }
+  ```
+
+  **Ошибки:**
+  - `400` — isin не передан
+  - `404` — облигация не найдена на MOEX
+  - `409` — облигация уже в избранном
+}
