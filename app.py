@@ -249,12 +249,10 @@ def _update_bond_prices() -> None:
 def _send_coupon_reminders() -> None:
     """Рассылает напоминания о купонах завтра — через email и/или Telegram."""
     with app.app_context():
-        has_mail = bool(app.config.get("MAIL_SERVER"))
         has_tg = bool(app.config.get("TELEGRAM_BOT_TOKEN"))
-        if not has_mail and not has_tg:
+        if not has_tg:
             return
         try:
-            from flask_mail import Message
             from models import User, BondPortfolio
             from moex import get_coupon_calendar
             from datetime import date, timedelta
@@ -262,12 +260,9 @@ def _send_coupon_reminders() -> None:
 
             tomorrow = date.today() + timedelta(days=1)
 
-            # Собираем пользователей с хотя бы одним каналом уведомлений
+            # Собираем пользователей с Telegram-каналом уведомлений
             users = User.query.filter(
-                db.or_(
-                    db.and_(User.email.isnot(None), User.email_notifications == True),
-                    db.and_(User.telegram_chat_id.isnot(None), User.telegram_notifications == True),
-                )
+                db.and_(User.telegram_chat_id.isnot(None), User.telegram_notifications == True)
             ).all()
 
             for user in users:
@@ -283,26 +278,6 @@ def _send_coupon_reminders() -> None:
                             ))
                 if not due:
                     continue
-
-                # Email
-                if has_mail and user.email and user.email_notifications:
-                    lines = "\n".join(f"  {n} ({i}): {v} ₽" for n, i, v in due)
-                    body = (
-                        f"Привет, {user.username}!\n\n"
-                        f"Завтра ({tomorrow}) ожидаются купонные выплаты:\n\n"
-                        + lines
-                        + "\n\nС уважением,\nInvestTrack"
-                    )
-                    msg = Message(
-                        subject=f"InvestTrack: купонные выплаты {tomorrow}",
-                        recipients=[user.email],
-                        body=body,
-                    )
-                    try:
-                        mail.send(msg)
-                        logger.info("Coupon email sent to %s", user.email)
-                    except Exception as send_err:
-                        logger.warning("Email send failed for %s: %s", user.email, send_err)
 
                 # Telegram
                 if has_tg and user.telegram_chat_id and user.telegram_notifications:

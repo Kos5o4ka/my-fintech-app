@@ -323,3 +323,31 @@
 .empty-state-icon svg { width: 22px; height: 22px; color: var(--text-tertiary); }
 .empty-state h6 { font-weight: 600; margin-bottom: .35rem; }
 .empty-state p { font-size: .85rem; color: var(--text-tertiary); margin: 0; }
+
+/* ── Portfolio enhancements ───────────────────────────────── */
+.note-filled {
+  background-color: rgba(16, 185, 129, 0.15) !important;
+  border-color: rgba(16, 185, 129, 0.4) !important;
+}
+
+.summary-row td {
+  font-weight: 500;
+}
+
+.toggle-lots-btn {
+  font-size: 0.72rem;
+  padding: 0.15rem 0.4rem;
+  line-height: 1;
+}
+
+.lots-row {
+  background: var(--surface-1) !important;
+}
+
+.lots-row:hover {
+  background: var(--surface-1) !important;
+}
+
+.lots-row td {
+  padding: 0.5rem 1rem !important;
+}

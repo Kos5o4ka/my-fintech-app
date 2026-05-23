@@ -32,6 +32,7 @@ class Config:
     # Telegram Bot (optional — set TELEGRAM_BOT_TOKEN in .env to enable Telegram features)
     TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
     TELEGRAM_BOT_USERNAME = os.environ.get('TELEGRAM_BOT_USERNAME', 'InvestTrackBot')
+    TELEGRAM_WEBHOOK_SECRET = os.environ.get('TELEGRAM_WEBHOOK_SECRET')
     # Sentry (optional — set SENTRY_DSN to enable error tracking)
     SENTRY_DSN = os.environ.get('SENTRY_DSN')
 

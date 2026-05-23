@@ -25,7 +25,14 @@ window.Common = (function(){
 
     function toggleTheme() {
         const current = document.documentElement.getAttribute('data-bs-theme');
-        setTheme(current === 'dark' ? 'light' : 'dark');
+        const next = current === 'dark' ? 'light' : 'dark';
+        if (document.startViewTransition) {
+            document.startViewTransition(() => {
+                setTheme(next);
+            });
+        } else {
+            setTheme(next);
+        }
     }
 
     function showSystemMessage(msg, isError = false) {

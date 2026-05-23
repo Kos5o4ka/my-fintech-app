@@ -8,8 +8,7 @@ from flask_wtf.csrf import generate_csrf
 
 from extensions import db
 from models import AuditLog
-from services.user_service import save_avatar, update_email_settings, update_telegram_settings
-from schemas.profile import EmailSettingsRequest
+from services.user_service import save_avatar, update_telegram_settings
 
 logger = logging.getLogger(__name__)
 profile_bp = Blueprint("profile", __name__)
@@ -48,22 +47,6 @@ def profile_page():
         except ValueError as exc:
             return jsonify({"status": "error", "message": str(exc)}), 400
     return render_template("profile.html", csrf_token=generate_csrf())
-
-
-# ── Email-уведомления ─────────────────────────────────────────────────────────
-
-@profile_bp.route("/api/profile/email", methods=["POST"])
-@login_required
-def update_email():
-    try:
-        req = EmailSettingsRequest.model_validate(request.get_json() or {})
-    except ValidationError as e:
-        first_error = e.errors()[0]["msg"].replace("Value error, ", "")
-        return jsonify({"status": "error", "message": first_error}), 400
-
-    update_email_settings(current_user, req.email, req.email_notifications)
-    return jsonify({"status": "success", "message": "Настройки уведомлений сохранены."})
-
 
 # ── Telegram — привязка ───────────────────────────────────────────────────────
 

@@ -6,28 +6,25 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-function openDrawer(bondId, notesVal) {
+function openDrawer() {
   document.getElementById('bondDrawer').classList.add('open');
   document.getElementById('drawerOverlay').classList.add('open');
   document.body.style.overflow = 'hidden';
+  
   const notesEl = document.getElementById('bondNotes');
+  if (notesEl) notesEl.value = '';
+  
   const drawerTitle = document.querySelector('.drawer-title');
-  if (bondId) {
-    document.getElementById('bondDrawer').dataset.editId = bondId;
-    if (notesEl) notesEl.value = notesVal || '';
-    if (drawerTitle) drawerTitle.textContent = 'Редактировать заметку';
-    document.getElementById('addBondBtn').textContent = 'Сохранить заметку';
-    document.getElementById('addBondBtn').onclick = saveNoteOnly;
-  } else {
-    delete document.getElementById('bondDrawer').dataset.editId;
-    if (notesEl) notesEl.value = '';
-    if (drawerTitle) drawerTitle.textContent = 'Добавить облигацию';
-    document.getElementById('addBondBtn').textContent = 'Добавить в портфель';
-    document.getElementById('addBondBtn').onclick = function () {
+  if (drawerTitle) drawerTitle.textContent = 'Добавить облигацию';
+  
+  const addBtn = document.getElementById('addBondBtn');
+  if (addBtn) {
+    addBtn.textContent = 'Добавить в портфель';
+    addBtn.onclick = function () {
       document.getElementById('addBondForm').dispatchEvent(new Event('submit', {bubbles: true, cancelable: true}));
     };
-    setTimeout(() => document.getElementById('bondIsin')?.focus(), 350);
   }
+  setTimeout(() => document.getElementById('bondIsin')?.focus(), 350);
 }
 
 function closeDrawer() {
@@ -37,34 +34,6 @@ function closeDrawer() {
 }
 
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
-
-async function saveNoteOnly() {
-  const drawer = document.getElementById('bondDrawer');
-  const bondId = drawer.dataset.editId;
-  if (!bondId) return;
-  const notes = document.getElementById('bondNotes')?.value || '';
-  const btn = document.getElementById('addBondBtn');
-  btn.disabled = true; btn.textContent = 'Сохранение…';
-  try {
-    const res = await window.Common.csrfFetch(`/api/portfolio/${bondId}/notes`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ notes }),
-    });
-    const data = await res.json();
-    if (res.ok) {
-      window.Common.showToast('Заметка сохранена');
-      const noteBtn = document.querySelector(`[data-note-btn="${bondId}"]`);
-      if (noteBtn) noteBtn.title = data.notes ? data.notes : 'Добавить заметку';
-      if (noteBtn) noteBtn.style.opacity = data.notes ? '1' : '0.35';
-      closeDrawer();
-    } else {
-      window.Common.showSystemMessage(data.message || 'Ошибка', true);
-    }
-  } finally {
-    btn.disabled = false; btn.textContent = 'Сохранить заметку';
-  }
-}
 
 function filterBondsTable(q) {
   const rows = document.querySelectorAll('#bonds-table-body tr[data-name]');

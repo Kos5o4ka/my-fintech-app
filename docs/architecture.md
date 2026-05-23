@@ -15,7 +15,6 @@ graph TB
     %% External systems
     MOEX["🏦 MOEX ISS API\nexchange.moex.com\nRESTful JSON API"]
     TelegramAPI["✈️ Telegram Bot API\napi.telegram.org\nWebhook + sendMessage"]
-    SMTP["📧 SMTP-сервер\nEmail-уведомления"]
     Sentry["🔍 Sentry\nError tracking\n(опционально)"]
 
     subgraph Docker["Docker Compose Network"]
@@ -33,12 +32,12 @@ graph TB
 
             Services["⚙️ Services Layer\n──────────────\nportfolio_service.py\nmoex_service.py\nuser_service.py\ntelegram_service.py"]
 
-            Scheduler["⏰ APScheduler\n──────────────\nЦены каждые 60с\nКупоны ежедн. 09:00"]
+            Scheduler["⏰ APScheduler\n──────────────\nЦены каждые 15м\nКупоны ежедн. 09:00"]
         end
 
-        DB[("🗄️ PostgreSQL 16\n(SQLite в dev)\n──────────────\nUser\nBondPortfolio\nWatchlistItem\nAuditLog")]
+        DB[("🗄️ PostgreSQL 16\n(SQLite в dev)\n──────────────\nUser\nBondPortfolio\nWatchlist\nTransaction\nAuditLog")]
 
-        Redis[("⚡ Redis 7\n──────────────\nCache (bond data 5м)\nCache (stats 15м)\nOTP tokens (5м)\nLink tokens (10м)")]
+        Redis[("⚡ Redis 7\n──────────────\nCache (MOEX 15м)\nCache (stats 15м)\nOTP tokens (5м)\nLink tokens (10м)")]
 
         Static["📁 Static Files\nstatic/css/*.min.css\nstatic/js/*.min.js\nstatic/avatars/"]
     end
@@ -61,7 +60,6 @@ graph TB
 
     %% External APIs
     Services -->|"HTTP GET"| MOEX
-    Services -->|"SMTP"| SMTP
     App -.->|"errors + traces"| Sentry
 
     %% Styling
@@ -71,7 +69,7 @@ graph TB
     classDef service fill:#f3e5f5,stroke:#9C27B0,color:#4a148c
     classDef proxy fill:#fce4ec,stroke:#E91E63,color:#880e4f
 
-    class MOEX,TelegramAPI,SMTP,Sentry external
+    class MOEX,TelegramAPI,Sentry external
     class Auth,Portfolio,Profile,Main,Admin,TGBot,Services,Scheduler container
     class DB,Redis db
     class Nginx proxy
@@ -107,7 +105,7 @@ graph LR
 | Validation | `schemas/*.py` | Pydantic v2 валидация входящих данных |
 | Business Logic | `services/*.py` | Расчёты, внешние API, бизнес-правила |
 | Data | `models.py`, `moex.py` | ORM-модели, прямой доступ к MOEX |
-| Infrastructure | `extensions.py`, `config.py` | db, cache, mail, limiter |
+| Infrastructure | `extensions.py`, `config.py` | db, cache, limiter |
 
 ---
 
@@ -237,12 +235,19 @@ sequenceDiagram
 
 ## Кэш-стратегия
 
-| Ключ | TTL | Инвалидация |
-|------|-----|-------------|
-| `bond:{isin}` | 5 мин | При следующем запросе после истечения |
-| `portfolio_stats:{user_id}` | 15 мин | `_bust_user_cache()` при add/sell bond |
-| `otp:{user_id}` | 5 мин | Удаляется при успешной верификации |
-| `link_token:{token}` | 10 мин | Удаляется при успешной привязке |
+| Ключ | TTL | Инвалидация / Описание |
+|------|-----|-------------------------|
+| `moex_bond:{isin}` | 15 мин | Цены и параметры активных облигаций с MOEX ISS. |
+| `bond_preview:{isin}` | 5 мин | Превью цены и деталей облигации для UI добавления. |
+| `portfolio_stats:{user_id}` | 15 мин | `_bust_user_cache()` при add/sell bond. Статистика P&L по месяцам. |
+| `portfolio_income:{user_id}` | 15 мин | `_bust_user_cache()` при add/sell bond. Прогноз купонов. |
+| `bond_chart:{isin}:{range}` | 15 мин / 1 день | История цены для чарта облигации. |
+| `tg_otp:{chat_id}` | 5 мин | Одноразовый OTP код 2FA (сгорает при любой первой проверке). |
+| `tg_link:{token}` | 10 мин | Временный токен deep-link привязки аккаунта в Telegram. |
+| `tg_2fa:{token}` | 5 мин | Pending-сессия входа 2FA. |
+| `benchmark:{range}` | 10 мин | Данные сравнения с RGBI индексом. |
+| `screener:{filters}` | 1 час | Результаты скрининга облигаций на MOEX. |
+| `compare:{isins}:{range}` | 10 мин | Данные нормализованного сравнения двух облигаций. |
 
 Backend: **FileSystemCache** (`.cache/`) по умолчанию, **Redis** при наличии `REDIS_URL`.
 

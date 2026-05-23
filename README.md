@@ -21,18 +21,20 @@
 
 | Функция | Описание |
 |---|---|
-| 📊 **Портфель** | Учёт активных и закрытых позиций, P&L, YTM, брокерская комиссия |
+| 📊 **Портфель** | Учёт активных/закрытых позиций, дюрация и текущие цены MOEX в реальном времени |
 | 📈 **Аналитика** | Нереализованный и реализованный P&L, Sharpe Ratio, бенчмарк RGBI |
 | 💸 **Купонный календарь** | Предстоящие выплаты на 60 дней вперёд, in-app уведомления |
 | 🔎 **Скринер MOEX** | Фильтрация по YTM, дюрации, типу эмитента (ОФЗ / корпоративные / муниципальные) |
 | ⚖️ **Сравнение облигаций** | Нормализованный price chart по двум бумагам за выбранный период |
-| 🧾 **Налоговый отчёт** | НДФЛ 13% по реализованным сделкам за любой год |
-| 📥 **Экспорт** | Портфель и история сделок в Excel (XLSX) и CSV одним кликом |
+| 🧾 **Налоговый отчёт** | НДФЛ 13% по всем реализованным сделкам (с учётом купонов проданных бумаг) |
+| 📥 **Экспорт / Импорт** | Экспорт портфеля в Excel (XLSX) и CSV; импорт брокерских отчётов `.xlsx`/`.csv` с автоопределением столбцов |
 | ⭐ **Вотчлист** | Список наблюдения с актуальными ценами и YTM с MOEX |
-| 🔐 **2FA через Telegram** | Двухфакторная аутентификация — OTP-код в личный бот |
-| 🔔 **Уведомления** | Email за день до купонной выплаты + Telegram-уведомления |
-| 🌓 **Тёмная тема** | Переключение с анти-FOUC и сохранением в localStorage |
+| 🔐 **2FA через Telegram** | Двухфакторная аутентификация — OTP-код в личный бот с мгновенным сгоранием при попытке |
+| 🔔 **Уведомления** | Telegram-уведомления за день до купонной выплаты |
+| 🌓 **Тёмная тема** | Переключение с View Transitions API (сглаженное перетекание) и сохранением в localStorage |
 | 🖨️ **PDF-отчёт** | Отчёт портфеля с Sharpe и налогами через `window.print()` |
+| 🍕 **Частичная продажа** | Поддержка дробного уменьшения лотов с авто-разделением сделок и пересчётом P&L |
+| 📝 **Заметки к позициям** | Возможность добавлять и сохранять подробные текстовые комментарии для каждого лота |
 
 ---
 
@@ -128,10 +130,6 @@ docker compose up -d
 | `REDIS_URL` | — | `redis://localhost:6379/0` (FileSystemCache если не задан) |
 | `TELEGRAM_BOT_TOKEN` | — | Токен бота для 2FA и уведомлений |
 | `TELEGRAM_BOT_USERNAME` | — | `@username` бота без `@` |
-| `MAIL_SERVER` | — | SMTP-сервер для email-уведомлений |
-| `MAIL_PORT` | — | Порт SMTP (обычно 587) |
-| `MAIL_USERNAME` | — | Email отправителя |
-| `MAIL_PASSWORD` | — | Пароль / App Password |
 | `SENTRY_DSN` | — | DSN для Sentry error tracking |
 
 Полный список: [`.env.production.example`](.env.production.example)
@@ -160,13 +158,12 @@ my-fintech-app/
 ├── services/
 │   ├── portfolio_service.py # P&L, YTM, Sharpe, Tax, купонный доход
 │   ├── moex_service.py      # Кэшированный доступ к MOEX
-│   ├── user_service.py      # Аватары (Pillow), email, telegram settings
+│   ├── user_service.py      # Аватары (Pillow), telegram settings
 │   └── telegram_service.py  # Bot API, OTP, deep-link
 │
 ├── schemas/
 │   ├── portfolio.py         # AddBondRequest, SellBondRequest, ScreenerRequest
-│   ├── auth.py              # LoginRequest, ChangePasswordRequest
-│   └── profile.py           # EmailSettingsRequest
+│   └── auth.py              # LoginRequest, ChangePasswordRequest
 │
 ├── templates/               # Jinja2: base, index, dashboard, portfolio, profile, admin
 ├── static/
@@ -178,10 +175,10 @@ my-fintech-app/
 │   ├── test_app.py          # 36 интеграционных тестов
 │   └── test_properties.py   # 17 Hypothesis property-based тестов
 │
-├── bruno/                   # API коллекция Bruno (42 запроса)
+├── bruno/                   # API коллекция Bruno (41 запрос)
 │   ├── auth/                # login, verify_2fa, logout, change_password
 │   ├── portfolio/           # 26 эндпоинтов: CRUD, export, screener, …
-│   ├── profile/             # 7 эндпоинтов: stats, email, telegram
+│   ├── profile/             # 6 эндпоинтов: stats, telegram, activity
 │   ├── admin/               # get_users, add_user, delete_user
 │   └── misc/                # health, init
 │

@@ -106,6 +106,27 @@ services:
       timeout: 3s
       retries: 5
 
+  # ── Telegram Bot (long polling) ─────────────────────────────────────────────
+  tg-bot:
+    build:
+      context: ../investtrack-tg-bot
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:?TELEGRAM_BOT_TOKEN must be set}
+      DATABASE_URL: postgresql://investtrack:${DB_PASSWORD:-investtrack}@db:5432/investtrack
+      CACHE_BACKEND: redis
+      REDIS_URL: redis://redis:6379/0
+      CACHE_KEY_PREFIX: ""
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - internal
+
   # ── Nginx (reverse proxy + static files) ─────────────────────────────────────
   nginx:
     image: nginx:1.27-alpine

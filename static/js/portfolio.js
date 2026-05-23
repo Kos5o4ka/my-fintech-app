@@ -11,11 +11,23 @@ let currentBondNkd = [];
 let currentBondYtm = [];
 let historyLoaded = false;
 let incomeData = {};
+let currentPreviewPrice = null;
 
 // Table sort state
 let bondsData = [];
 let sortKey = null;
 let sortDir = 1; // 1 = ascending, -1 = descending
+
+function getCurrencySymbol(cur) {
+    switch (cur) {
+        case 'USD': return '$';
+        case 'CNY': return '¥';
+        case 'EUR': return '€';
+        case 'GLD': return 'г';
+        case 'RUB':
+        default: return '₽';
+    }
+}
 
 // Set today's date as default
 document.getElementById('bondDate').value = new Date().toISOString().split('T')[0];
@@ -144,10 +156,9 @@ function _updateSortIndicators() {
     });
 }
 
-// ── Skeleton rows ─────────────────────────────────────────────────────────────
-function _skeletonRows(cols = 8, rows = 4) {
+function _skeletonRows(cols = 9, rows = 4) {
     let html = '';
-    const widths = ['60%', '30%', '20%', '25%', '20%', '20%', '30%', '15%'];
+    const widths = ['60%', '30%', '20%', '25%', '20%', '20%', '20%', '30%', '15%'];
     for (let r = 0; r < rows; r++) {
         html += '<tr>';
         for (let c = 0; c < cols; c++) {
@@ -187,7 +198,7 @@ function renderBondRows() {
     tbody.innerHTML = '';
 
     if (!bondsData.length) {
-        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-5">
+        tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-5">
             <div style="font-size:2.5rem;opacity:.2;line-height:1">📊</div>
             <div class="fw-semibold mt-2 mb-1">Портфель пуст</div>
             <small class="text-secondary">Найдите облигацию по ISIN или названию и добавьте первую позицию.</small>
@@ -195,56 +206,205 @@ function renderBondRows() {
         return;
     }
 
-    // Apply sort
-    let sorted = [...bondsData];
+    // Group active bonds by ISIN
+    const grouped = {};
+    bondsData.forEach(bond => {
+        if (!grouped[bond.isin]) {
+            grouped[bond.isin] = {
+                isin: bond.isin,
+                name: bond.name,
+                currency: bond.currency || 'RUB',
+                lots: [],
+                total_amount: 0,
+                total_cost: 0,
+                total_pnl: 0,
+                nkd: bond.nkd || 0,
+                ytm: bond.ytm || 0,
+                last_price: bond.last_price || bond.buy_price
+            };
+        }
+        const g = grouped[bond.isin];
+        g.lots.push(bond);
+        g.total_amount += bond.amount;
+        g.total_cost += bond.buy_price * bond.amount;
+        g.total_pnl += bond.pnl || 0;
+    });
+
+    // Apply sorting on grouped items
+    let sorted = Object.values(grouped);
     if (sortKey) {
         sorted.sort((a, b) => {
-            let va = a[sortKey], vb = b[sortKey];
-            if (typeof va === 'string') { va = va.toLowerCase(); vb = (vb || '').toLowerCase(); }
+            let key = sortKey;
+            let va = a[key];
+            let vb = b[key];
+            if (key === 'amount') {
+                va = a.total_amount;
+                vb = b.total_amount;
+            } else if (key === 'buy_price') {
+                va = a.total_amount ? (a.total_cost / a.total_amount) : 0;
+                vb = b.total_amount ? (b.total_cost / b.total_amount) : 0;
+            } else if (key === 'pnl') {
+                va = a.total_pnl;
+                vb = b.total_pnl;
+            }
+            if (typeof va === 'string') {
+                va = va.toLowerCase();
+                vb = (vb || '').toLowerCase();
+            }
             return (va < vb ? -1 : va > vb ? 1 : 0) * sortDir;
         });
     }
 
     const esc = window.Common.escapeHtml;
-    sorted.forEach(bond => {
-        const pnl = bond.pnl ?? 0;
-        const pnlPct = bond.pnl_pct ?? 0;
-        const pnlClass = pnl >= 0 ? 'text-success' : 'text-danger';
-        const sign = pnl >= 0 ? '+' : '';
+    
+    function getLotLabel(count) {
+        if (count % 10 === 1 && count % 100 !== 11) {
+            return `${count} лот`;
+        } else if ([2, 3, 4].includes(count % 10) && ![12, 13, 14].includes(count % 100)) {
+            return `${count} лота`;
+        } else {
+            return `${count} лотов`;
+        }
+    }
+
+    sorted.forEach(g => {
+        const avgBuyPrice = g.total_amount ? (g.total_cost / g.total_amount) : 0;
+        const pnlPct = g.total_cost ? (g.total_pnl / g.total_cost * 100) : 0;
+        const pnlClass = g.total_pnl >= 0 ? 'text-success' : 'text-danger';
+        const sign = g.total_pnl >= 0 ? '+' : '';
+        const sym = getCurrencySymbol(g.currency || 'RUB');
 
         tbody.innerHTML += `
-            <tr data-name="${esc(bond.name)}" data-isin="${esc(bond.isin)}">
-                <td data-label="Название"><b>${esc(bond.name)}</b></td>
-                <td data-label="ISIN"><b class="isin-link" onclick="openBondChart(this.dataset.isin)"
-                        data-isin="${esc(bond.isin)}">${esc(bond.isin)}</b></td>
-                <td data-label="Кол-во">${bond.amount} шт.</td>
-                <td data-label="Цена покупки">${bond.buy_price.toFixed(2)} ₽</td>
-                <td data-label="НКД" class="text-primary"><b>${(bond.nkd || 0).toFixed(2)} ₽</b></td>
-                <td data-label="YTM" class="text-info"><b>${(bond.ytm || 0).toFixed(2)} %</b></td>
-                <td data-label="P&L" class="${pnlClass}" title="Нереализованная прибыль/убыток">
-                    <b>${sign}${pnl.toFixed(2)} ₽</b><br>
+            <tr class="summary-row" data-name="${esc(g.name)}" data-isin="${esc(g.isin)}">
+                <td data-label="Название"><b>${esc(g.name)}</b></td>
+                <td data-label="ISIN">
+                    <b class="isin-link" onclick="openBondChart(this.dataset.isin)" data-isin="${esc(g.isin)}">${esc(g.isin)}</b>
+                </td>
+                <td data-label="Кол-во">${g.total_amount} шт.</td>
+                <td data-label="Цена покупки">${avgBuyPrice.toFixed(2)} ${sym}</td>
+                <td data-label="Текущая цена">${g.last_price.toFixed(2)} ${sym}</td>
+                <td data-label="НКД" class="text-primary"><b>${g.nkd.toFixed(2)} ${sym}</b></td>
+                <td data-label="YTM" class="text-info"><b>${g.ytm.toFixed(2)} %</b></td>
+                <td data-label="P&L" class="${pnlClass}">
+                    <b>${sign}${g.total_pnl.toFixed(2)} ₽</b><br>
                     <small>${sign}${pnlPct.toFixed(2)}%</small>
                 </td>
-                <td style="white-space:nowrap">
-                    <button
-                        onclick="sellTrigger(parseInt(this.dataset.id), this.dataset.name, parseFloat(this.dataset.price), parseFloat(this.dataset.buyPrice), parseInt(this.dataset.amount))"
-                        data-id="${bond.id}"
-                        data-name="${esc(bond.name)}"
-                        data-price="${bond.last_price || bond.buy_price}"
-                        data-buy-price="${bond.buy_price}"
-                        data-amount="${bond.amount}"
-                        class="btn btn-sm btn-outline-success">Продать</button>
-                    <button
-                        data-note-btn="${bond.id}"
-                        title="${esc(bond.notes || 'Добавить заметку')}"
-                        onclick="openDrawer(${bond.id}, ${JSON.stringify(bond.notes || '')})"
-                        class="btn btn-sm btn-outline-secondary ms-1"
-                        style="opacity:${bond.notes ? '1' : '0.35'}"
-                        aria-label="Заметка">📝</button>
+                <td>
+                    <button class="btn btn-xs btn-outline-info toggle-lots-btn" data-isin="${esc(g.isin)}" onclick="toggleLots('${esc(g.isin)}')">
+                        ${getLotLabel(g.lots.length)} ▾
+                    </button>
                 </td>
-            </tr>`;
+            </tr>
+            <tr class="lots-row d-none" id="lots-${esc(g.isin)}">
+                <td colspan="9" class="p-3 bg-light-subtle">
+                    <div class="card card-body shadow-sm py-2 px-3 border border-subtle">
+                        <table class="table table-sm table-borderless mb-0 align-middle" style="font-size: 0.8rem;">
+                            <thead>
+                                <tr class="text-secondary border-bottom border-subtle" style="font-size: 0.72rem;">
+                                    <th>Дата покупки</th>
+                                    <th>Кол-во</th>
+                                    <th>Цена покупки</th>
+                                    <th>Текущая цена</th>
+                                    <th>P&L</th>
+                                    <th>Заметка</th>
+                                    <th class="text-end">Действия</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${g.lots.map(lot => {
+                                    const lotPnl = lot.pnl ?? 0;
+                                    const lotPnlPct = lot.pnl_pct ?? 0;
+                                    const lotPnlClass = lotPnl >= 0 ? 'text-success' : 'text-danger';
+                                    const lotSign = lotPnl >= 0 ? '+' : '';
+                                    const lotSym = getCurrencySymbol(lot.currency || 'RUB');
+                                    return `
+                                        <tr style="border-bottom: 1px solid rgba(var(--accent-rgb), 0.05);">
+                                            <td>${esc(lot.purchase_date || '—')}</td>
+                                            <td>${lot.amount} шт.</td>
+                                            <td>${lot.buy_price.toFixed(2)} ${lotSym}</td>
+                                            <td>${(lot.last_price || lot.buy_price).toFixed(2)} ${lotSym}</td>
+                                            <td class="${lotPnlClass}">
+                                                <b>${lotSign}${lotPnl.toFixed(2)} ₽</b> (${lotSign}${lotPnlPct.toFixed(2)}%)
+                                            </td>
+                                            <td>
+                                                <span class="text-truncate d-inline-block" style="max-width: 120px;" title="${esc(lot.notes || '')}">
+                                                    ${esc(lot.notes || '—')}
+                                                </span>
+                                            </td>
+                                            <td class="text-end">
+                                                <button onclick="sellTrigger(${lot.id}, '${esc(lot.name)}', ${lot.last_price || lot.buy_price}, ${lot.buy_price}, ${lot.amount})" class="btn btn-xs btn-outline-success py-0 px-2">Продать</button>
+                                                <button data-note-btn="${lot.id}" title="${esc(lot.notes || 'Добавить заметку')}" onclick="openNotesModal(${lot.id}, ${JSON.stringify(lot.notes || '')})" class="btn btn-xs btn-outline-secondary ms-1 py-0 px-2 ${lot.notes ? 'note-filled' : ''}">📝</button>
+                                            </td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </td>
+            </tr>
+        `;
     });
 }
+
+window.toggleLots = function(isin) {
+    const row = document.getElementById(`lots-${isin}`);
+    const btn = document.querySelector(`.toggle-lots-btn[data-isin="${isin}"]`);
+    if (!row || !btn) return;
+    if (row.classList.contains('d-none')) {
+        row.classList.remove('d-none');
+        btn.innerHTML = btn.innerHTML.replace('▾', '▴');
+    } else {
+        row.classList.add('d-none');
+        btn.innerHTML = btn.innerHTML.replace('▴', '▾');
+    }
+};
+
+let notesModal = null;
+window.openNotesModal = function(bondId, currentNotes) {
+    document.getElementById('modalNoteText').value = currentNotes || '';
+    const saveBtn = document.getElementById('saveModalNoteBtn');
+    
+    const newSaveBtn = saveBtn.cloneNode(true);
+    saveBtn.parentNode.replaceChild(newSaveBtn, saveBtn);
+    
+    newSaveBtn.addEventListener('click', async () => {
+        const notes = document.getElementById('modalNoteText').value;
+        newSaveBtn.disabled = true;
+        newSaveBtn.textContent = 'Сохранение...';
+        try {
+            const res = await window.Common.csrfFetch(`/api/portfolio/${bondId}/notes`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ notes }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                window.Common.showToast('Заметка сохранена');
+                await fetchActivePortfolio();
+                if (notesModal) notesModal.hide();
+            } else {
+                window.Common.showSystemMessage(data.message || 'Ошибка', true);
+            }
+        } finally {
+            newSaveBtn.disabled = false;
+            newSaveBtn.textContent = 'Сохранить';
+        }
+    });
+
+    if (!notesModal) {
+        notesModal = new bootstrap.Modal(document.getElementById('notesModal'));
+    }
+    notesModal.show();
+};
+
+let currentTxType = '';
+window.setHistoryTxType = function(txType, btn) {
+    currentTxType = txType;
+    document.querySelectorAll('#historyTxTypeGroup .btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    fetchTradeHistory();
+};
 
 // ── Trade history ─────────────────────────────────────────────────────────────
 function loadHistoryIfNeeded() {
@@ -258,12 +418,14 @@ async function fetchTradeHistory(dateFrom = '', dateTo = '') {
     const loading = document.getElementById('history-loading');
     const tbody = document.getElementById('history-table-body');
     if (loading) loading.style.display = 'block';
-    tbody.innerHTML = _skeletonRows(8, 3);
+    tbody.innerHTML = _skeletonRows(9, 3);
 
     try {
         const params = new URLSearchParams();
         if (dateFrom) params.set('date_from', dateFrom);
         if (dateTo) params.set('date_to', dateTo);
+        params.set('tx_type', currentTxType);
+        
         const url = '/api/portfolio/history' + (params.toString() ? '?' + params.toString() : '');
         const response = await fetch(url);
         if (!response.ok) return;
@@ -271,7 +433,7 @@ async function fetchTradeHistory(dateFrom = '', dateTo = '') {
         tbody.innerHTML = '';
 
         if (!data.trades || data.trades.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">
+            tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-4">
                 ${dateFrom || dateTo ? 'Нет сделок за выбранный период.' : 'История сделок пуста.'}
             </td></tr>`;
             return;
@@ -279,18 +441,28 @@ async function fetchTradeHistory(dateFrom = '', dateTo = '') {
 
         const esc = window.Common.escapeHtml;
         data.trades.forEach(t => {
-            const pnlClass = t.pnl >= 0 ? 'text-success' : 'text-danger';
+            const pnlClass = t.tx_type === 'sell' ? (t.pnl >= 0 ? 'text-success' : 'text-danger') : 'text-secondary';
             const sign = t.pnl >= 0 ? '+' : '';
+            const typeBadge = t.tx_type === 'buy' 
+                ? '<span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size:0.7rem">Покупка</span>'
+                : '<span class="badge bg-warning-subtle text-warning border border-warning-subtle" style="font-size:0.7rem">Продажа</span>';
+            
+            const pnlStr = t.tx_type === 'sell' ? `<b>${sign}${t.pnl.toFixed(2)} ₽</b>` : '—';
+            const pnlPctStr = t.tx_type === 'sell' ? `<b>${sign}${t.pnl_pct.toFixed(2)}%</b>` : '—';
+            const dateStr = t.tx_type === 'sell' ? esc(t.sell_date || '—') : esc(t.purchase_date || '—');
+            const sellPriceStr = t.tx_type === 'sell' ? `${t.sell_price.toFixed(2)} ₽` : '—';
+
             tbody.innerHTML += `
                 <tr>
                     <td><b>${esc(t.name)}</b></td>
                     <td><small class="text-muted">${esc(t.isin)}</small></td>
+                    <td>${typeBadge}</td>
                     <td>${t.amount} шт.</td>
                     <td>${t.buy_price.toFixed(2)} ₽</td>
-                    <td>${t.sell_price.toFixed(2)} ₽</td>
-                    <td class="${pnlClass}"><b>${sign}${t.pnl.toFixed(2)} ₽</b></td>
-                    <td class="${pnlClass}"><b>${sign}${t.pnl_pct.toFixed(2)}%</b></td>
-                    <td><small>${esc(t.sell_date || '—')}</small></td>
+                    <td>${sellPriceStr}</td>
+                    <td class="${pnlClass}">${pnlStr}</td>
+                    <td class="${pnlClass}">${pnlPctStr}</td>
+                    <td><small>${dateStr}</small></td>
                 </tr>`;
         });
     } finally {
@@ -319,11 +491,18 @@ async function fetchBondPreview(isin) {
         const d = await res.json();
         if (d.status !== 'ok') { hideBondPreview(); return; }
 
+        const cur = d.currency || 'RUB';
+        const sym = getCurrencySymbol(cur);
+
         document.getElementById('previewName').textContent = d.name || isin;
-        document.getElementById('previewPrice').textContent = d.price != null ? d.price.toFixed(2) + ' ₽' : '—';
+        document.getElementById('previewPrice').textContent = d.price != null ? d.price.toFixed(2) + ' ' + sym : '—';
         document.getElementById('previewYtm').textContent = d.ytm != null ? d.ytm.toFixed(2) + ' %' : '—';
         document.getElementById('previewMatdate').textContent = d.matdate || '—';
-        document.getElementById('previewNkd').textContent = d.nkd != null ? d.nkd.toFixed(2) + ' ₽' : '—';
+        document.getElementById('previewNkd').textContent = d.nkd != null ? d.nkd.toFixed(2) + ' ' + sym : '—';
+
+        // Update currency label next to buy price field
+        const labelEl = document.getElementById('buyPriceCurrencyLabel');
+        if (labelEl) labelEl.textContent = sym;
 
         let couponText = '—';
         if (d.coupon_pct != null) {
@@ -334,11 +513,20 @@ async function fetchBondPreview(isin) {
 
         document.getElementById('bondPreview').style.display = 'block';
 
-        // Auto-fill buy price if the field is empty or previously auto-filled
+        // Store current market price for checkbox prefill
+        currentPreviewPrice = d.price != null ? d.price : null;
+
+        // If checkbox is checked — auto-fill price from market
+        const checkbox = document.getElementById('bondUseMarketPrice');
         const priceField = document.getElementById('bondBuyPrice');
-        if (d.price != null && (!priceField.value || priceField.dataset.autofilled === 'true')) {
-            priceField.value = d.price.toFixed(2);
+        if (checkbox && checkbox.checked && currentPreviewPrice != null) {
+            priceField.value = currentPreviewPrice.toFixed(2);
             priceField.dataset.autofilled = 'true';
+        } else if (!priceField.value || priceField.dataset.autofilled === 'true') {
+            if (currentPreviewPrice != null) {
+                priceField.value = currentPreviewPrice.toFixed(2);
+                priceField.dataset.autofilled = 'true';
+            }
         }
     } catch (_) {
         hideBondPreview();
@@ -347,7 +535,36 @@ async function fetchBondPreview(isin) {
 
 function hideBondPreview() {
     document.getElementById('bondPreview').style.display = 'none';
+    currentPreviewPrice = null;
+    const labelEl = document.getElementById('buyPriceCurrencyLabel');
+    if (labelEl) labelEl.textContent = '₽';
 }
+
+// Checkbox: Использовать текущую рыночную цену
+(function setupMarketPriceCheckbox() {
+    const checkbox = document.getElementById('bondUseMarketPrice');
+    const priceField = document.getElementById('bondBuyPrice');
+    if (!checkbox || !priceField) return;
+
+    checkbox.addEventListener('change', () => {
+        if (checkbox.checked && currentPreviewPrice != null) {
+            priceField.value = currentPreviewPrice.toFixed(2);
+            priceField.dataset.autofilled = 'true';
+            priceField.readOnly = true;
+        } else {
+            priceField.readOnly = false;
+        }
+    });
+
+    // If user manually edits price — uncheck the checkbox
+    priceField.addEventListener('input', () => {
+        if (checkbox.checked) {
+            checkbox.checked = false;
+            priceField.readOnly = false;
+        }
+        priceField.dataset.autofilled = '';
+    });
+})();
 
 // ── Add bond form ─────────────────────────────────────────────────────────────
 document.getElementById('addBondForm').addEventListener('submit', async (e) => {
@@ -360,12 +577,13 @@ document.getElementById('addBondForm').addEventListener('submit', async (e) => {
     const amount = document.getElementById('bondAmount').value;
     const buy_price = document.getElementById('bondBuyPrice').value;
     const purchase_date = document.getElementById('bondDate').value;
+    const notes = document.getElementById('bondNotes')?.value || '';
 
     try {
         const response = await window.Common.csrfFetch('/api/add_bond', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ isin, amount, buy_price, purchase_date })
+            body: JSON.stringify({ isin, amount, buy_price, purchase_date, notes })
         });
         const data = await response.json();
 
@@ -532,17 +750,26 @@ function showIncome(period, btn) {
 
 // ── Sell modal ────────────────────────────────────────────────────────────────
 function sellTrigger(bondId, name, sellPrice, buyPrice, amount) {
-    const nameEl  = document.getElementById('sellModalBondName');
-    const priceEl = document.getElementById('sellPriceInput');
-    const commEl  = document.getElementById('sellCommissionInput');
-    if (nameEl)  nameEl.textContent = name;
-    if (priceEl) priceEl.value = sellPrice.toFixed(2);
-    if (commEl)  commEl.value = '';
+    const nameEl   = document.getElementById('sellModalBondName');
+    const priceEl  = document.getElementById('sellPriceInput');
+    const commEl   = document.getElementById('sellCommissionInput');
+    const amountEl = document.getElementById('sellAmountInput');
+    const hintEl   = document.getElementById('sellMaxAmountHint');
+
+    if (nameEl)   nameEl.textContent = name;
+    if (priceEl)  priceEl.value = sellPrice.toFixed(2);
+    if (commEl)   commEl.value = '';
+    if (amountEl) {
+        amountEl.value = amount;
+        amountEl.max = amount;
+        amountEl.min = 1;
+    }
+    if (hintEl) hintEl.textContent = `Доступно: ${amount} шт.`;
 
     function updatePnlPreview() {
         const sp = parseFloat(priceEl?.value) || 0;
         const comm = parseFloat(commEl?.value) || 0;
-        const qty = amount || 1;
+        const qty = parseFloat(amountEl?.value) || amount || 1;
         const pnl = (sp - (buyPrice || sp)) * qty - comm;
         const pct = buyPrice ? ((sp - buyPrice) / buyPrice * 100) : 0;
         const el = document.getElementById('sellPnlPreview');
@@ -554,6 +781,7 @@ function sellTrigger(bondId, name, sellPrice, buyPrice, amount) {
 
     priceEl?.addEventListener('input', updatePnlPreview);
     commEl?.addEventListener('input', updatePnlPreview);
+    amountEl?.addEventListener('input', updatePnlPreview);
     updatePnlPreview();
 
     if (!sellModal) sellModal = new bootstrap.Modal(document.getElementById('sellModal'));
@@ -565,13 +793,19 @@ function sellTrigger(bondId, name, sellPrice, buyPrice, amount) {
     newBtn.addEventListener('click', async () => {
         const price = parseFloat(document.getElementById('sellPriceInput').value);
         const comm  = parseFloat(document.getElementById('sellCommissionInput').value) || 0;
+        const qty   = parseInt(document.getElementById('sellAmountInput').value, 10);
+
         if (isNaN(price) || price <= 0) return;
+        if (isNaN(qty) || qty <= 0 || qty > amount) {
+            window.Common.showToast(`Укажите количество от 1 до ${amount} шт.`, true);
+            return;
+        }
 
         sellModal.hide();
         const response = await window.Common.csrfFetch(`/api/sell_bond/${bondId}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sell_price: price, broker_commission: comm || null })
+            body: JSON.stringify({ sell_price: price, broker_commission: comm || null, amount: qty })
         });
         const data = await response.json();
         if (response.ok) {
@@ -729,6 +963,89 @@ async function addScreenerToWatchlist(isin) {
     window.Common.showToast(data.message, !res.ok && res.status !== 409);
     if (res.ok) { watchlistLoaded = false; }
 }
+
+// ── Broker report import ───────────────────────────────────────────────────────
+(function setupImportForm() {
+    const form = document.getElementById('importBrokerForm');
+    if (!form) return;
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const fileInput = document.getElementById('importFile');
+        const submitBtn = document.getElementById('importSubmitBtn');
+        const resultDiv = document.getElementById('importResult');
+        const successAlert = document.getElementById('importSuccessAlert');
+        const successTitle = document.getElementById('importSuccessTitle');
+        const successMsg = document.getElementById('importSuccessMsg');
+        const errorAlert = document.getElementById('importErrorAlert');
+        const errorList = document.getElementById('importErrorList');
+
+        if (!fileInput.files.length) return;
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Импорт…';
+        resultDiv.style.display = 'none';
+        successAlert.style.display = 'none';
+        errorAlert.style.display = 'none';
+
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+
+        try {
+            // csrfFetch doesn't set Content-Type for FormData — browser sets it with boundary automatically
+            const csrfToken = (() => {
+                const raw = document.cookie.split(';').find(c => c.trim().startsWith('XSRF-TOKEN='));
+                if (!raw) return null;
+                try { return decodeURIComponent(raw.split('=')[1]); } catch { return raw.split('=')[1]; }
+            })();
+
+            const headers = {};
+            if (csrfToken) {
+                headers['X-CSRFToken'] = csrfToken;
+                headers['X-CSRF-Token'] = csrfToken;
+            }
+
+            const res = await fetch('/api/portfolio/import', {
+                method: 'POST',
+                headers,
+                credentials: 'same-origin',
+                body: formData,
+            });
+
+            const data = await res.json();
+            resultDiv.style.display = 'block';
+
+            if (res.ok) {
+                successAlert.style.display = '';
+                successTitle.textContent = 'Успешно!';
+                successMsg.textContent = data.message || `Импортировано ${data.imported_count ?? 0} сделок.`;
+
+                const skipped = data.errors || [];
+                if (skipped.length) {
+                    errorAlert.style.display = '';
+                    errorList.innerHTML = skipped.map(s => `<li>${window.Common.escapeHtml(s)}</li>`).join('');
+                }
+
+                historyLoaded = false;
+                await loadDashboard();
+            } else {
+                successAlert.style.display = 'none';
+                errorAlert.style.display = '';
+                const errors = data.errors || (data.message ? [data.message] : ['Неизвестная ошибка']);
+                errorList.innerHTML = errors.map(s => `<li>${window.Common.escapeHtml(String(s))}</li>`).join('');
+            }
+        } catch (err) {
+            resultDiv.style.display = 'block';
+            successAlert.style.display = 'none';
+            errorAlert.style.display = '';
+            errorList.innerHTML = `<li>${window.Common.escapeHtml(String(err))}</li>`;
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Загрузить и импортировать';
+        }
+    });
+})();
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 loadDashboard();

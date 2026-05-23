@@ -113,12 +113,7 @@
           <span class="info-label">Роль</span>
           <span class="info-value">{% if current_user.is_admin %}Администратор{% else %}Инвестор{% endif %}</span>
         </div>
-        <div class="info-row">
-          <span class="info-label">Email</span>
-          <span class="info-value" style="color:{% if current_user.email %}var(--text-primary){% else %}var(--text-tertiary){% endif %}">
-            {{ current_user.email or 'Не указан' }}
-          </span>
-        </div>
+
       </div>
 
       <div class="prf-section-label" style="margin-top:1.75rem">Сессия</div>
@@ -175,36 +170,6 @@
   <div class="prf-panel" id="prf-panel-2">
     <div style="max-width:500px">
 
-      <div class="prf-section-label">Email-уведомления</div>
-      <div class="card" style="border-radius:var(--radius)">
-        <div class="card-body p-4">
-          <form id="emailNotifForm">
-            <div class="prf-field">
-              <label for="emailInput">Email-адрес</label>
-              <input type="email" id="emailInput" class="form-control"
-                     placeholder="you@example.com" autocomplete="email"
-                     value="{{ current_user.email or '' }}">
-            </div>
-
-            <div class="notif-row">
-              <div class="notif-info">
-                <div class="notif-title">Купонные напоминания</div>
-                <div class="notif-desc">Уведомление за день до выплаты купона</div>
-              </div>
-              <label class="toggle-switch ms-3">
-                <input type="checkbox" id="notifCheck"
-                       {% if current_user.email_notifications %}checked{% endif %}>
-                <span class="toggle-track"></span>
-              </label>
-            </div>
-
-            <button type="submit" id="saveEmailBtn" class="btn btn-primary w-100 mt-3"
-                    style="border-radius:var(--radius-sm)">
-              Сохранить настройки
-            </button>
-          </form>
-        </div>
-      </div>
 
       {# ── Telegram-бот ──────────────────────────────────────────── #}
       <div class="prf-section-label mt-4">Telegram-бот</div>

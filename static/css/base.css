@@ -14,3 +14,12 @@
   35%,75% { transform: translateX(7px); }
 }
 .form-shake { animation: formShake .42s cubic-bezier(.36,.07,.19,.97) both; }
+
+/* ── Smooth Theme Transition fallback ───────────────────────── */
+body, .app-sidebar, .app-main, .card, .modal-content, .list-group-item, .metric-card, .pf-card, .pf-stat {
+  transition: background-color var(--dur-base) var(--ease-base),
+              color var(--dur-base) var(--ease-base),
+              border-color var(--dur-base) var(--ease-base),
+              box-shadow var(--dur-base) var(--ease-base);
+}
+

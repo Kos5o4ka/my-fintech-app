@@ -1,7 +1,7 @@
 """Blueprint Telegram-бота — webhook для обработки команд от бота."""
 import logging
 
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, abort
 
 from extensions import db
 from models import User
@@ -13,16 +13,21 @@ telegram_bp = Blueprint("telegram", __name__)
 
 
 @telegram_bp.route("/api/telegram/webhook", methods=["POST"])
-def webhook():
+@telegram_bp.route("/api/telegram/webhook/<secret>", methods=["POST"])
+def webhook(secret=None):
     """Обрабатывает входящие обновления от Telegram.
 
     Эндпоинт освобождён от CSRF — Telegram не отправляет CSRF-токен.
-    Безопасность обеспечивается секретным путём (TELEGRAM_WEBHOOK_SECRET в URL)
-    или проверкой IP Telegram-серверов.
+    Безопасность обеспечивается секретным токеном в URL.
     """
     # Проверяем, что токен в конфиге задан
     if not current_app.config.get("TELEGRAM_BOT_TOKEN"):
         return jsonify({"ok": False}), 503
+
+    # Проверка секретного ключа вебхука для защиты от спуфинга
+    expected_secret = current_app.config.get("TELEGRAM_WEBHOOK_SECRET")
+    if expected_secret and secret != expected_secret:
+        abort(403)
 
     update = request.get_json(silent=True) or {}
     message = update.get("message") or update.get("edited_message")
