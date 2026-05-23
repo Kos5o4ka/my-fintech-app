@@ -65,6 +65,34 @@
 </div>
 {% endblock %}
 
+{# ── Password change modal ──────────────────────────────────────── #}
+<div class="modal fade" id="changePwModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title fw-semibold">Смена пароля: <span id="changePwUsername"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Новый пароль</label>
+          <input type="password" id="changePwNew" class="form-control"
+                 placeholder="Минимум 8 символов" minlength="8" autocomplete="new-password">
+        </div>
+        <div class="mb-1">
+          <label class="form-label">Подтверждение</label>
+          <input type="password" id="changePwConfirm" class="form-control"
+                 placeholder="Повторите пароль" autocomplete="new-password">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+        <button class="btn btn-primary" id="changePwSubmitBtn">Сохранить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/admin.min.js') }}" defer></script>
 {% endblock %}

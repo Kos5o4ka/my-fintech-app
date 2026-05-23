@@ -6,7 +6,8 @@ from flask_login import login_required, current_user
 from werkzeug.security import generate_password_hash
 
 from extensions import db, limiter
-from models import User
+from models import User, AuditLog
+from constants import MIN_PASSWORD_LEN
 
 logger = logging.getLogger(__name__)
 admin_bp = Blueprint("admin", __name__)
@@ -97,3 +98,38 @@ def delete_user(user_id):
     db.session.delete(user_to_delete)
     db.session.commit()
     return jsonify({"status": "success", "message": f"Пользователь {user_to_delete.username} удален."})
+
+
+@admin_bp.route("/api/admin/change_password/<int:user_id>", methods=["POST"])
+@login_required
+@limiter.limit("20 per hour")
+def admin_change_password(user_id):
+    if not current_user.is_admin:
+        abort(403)
+
+    target = db.session.get(User, user_id)
+    if target is None:
+        abort(404)
+
+    if target.username == "root":
+        return jsonify({"status": "error", "message": "Пароль root-пользователя изменить нельзя."}), 403
+
+    data = request.get_json() or {}
+    new_password = data.get("new_password", "").strip()
+
+    if not new_password or len(new_password) < MIN_PASSWORD_LEN:
+        return jsonify(
+            {"status": "error", "message": f"Пароль должен содержать минимум {MIN_PASSWORD_LEN} символов."}
+        ), 400
+
+    target.password_hash = generate_password_hash(new_password)
+    log = AuditLog(
+        action="admin_change_password",
+        user_id=current_user.id,
+        ip_address=(request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or request.remote_addr or ""),
+        user_agent=(request.headers.get("User-Agent") or "")[:255],
+        details=f"target_user_id={target.id} target_username={target.username}",
+    )
+    db.session.add(log)
+    db.session.commit()
+    return jsonify({"status": "success", "message": f"Пароль пользователя «{target.username}» успешно изменён."})
