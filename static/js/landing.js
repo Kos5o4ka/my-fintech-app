@@ -1,0 +1,107 @@
+document.addEventListener('DOMContentLoaded', () => {
+  // ── Visit counter ─────────────────────────────────────────────────
+  fetch('/api/init').then(r => r.json()).then(d => {
+    const v = Number(d.visits).toLocaleString('ru-RU');
+    const el = document.getElementById('global-visits');
+    const el2 = document.getElementById('stats-visits');
+    if (el) el.textContent = v;
+    if (el2) el2.textContent = v;
+  }).catch(() => {});
+
+  // ── Login form ────────────────────────────────────────────────────
+  const loginForm = document.getElementById('uiLoginForm');
+  const loginBtn  = document.getElementById('loginBtn');
+  const form2fa   = document.getElementById('ui2faForm');
+  const otpBtn    = document.getElementById('otpBtn');
+  const backBtn   = document.getElementById('backToLoginBtn');
+  const subText   = document.getElementById('loginSubText');
+  let pending2faToken = null;
+
+  function showLoginStep() {
+    loginForm.style.display = '';
+    form2fa.style.display   = 'none';
+    subText.textContent     = 'Войдите, чтобы открыть портфель';
+    loginBtn.disabled       = false;
+    loginBtn.textContent    = 'Войти →';
+    pending2faToken         = null;
+  }
+
+  function show2faStep() {
+    loginForm.style.display = 'none';
+    form2fa.style.display   = '';
+    subText.textContent     = 'Двухфакторная аутентификация';
+    document.getElementById('otpCode').value = '';
+    document.getElementById('otpCode').focus();
+  }
+
+  loginForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    loginBtn.disabled = true;
+    loginBtn.textContent = 'Входим…';
+
+    try {
+      const res = await window.Common.csrfFetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: document.getElementById('loginUsername').value,
+          password: document.getElementById('loginPassword').value,
+        }),
+      });
+      const data = await res.json();
+
+      if (data.status === '2fa_required') {
+        pending2faToken = data.token;
+        show2faStep();
+        window.Common.showToast(data.message || 'Код отправлен в Telegram');
+      } else if (res.ok && data.status === 'success') {
+        loginBtn.textContent = '✓ Вход…';
+        window.location.href = '/dashboard';
+      } else {
+        loginBtn.disabled = false;
+        loginBtn.textContent = 'Войти →';
+        window.Common.showSystemMessage(data.message || 'Ошибка входа', true);
+        loginForm.classList.add('animate-shake');
+        setTimeout(() => loginForm.classList.remove('animate-shake'), 500);
+      }
+    } catch {
+      loginBtn.disabled = false;
+      loginBtn.textContent = 'Войти →';
+    }
+  });
+
+  // ── 2FA form ──────────────────────────────────────────────────────
+  form2fa.addEventListener('submit', async e => {
+    e.preventDefault();
+    otpBtn.disabled = true;
+    otpBtn.textContent = 'Проверяем…';
+
+    try {
+      const res = await window.Common.csrfFetch('/api/auth/verify_2fa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: pending2faToken,
+          code:  document.getElementById('otpCode').value.trim(),
+        }),
+      });
+      const data = await res.json();
+
+      if (res.ok && data.status === 'success') {
+        otpBtn.textContent = '✓ Вход…';
+        window.location.href = '/dashboard';
+      } else {
+        otpBtn.disabled = false;
+        otpBtn.textContent = 'Подтвердить →';
+        window.Common.showSystemMessage(data.message || 'Неверный код', true);
+        form2fa.classList.add('animate-shake');
+        setTimeout(() => form2fa.classList.remove('animate-shake'), 500);
+      }
+    } catch {
+      otpBtn.disabled = false;
+      otpBtn.textContent = 'Подтвердить →';
+    }
+  });
+
+  backBtn.addEventListener('click', showLoginStep);
+});

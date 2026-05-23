@@ -1,0 +1,128 @@
+/* ── Page header ──────────────────────────────────────────── */
+.page-header { padding: 1.75rem 1.75rem .25rem; }
+.page-header h4 { font-weight: 700; letter-spacing: -.02em; font-size: 1.2rem; }
+
+.dash-container { padding: 0 1.75rem 2rem; }
+
+/* ── Metric cards row ─────────────────────────────────────── */
+.metrics-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+@media(max-width:900px) { .metrics-row { grid-template-columns: repeat(2,1fr); } }
+@media(max-width:480px) { .metrics-row { grid-template-columns: 1fr 1fr; gap:.75rem; } }
+
+/* ── Charts row ───────────────────────────────────────────── */
+.dash-charts {
+  display: grid;
+  grid-template-columns: 5fr 3fr;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+@media(max-width:900px) { .dash-charts { grid-template-columns: 1fr; } }
+
+.dash-chart-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+}
+
+.dash-chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: .75rem 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.dash-chart-title {
+  font-size: .78rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* ── P&L period selector ──────────────────────────────────── */
+.pnl-period-tabs {
+  display: flex;
+  gap: 2px;
+}
+.pnl-tab {
+  padding: .22rem .6rem;
+  font-size: .72rem;
+  font-weight: 600;
+  border: 1px solid var(--border-subtle);
+  background: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background var(--dur-fast), color var(--dur-fast), border-color var(--dur-fast);
+}
+.pnl-tab.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.pnl-tab:hover:not(.active) {
+  color: var(--text-primary);
+  border-color: var(--text-tertiary);
+}
+
+/* ── Bottom section ───────────────────────────────────────── */
+.dash-bottom { display: grid; grid-template-columns: 2fr 3fr; gap: 1rem; }
+@media(max-width:900px) { .dash-bottom { grid-template-columns: 1fr; } }
+
+/* ── Position cards ───────────────────────────────────────── */
+.pos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+
+/* ── Summary row ──────────────────────────────────────────── */
+.summary-row { display: grid; grid-template-columns: repeat(3,1fr); gap: 0; }
+.summary-cell { padding: .9rem; text-align: center; border-right: 1px solid var(--card-border); }
+.summary-cell:last-child { border-right: none; }
+
+/* ── Timeline coupon list ─────────────────────────────────── */
+#d-coupon-list .list-group-item {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .65rem 1.1rem;
+  border: none;
+  border-bottom: 1px solid var(--border-subtle);
+}
+#d-coupon-list .list-group-item:last-child { border-bottom: none; }
+.coupon-date-badge {
+  font-size: .65rem;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  min-width: 38px;
+  text-align: center;
+  line-height: 1.2;
+}
+
+/* ── Skeleton shimmer on metric values ────────────────────── */
+.metric-value.loading, .metric-delta.loading {
+  position: relative;
+  overflow: hidden;
+  color: transparent !important;
+  min-width: 80px;
+  border-radius: var(--radius-xs);
+}
+.metric-value.loading::after, .metric-delta.loading::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 50%, var(--surface-2) 75%);
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.4s ease-in-out infinite;
+}
+@keyframes skeletonShimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}

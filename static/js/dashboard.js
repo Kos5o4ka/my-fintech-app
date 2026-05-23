@@ -1,0 +1,251 @@
+// ── Helpers ──────────────────────────────────────────────────────────────────
+const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+function _removeSkeleton() {
+  document.querySelectorAll('.metric-value.loading, .metric-delta.loading')
+    .forEach(el => el.classList.remove('loading'));
+}
+
+// ── Charts ────────────────────────────────────────────────────────────────────
+let dashPnlChartInst = null;
+let dashDonutChartInst = null;
+
+async function loadPnlChart(period, btn) {
+  // Update active tab
+  if (btn) {
+    document.querySelectorAll('.pnl-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+  }
+
+  try {
+    const res  = await fetch(`/api/dashboard/pnl_chart?period=${period}`);
+    const data = await res.json();
+    const isDark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
+
+    const ctx = document.getElementById('dashPnlChart').getContext('2d');
+    if (dashPnlChartInst) dashPnlChartInst.destroy();
+
+    const allZero = data.data.every(v => v === 0);
+    const emptyEl = document.getElementById('dashPnlEmpty');
+    if (emptyEl) emptyEl.style.display = allZero ? 'flex' : 'none';
+    document.getElementById('dashPnlChart').style.display = allZero ? 'none' : '';
+
+    const lastVal = data.data[data.data.length - 1] ?? 0;
+    const positive = lastVal >= 0;
+    const lineColor = positive ? 'rgba(16,185,129,1)' : 'rgba(239,68,68,1)';
+    const fillColor = positive ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.08)';
+
+    dashPnlChartInst = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: data.labels,
+        datasets: [{
+          data: data.data,
+          borderColor: lineColor,
+          backgroundColor: fillColor,
+          borderWidth: 2,
+          fill: true,
+          tension: 0.35,
+          pointRadius: data.data.length <= 12 ? 3 : 0,
+          pointHoverRadius: 5,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: ctx => {
+                const v = ctx.parsed.y;
+                return (v >= 0 ? '+' : '') + v.toLocaleString('ru-RU', {minimumFractionDigits: 2}) + ' ₽';
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { font: { size: 10 }, color: 'rgba(148,163,184,.7)', maxTicksLimit: 7 }
+          },
+          y: {
+            grid: { color: isDark ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.04)' },
+            ticks: {
+              font: { size: 10 }, color: 'rgba(148,163,184,.7)',
+              callback: v => (v >= 0 ? '+' : '') + v.toLocaleString('ru-RU') + ' ₽'
+            }
+          }
+        }
+      }
+    });
+  } catch (e) {
+    console.error('PnL chart error', e);
+  }
+}
+
+async function loadDonutChart() {
+  try {
+    const res   = await fetch('/api/portfolio/allocation');
+    const items = await res.json();
+
+    const canvas = document.getElementById('dashDonutChart');
+    const emptyEl = document.getElementById('dashDonutEmpty');
+
+    if (!items.length) {
+      canvas.style.display = 'none';
+      if (emptyEl) emptyEl.style.display = 'flex';
+      return;
+    }
+    if (emptyEl) emptyEl.style.display = 'none';
+
+    // Топ-5 + Остальные
+    const top5 = items.slice(0, 5);
+    const rest = items.slice(5).reduce((s, i) => s + i.value, 0);
+    const labels = top5.map(i => i.name);
+    const values = top5.map(i => i.value);
+    if (rest > 0) { labels.push('Остальные'); values.push(rest); }
+
+    const palette = [
+      'rgba(59,130,246,.85)',
+      'rgba(16,185,129,.85)',
+      'rgba(124,58,237,.85)',
+      'rgba(245,158,11,.85)',
+      'rgba(6,182,212,.85)',
+      'rgba(148,163,184,.6)',
+    ];
+
+    if (dashDonutChartInst) dashDonutChartInst.destroy();
+    dashDonutChartInst = new Chart(canvas.getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels,
+        datasets: [{ data: values, backgroundColor: palette, borderWidth: 2,
+                     borderColor: 'var(--card-bg)', hoverOffset: 6 }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '62%',
+        plugins: {
+          legend: {
+            position: 'right',
+            labels: { font: { size: 10 }, boxWidth: 10, padding: 8,
+                      color: 'rgba(148,163,184,.9)' }
+          },
+          tooltip: {
+            callbacks: {
+              label: ctx => {
+                const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                const pct = ((ctx.parsed / total) * 100).toFixed(1);
+                return ` ${ctx.parsed.toLocaleString('ru-RU', {maximumFractionDigits: 0})} ₽ (${pct}%)`;
+              }
+            }
+          }
+        }
+      }
+    });
+  } catch (e) {
+    console.error('Donut chart error', e);
+  }
+}
+
+// ── Main dashboard load ───────────────────────────────────────────────────────
+async function loadDashboard() {
+  try {
+    const [portfolio, income, coupons, history] = await Promise.all([
+      fetch('/api/portfolio').then(r => r.json()),
+      fetch('/api/portfolio/income').then(r => r.json()),
+      fetch('/api/portfolio/calendar').then(r => r.json()),
+      fetch('/api/portfolio/history').then(r => r.json()),
+    ]);
+
+    const bonds = portfolio.bonds || [];
+    const cu = window.Common.countUp;
+
+    // Снимаем skeleton-классы с карточек
+    _removeSkeleton();
+
+    // Total value
+    cu(document.getElementById('d-total-value'), portfolio.total_value || 0, {decimals: 2});
+    document.getElementById('d-count-delta').textContent = bonds.length + ' позиций';
+
+    // YTM
+    const ytmEl = document.getElementById('d-ytm');
+    if (portfolio.portfolio_ytm) {
+      cu(ytmEl, portfolio.portfolio_ytm, {decimals: 2, suffix: ' %'});
+    } else {
+      ytmEl.textContent = '—';
+    }
+
+    // Count
+    document.getElementById('d-count').textContent = bonds.length;
+
+    // P&L
+    const unrealized = bonds.reduce((s, b) => s + (b.pnl || 0), 0);
+    const realized   = (history.trades || []).reduce((s, t) => s + (t.pnl || 0), 0);
+    const totalPnl   = unrealized + realized;
+    const pnlEl = document.getElementById('d-total-pnl');
+    const pnlSign = totalPnl >= 0 ? '+' : '';
+    pnlEl.style.color = totalPnl >= 0 ? 'var(--text-success)' : 'var(--text-danger)';
+    cu(pnlEl, Math.abs(totalPnl), {decimals: 2, prefix: pnlSign + (totalPnl < 0 ? '−' : ''), suffix: ' ₽'});
+
+    // Income
+    cu(document.getElementById('d-income30'), income['30d'] || 0, {decimals: 2});
+    cu(document.getElementById('d-income90'), income['90d'] || 0, {decimals: 2, suffix: ' ₽'});
+    cu(document.getElementById('d-income365'), income['365d'] || 0, {decimals: 2, suffix: ' ₽'});
+
+    // Best / Worst
+    if (bonds.length) {
+      const sorted = [...bonds].sort((a, b) => (b.pnl_pct || 0) - (a.pnl_pct || 0));
+      const best = sorted[0], worst = sorted[sorted.length - 1];
+      document.getElementById('d-best-name').textContent  = best.name;
+      document.getElementById('d-best-pnl').textContent   = '+' + (best.pnl_pct || 0).toFixed(2) + '%';
+      document.getElementById('d-best-isin').textContent  = best.isin;
+      document.getElementById('d-worst-name').textContent = worst.name;
+      document.getElementById('d-worst-pnl').textContent  = (worst.pnl_pct || 0).toFixed(2) + '%';
+      document.getElementById('d-worst-isin').textContent = worst.isin;
+    }
+
+    // Coupon calendar
+    const list = document.getElementById('d-coupon-list');
+    if (!coupons.length) {
+      list.innerHTML = '<li class="list-group-item justify-content-center" style="color:var(--text-tertiary);font-size:.875rem">Нет предстоящих купонов</li>';
+    } else {
+      list.innerHTML = coupons.slice(0, 6).map(c => {
+        const d = new Date(c.date);
+        const day   = d.getDate();
+        const month = d.toLocaleString('ru-RU', {month: 'short'});
+        return `
+          <li class="list-group-item">
+            <div class="coupon-date-badge">${day}<br>${month}</div>
+            <div style="flex:1;min-width:0">
+              <div class="fw-semibold small text-truncate">${esc(c.name)}</div>
+              <div style="font-size:.72rem;color:var(--text-tertiary)">${esc(c.date)}</div>
+            </div>
+            <span class="badge" style="background:rgba(16,185,129,.15);color:var(--text-success);font-variant-numeric:tabular-nums">
+              +${parseFloat(c.total_payout).toFixed(2)} ₽
+            </span>
+          </li>`;
+      }).join('');
+    }
+
+  } catch (e) {
+    _removeSkeleton();
+    console.error('Dashboard load error', e);
+  }
+}
+
+// Дожидаемся Chart.js, потом запускаем
+function _onChartsReady(fn) {
+  if (typeof Chart !== 'undefined') { fn(); return; }
+  const s = document.querySelector('script[src*="chart.js"]');
+  if (s) s.addEventListener('load', fn);
+  else fn();
+}
+
+loadDashboard();
+_onChartsReady(() => {
+  loadPnlChart('30d', document.querySelector('.pnl-tab.active'));
+  loadDonutChart();
+});

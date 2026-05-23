@@ -6,12 +6,25 @@ JS_FILES = [
     "static/js/index.js",
     "static/js/portfolio.js",
     "static/js/sidebar.js",
+    # Per-page bundles (extracted from inline scripts)
+    "static/js/base.js",
+    "static/js/dashboard.js",
+    "static/js/profile.js",
+    "static/js/landing.js",
+    "static/js/portfolio-page.js",
+    "static/js/admin.js",
 ]
 CSS_FILES = [
     "static/css/variables.css",
     "static/css/sidebar.css",
     "static/css/animations.css",
     "static/css/portfolio.css",
+    # Per-page stylesheets (extracted from inline styles)
+    "static/css/base.css",
+    "static/css/dashboard.css",
+    "static/css/profile.css",
+    "static/css/landing.css",
+    "static/css/portfolio-page.css",
 ]
 
 
