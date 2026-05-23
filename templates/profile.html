@@ -239,6 +239,24 @@
 
   </div>
 
+  {# Quick stats row #}
+  <div style="display:flex;gap:1.25rem;margin-top:1.1rem;padding:0 .1rem;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:.4rem">
+      <span style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:rgba(255,255,255,.4)">Облигаций</span>
+      <span id="hsBondCount" style="font-size:.9rem;font-weight:800;color:#fff">—</span>
+    </div>
+    <div style="width:1px;background:rgba(255,255,255,.12)"></div>
+    <div style="display:flex;align-items:center;gap:.4rem">
+      <span style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:rgba(255,255,255,.4)">Стоимость</span>
+      <span id="hsTotalValue" style="font-size:.9rem;font-weight:800;color:#fff">—</span>
+    </div>
+    <div style="width:1px;background:rgba(255,255,255,.12)"></div>
+    <div style="display:flex;align-items:center;gap:.4rem">
+      <span style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:rgba(255,255,255,.4)">Сделок закрыто</span>
+      <span id="hsSoldCount" style="font-size:.9rem;font-weight:800;color:#fff">—</span>
+    </div>
+  </div>
+
   {# Tab bar #}
   <div class="prf-tabs" role="tablist" style="overflow-x:auto;scrollbar-width:none">
     <button class="prf-tab active" onclick="prfTab(0)">
@@ -493,6 +511,18 @@ document.getElementById('avatarFileInput')?.addEventListener('change', function(
 });
 
 document.addEventListener('DOMContentLoaded', () => {
+  // ── Hero quick stats ─────────────────────────────────────────────────
+  fetch('/api/profile/stats').then(r => r.json()).then(d => {
+    const bc = document.getElementById('hsBondCount');
+    const tv = document.getElementById('hsTotalValue');
+    const sc = document.getElementById('hsSoldCount');
+    if (bc) bc.textContent = d.bond_count ?? '—';
+    if (sc) sc.textContent = d.sold_count ?? '—';
+    if (tv && d.total_value != null) {
+      tv.textContent = d.total_value.toLocaleString('ru-RU', {minimumFractionDigits: 0, maximumFractionDigits: 0}) + ' ₽';
+    }
+  }).catch(() => {});
+
   document.getElementById('emailNotifForm').addEventListener('submit', async e => {
     e.preventDefault();
     const btn = document.getElementById('saveEmailBtn');

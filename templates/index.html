@@ -443,12 +443,104 @@ html, body { background: #040d1a !important; margin: 0; padding: 0; }
   animation: fadeInDown var(--dur-base) var(--ease-out) both;
 }
 
+/* ── Features grid ────────────────────────────────────────────────── */
+.features-section {
+  position: relative;
+  z-index: 5;
+  padding: 5rem 2rem;
+  border-top: 1px solid rgba(255,255,255,.06);
+  background: rgba(4,13,26,.85);
+}
+
+.features-heading {
+  text-align: center;
+  font-size: clamp(1.3rem, 2.5vw, 1.75rem);
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -.03em;
+  margin-bottom: .5rem;
+}
+
+.features-sub {
+  text-align: center;
+  font-size: .88rem;
+  color: rgba(255,255,255,.38);
+  margin-bottom: 3rem;
+}
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.25rem;
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.feature-card {
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: var(--radius-lg, 16px);
+  padding: 1.75rem;
+  transition: border-color .2s ease, transform .2s ease, box-shadow .2s ease;
+}
+
+.feature-card:hover {
+  border-color: rgba(59,130,246,.28);
+  transform: translateY(-3px);
+  box-shadow: 0 14px 36px rgba(0,0,0,.35);
+}
+
+.feature-card-icon {
+  width: 44px; height: 44px;
+  border-radius: var(--radius-sm, 8px);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.feature-card-title {
+  font-size: .95rem;
+  font-weight: 700;
+  color: rgba(255,255,255,.9);
+  margin-bottom: .45rem;
+  letter-spacing: -.01em;
+}
+
+.feature-card-desc {
+  font-size: .8rem;
+  color: rgba(255,255,255,.4);
+  line-height: 1.65;
+}
+
+/* ── Landing footer ────────────────────────────────────────────────── */
+.landing-footer {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: .5rem .75rem;
+  padding: 1rem 2rem;
+  border-top: 1px solid rgba(255,255,255,.04);
+  background: rgba(4,13,26,.95);
+  font-size: .7rem;
+  color: rgba(255,255,255,.2);
+  letter-spacing: .02em;
+}
+
+.landing-footer-sep { color: rgba(255,255,255,.12); }
+
 /* ── Responsive ──────────────────────────────────────────────────── */
+.landing-wrap { overflow-x: hidden; }
+
 @media (max-width: 900px) {
   .hero { grid-template-columns: 1fr; min-height: unset; }
   .hero-left { padding: 2.5rem 1.5rem 1.5rem; }
   .hero-right { padding: 1.5rem; }
   .stats-bar { gap: 1.5rem; }
+  .features-grid { grid-template-columns: 1fr; }
+  .features-section { padding: 3.5rem 1.5rem; }
 }
 
 @media (max-width: 480px) {
@@ -644,6 +736,42 @@ html, body { background: #040d1a !important; margin: 0; padding: 0; }
 
   </section>
 
+  {# ── Features grid ──────────────────────────────────────────────── #}
+  <section class="features-section">
+    <h2 class="features-heading">Всё для управления облигационным портфелем</h2>
+    <p class="features-sub">Профессиональные инструменты в простом интерфейсе</p>
+    <div class="features-grid">
+
+      <div class="feature-card">
+        <div class="feature-card-icon" style="background:rgba(37,99,235,.18)">📊</div>
+        <div class="feature-card-title">Аналитика и метрики</div>
+        <div class="feature-card-desc">
+          P&amp;L в реальном времени, средневзвешенная доходность к погашению (YTM),
+          коэффициент Шарпа и сравнение с бенчмарком RGBI.
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-card-icon" style="background:rgba(5,150,105,.18)">🔔</div>
+        <div class="feature-card-title">Умные уведомления</div>
+        <div class="feature-card-desc">
+          Telegram-бот и email: напоминания о купонах за день до даты,
+          ценовые тревоги и ежедневные сводки по расписанию.
+        </div>
+      </div>
+
+      <div class="feature-card">
+        <div class="feature-card-icon" style="background:rgba(124,58,237,.18)">📄</div>
+        <div class="feature-card-title">Отчёты и экспорт</div>
+        <div class="feature-card-desc">
+          PDF-отчёт по портфелю, экспорт в Excel с формулами,
+          автоматический расчёт НДФЛ 13% по сделкам и купонам.
+        </div>
+      </div>
+
+    </div>
+  </section>
+
   {# ── Stats bar ──────────────────────────────────────────────────── #}
   <footer class="stats-bar">
     <div class="stat-item">
@@ -666,6 +794,17 @@ html, body { background: #040d1a !important; margin: 0; padding: 0; }
       <div class="stat-label">Посещений</div>
     </div>
   </footer>
+
+  {# ── Footer ─────────────────────────────────────────────────────── #}
+  <div class="landing-footer">
+    <span>InvestTrack</span>
+    <span class="landing-footer-sep">·</span>
+    <span>Данные MOEX ISS API</span>
+    <span class="landing-footer-sep">·</span>
+    <span>© 2025</span>
+    <span class="landing-footer-sep">·</span>
+    <span>v1.0.0</span>
+  </div>
 
 </div>
 {% endblock %}

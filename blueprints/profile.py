@@ -15,6 +15,26 @@ logger = logging.getLogger(__name__)
 profile_bp = Blueprint("profile", __name__)
 
 
+# ── Быстрая статистика для hero профиля ──────────────────────────────────────
+
+@profile_bp.route("/api/profile/stats", methods=["GET"])
+@login_required
+def profile_stats():
+    """Счётчики для hero-секции профиля: облигаций, стоимость, закрытые сделки."""
+    from models import BondPortfolio
+    active = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False).all()
+    sold   = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=True).count()
+    total_value = sum(
+        (float(b.last_price or b.buy_price)) * b.amount
+        for b in active
+    )
+    return jsonify({
+        "bond_count": len(active),
+        "sold_count": sold,
+        "total_value": round(total_value, 2),
+    })
+
+
 # ── Страница профиля ──────────────────────────────────────────────────────────
 
 @profile_bp.route("/profile", methods=["GET", "POST"])

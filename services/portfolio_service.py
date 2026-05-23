@@ -1,5 +1,6 @@
-"""Сервис портфеля — P&L, доходность, купонный доход, налоги."""
+"""Сервис портфеля — P&L, доходность, купонный доход, налоги, Sharpe Ratio."""
 import logging
+import math
 from collections import defaultdict
 from datetime import datetime, date
 from typing import Optional
@@ -152,4 +153,48 @@ def calc_tax_report(
         "coupon_income": round(coupon_income, 2),
         "total_income": total_income,
         "tax_13pct": round(total_income * NDFL_RATE, 2),
+    }
+
+
+def calc_sharpe_ratio(sold_bonds: list) -> Optional[dict]:
+    """Коэффициент Шарпа на основе доходностей закрытых позиций (Stage 4).
+
+    Использует доходность каждой сделки как отдельное наблюдение.
+    Безрисковая ставка ≈ 16%/12 в месяц (ставка ЦБ РФ, упрощённо).
+    Требует ≥ 3 закрытых позиций.
+    """
+    returns: list[float] = []
+    for bond in sold_bonds:
+        buy_p = float(bond.buy_price)
+        sell_p = float(bond.sell_price or bond.buy_price)
+        if buy_p <= 0:
+            continue
+        returns.append(sell_p / buy_p - 1.0)
+
+    n = len(returns)
+    if n < 3:
+        return None
+
+    mean_r = sum(returns) / n
+    variance = sum((r - mean_r) ** 2 for r in returns) / n
+    std_r = math.sqrt(variance) if variance > 0 else 0.0
+
+    if std_r == 0.0:
+        return {
+            "sharpe": None,
+            "mean_return_pct": round(mean_r * 100, 2),
+            "volatility_pct": 0.0,
+            "sample_size": n,
+            "note": "Нулевая волатильность — все сделки дали одинаковый результат",
+        }
+
+    # Безрисковая ставка: 16% годовых ÷ 12 = 1.33% в месяц (приблизительно)
+    risk_free_per_trade = 0.16 / 12
+    sharpe = (mean_r - risk_free_per_trade) / std_r
+
+    return {
+        "sharpe": round(sharpe, 2),
+        "mean_return_pct": round(mean_r * 100, 2),
+        "volatility_pct": round(std_r * 100, 2),
+        "sample_size": n,
     }

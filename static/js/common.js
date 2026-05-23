@@ -123,6 +123,19 @@ window.Common = (function(){
         const bsToast = new bootstrap.Toast(toast, { delay });
         bsToast.show();
         toast.addEventListener('hidden.bs.toast', () => toast.remove());
+
+        // Swipe-to-dismiss (mobile: swipe right ≥ 80px)
+        let _tx = 0;
+        toast.addEventListener('touchstart', e => { _tx = e.touches[0].clientX; }, { passive: true });
+        toast.addEventListener('touchmove', e => {
+            const dx = e.touches[0].clientX - _tx;
+            if (dx > 0) { toast.style.transform = `translateX(${dx}px)`; toast.style.opacity = String(1 - dx / 200); }
+        }, { passive: true });
+        toast.addEventListener('touchend', e => {
+            const dx = e.changedTouches[0].clientX - _tx;
+            if (dx > 80) { bsToast.hide(); }
+            else { toast.style.transform = ''; toast.style.opacity = ''; }
+        }, { passive: true });
     }
 
     function countUp(el, end, {decimals = 0, suffix = '', prefix = '', duration = 650} = {}) {

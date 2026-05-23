@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Отчёт InvestTrack — {{ username }} — {{ generated_at }}</title>
+  <style>
+    /* ── Reset & Base ─────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 13px; }
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      color: #1e293b;
+      background: #fff;
+      padding: 0;
+    }
+
+    a { color: #2563eb; text-decoration: none; }
+
+    /* ── Page layout ──────────────────────────────────────────────── */
+    .report-page {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2rem 2.5rem 3rem;
+    }
+
+    /* ── Header ───────────────────────────────────────────────────── */
+    .report-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 2px solid #1e3a8a;
+      padding-bottom: 1rem;
+      margin-bottom: 1.75rem;
+    }
+    .report-logo {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+    }
+    .report-logo-icon {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, #1d4ed8, #2563eb);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .report-logo-icon svg { width: 18px; height: 18px; }
+    .report-logo-name { font-size: 1.2rem; font-weight: 800; color: #1e293b; letter-spacing: -.02em; }
+    .report-meta { text-align: right; font-size: .8rem; color: #64748b; line-height: 1.6; }
+    .report-meta strong { color: #1e293b; }
+
+    /* ── Section ──────────────────────────────────────────────────── */
+    .section { margin-bottom: 2rem; }
+    .section-title {
+      font-size: .7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: #94a3b8;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: .4rem;
+      margin-bottom: 1rem;
+    }
+
+    /* ── Summary cards ────────────────────────────────────────────── */
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: .85rem;
+      margin-bottom: 1.5rem;
+    }
+    .summary-card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: .85rem 1rem;
+    }
+    .summary-card-label {
+      font-size: .65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: #94a3b8;
+      margin-bottom: .3rem;
+    }
+    .summary-card-value {
+      font-size: 1.2rem;
+      font-weight: 800;
+      letter-spacing: -.025em;
+      font-variant-numeric: tabular-nums;
+      color: #1e293b;
+    }
+    .text-success { color: #059669; }
+    .text-danger  { color: #dc2626; }
+    .text-blue    { color: #2563eb; }
+
+    /* ── Table ────────────────────────────────────────────────────── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .82rem;
+    }
+    thead th {
+      background: #f1f5f9;
+      font-size: .65rem;
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: #64748b;
+      padding: .55rem .75rem;
+      border-bottom: 2px solid #e2e8f0;
+      text-align: left;
+      white-space: nowrap;
+    }
+    tbody td {
+      padding: .6rem .75rem;
+      border-bottom: 1px solid #f1f5f9;
+      vertical-align: middle;
+    }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:nth-child(even) td { background: #fafafa; }
+    code { font-size: .78rem; color: #475569; font-family: monospace; }
+
+    /* ── Sharpe block ─────────────────────────────────────────────── */
+    .sharpe-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: .85rem;
+    }
+    .sharpe-card {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 10px;
+      padding: .85rem 1rem;
+    }
+    .sharpe-card-label { font-size: .65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #3b82f6; margin-bottom: .25rem; }
+    .sharpe-card-value { font-size: 1.15rem; font-weight: 800; color: #1e40af; font-variant-numeric: tabular-nums; }
+    .sharpe-note { font-size: .78rem; color: #64748b; margin-top: .85rem; padding: .65rem .9rem; background: #f8fafc; border-radius: 8px; border-left: 3px solid #94a3b8; }
+
+    /* ── Tax section ──────────────────────────────────────────────── */
+    .tax-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: .85rem;
+      margin-bottom: 1rem;
+    }
+    .tax-card { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 10px; padding: .85rem 1rem; }
+    .tax-card-label { font-size: .65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: #ea580c; margin-bottom: .25rem; }
+    .tax-card-value { font-size: 1.15rem; font-weight: 800; color: #9a3412; font-variant-numeric: tabular-nums; }
+
+    /* ── Footer ───────────────────────────────────────────────────── */
+    .report-footer {
+      margin-top: 2.5rem;
+      padding-top: 1rem;
+      border-top: 1px solid #e2e8f0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: .75rem;
+      color: #94a3b8;
+    }
+
+    /* ── Print action bar (screen only) ──────────────────────────── */
+    .print-bar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      background: #1e3a8a;
+      color: #fff;
+      padding: .75rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 100;
+      box-shadow: 0 2px 12px rgba(0,0,0,.3);
+    }
+    .print-bar-title { font-size: .9rem; font-weight: 600; }
+    .print-bar-actions { display: flex; gap: .75rem; align-items: center; }
+    .btn-print {
+      background: #fff;
+      color: #1e3a8a;
+      border: none;
+      border-radius: 6px;
+      padding: .45rem 1.1rem;
+      font-size: .85rem;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .btn-print:hover { background: #eff6ff; }
+    .btn-back {
+      background: rgba(255,255,255,.15);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,.3);
+      border-radius: 6px;
+      padding: .45rem 1rem;
+      font-size: .85rem;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .btn-back:hover { background: rgba(255,255,255,.25); }
+    body { padding-top: 52px; }
+
+    /* ── Print styles ─────────────────────────────────────────────── */
+    @media print {
+      .print-bar { display: none !important; }
+      body { padding-top: 0 !important; color: #000; }
+      .report-page { padding: 1cm 1.5cm; max-width: 100%; }
+      thead th { background: #f1f5f9 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      tbody tr:nth-child(even) td { background: #fafafa !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .summary-card, .sharpe-card, .tax-card { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      @page { size: A4; margin: 1.5cm; }
+    }
+  </style>
+</head>
+<body>
+
+{# ── Action bar (screen only) ────────────────────────────────────── #}
+<div class="print-bar">
+  <span class="print-bar-title">📊 Отчёт InvestTrack</span>
+  <div class="print-bar-actions">
+    <button class="btn-back" onclick="window.history.back()">← Назад</button>
+    <button class="btn-print" onclick="window.print()">🖨 Распечатать / Сохранить PDF</button>
+  </div>
+</div>
+
+<div class="report-page">
+
+  {# ── Header ──────────────────────────────────────────────────────── #}
+  <div class="report-header">
+    <div class="report-logo">
+      <div class="report-logo-icon">
+        <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <polyline points="2,12 5.5,7.5 8.5,9.5 12,5 14,6" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="14" cy="5" r="1.3" fill="white"/>
+        </svg>
+      </div>
+      <span class="report-logo-name">InvestTrack</span>
+    </div>
+    <div class="report-meta">
+      <div>Отчёт сформирован: <strong>{{ generated_at }}</strong></div>
+      <div>Пользователь: <strong>{{ username }}</strong></div>
+      <div>Год: <strong>{{ year }}</strong></div>
+    </div>
+  </div>
+
+  {# ── Portfolio summary ───────────────────────────────────────────── #}
+  <div class="section">
+    <div class="section-title">Сводка портфеля</div>
+    <div class="summary-grid">
+      <div class="summary-card">
+        <div class="summary-card-label">Стоимость портфеля</div>
+        <div class="summary-card-value text-success">
+          {{ "{:,.2f}".format(total_value).replace(",", " ") }} ₽
+        </div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-card-label">Средний YTM</div>
+        <div class="summary-card-value text-blue">{{ portfolio_ytm }} %</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-card-label">Активных позиций</div>
+        <div class="summary-card-value">{{ bond_count }}</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-card-label">Закрытых сделок</div>
+        <div class="summary-card-value">{{ sold_count }}</div>
+      </div>
+    </div>
+  </div>
+
+  {# ── Active positions ────────────────────────────────────────────── #}
+  {% if bonds %}
+  <div class="section">
+    <div class="section-title">Активные позиции</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Название</th>
+          <th>ISIN</th>
+          <th>Кол-во</th>
+          <th>Цена покупки</th>
+          <th>Текущая цена</th>
+          <th>Стоимость</th>
+          <th>YTM %</th>
+          <th>P&amp;L ₽</th>
+          <th>P&amp;L %</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in bonds %}
+        <tr>
+          <td><strong>{{ b.name }}</strong></td>
+          <td><code>{{ b.isin }}</code></td>
+          <td>{{ b.amount }} шт.</td>
+          <td>{{ "%.2f"|format(b.buy_price) }} ₽</td>
+          <td>{{ "%.2f"|format(b.last_price or b.buy_price) }} ₽</td>
+          <td>{{ "{:,.2f}".format(b.current_value).replace(",", " ") }} ₽</td>
+          <td class="text-blue">{{ "%.2f"|format(b.ytm or 0) }} %</td>
+          <td class="{{ 'text-success' if b.pnl >= 0 else 'text-danger' }}">
+            {{ "+" if b.pnl >= 0 else "" }}{{ "%.2f"|format(b.pnl) }} ₽
+          </td>
+          <td class="{{ 'text-success' if b.pnl_pct >= 0 else 'text-danger' }}">
+            {{ "+" if b.pnl_pct >= 0 else "" }}{{ "%.2f"|format(b.pnl_pct) }} %
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {# ── Sharpe Ratio ────────────────────────────────────────────────── #}
+  {% if sharpe and sharpe.sharpe is not none %}
+  <div class="section">
+    <div class="section-title">Коэффициент Шарпа</div>
+    <div class="sharpe-grid">
+      <div class="sharpe-card">
+        <div class="sharpe-card-label">Коэффициент Шарпа</div>
+        <div class="sharpe-card-value">{{ sharpe.sharpe }}</div>
+      </div>
+      <div class="sharpe-card">
+        <div class="sharpe-card-label">Ср. доходность сделки</div>
+        <div class="sharpe-card-value">{{ sharpe.mean_return_pct }} %</div>
+      </div>
+      <div class="sharpe-card">
+        <div class="sharpe-card-label">Волатильность</div>
+        <div class="sharpe-card-value">{{ sharpe.volatility_pct }} %</div>
+      </div>
+    </div>
+    <div class="sharpe-note">
+      Рассчитан по {{ sharpe.sample_size }} закрытым позициям.
+      Безрисковая ставка: 16%/год (ставка ЦБ РФ, упрощённо).
+      Шарп &gt; 1 считается хорошим результатом.
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── Tax report ──────────────────────────────────────────────────── #}
+  <div class="section">
+    <div class="section-title">Налоговый отчёт — {{ year }}</div>
+    <div class="tax-grid">
+      <div class="tax-card">
+        <div class="tax-card-label">Доход от сделок</div>
+        <div class="tax-card-value">{{ "{:,.2f}".format(tax.sales_income).replace(",", " ") }} ₽</div>
+      </div>
+      <div class="tax-card">
+        <div class="tax-card-label">Купонный доход</div>
+        <div class="tax-card-value">{{ "{:,.2f}".format(tax.coupon_income).replace(",", " ") }} ₽</div>
+      </div>
+      <div class="tax-card">
+        <div class="tax-card-label">НДФЛ 13% к уплате</div>
+        <div class="tax-card-value">{{ "{:,.2f}".format(tax.tax_13pct).replace(",", " ") }} ₽</div>
+      </div>
+    </div>
+    <div class="sharpe-note">
+      Расчёт носит ориентировочный характер. Проконсультируйтесь с налоговым консультантом.
+      Общий налогооблагаемый доход: {{ "{:,.2f}".format(tax.total_income).replace(",", " ") }} ₽.
+    </div>
+  </div>
+
+  {# ── Footer ──────────────────────────────────────────────────────── #}
+  <div class="report-footer">
+    <span>InvestTrack — персональный трекер облигаций</span>
+    <span>Сформировано: {{ generated_at }}</span>
+  </div>
+
+</div>
+</body>
+</html>

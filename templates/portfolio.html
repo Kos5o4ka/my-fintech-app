@@ -364,6 +364,12 @@
           <path d="M2 10v2h10v-2M7 2v7M4 6l3 3 3-3"/>
         </svg>Excel
       </a>
+      <a href="/portfolio/report" target="_blank" class="btn btn-sm btn-outline-secondary">
+        <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="margin-right:.3rem">
+          <rect x="2" y="1.5" width="10" height="11" rx="1.2"/>
+          <line x1="4.5" y1="5" x2="9.5" y2="5"/><line x1="4.5" y1="7.5" x2="9.5" y2="7.5"/>
+        </svg>PDF
+      </a>
       <button class="btn btn-sm btn-primary" onclick="openDrawer()">
         <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="margin-right:.3rem">
           <line x1="7" y1="2" x2="7" y2="12"/><line x1="2" y1="7" x2="12" y2="7"/>
@@ -373,7 +379,7 @@
   </div>
 
   {# ── Stats strip ──────────────────────────────────────────────── #}
-  <div class="pf-stats">
+  <div class="pf-stats" style="grid-template-columns:repeat(5,1fr)">
     <div class="pf-stat">
       <div class="pf-stat-label">Стоимость портфеля</div>
       <div class="pf-stat-value text-success"><span id="total-portfolio-value">—</span> ₽</div>
@@ -385,6 +391,14 @@
     <div class="pf-stat">
       <div class="pf-stat-label">Активных позиций</div>
       <div class="pf-stat-value" id="portfolio-count">—</div>
+    </div>
+    <div class="pf-stat" id="sharpeStat" title="Коэффициент Шарпа по закрытым сделкам">
+      <div class="pf-stat-label">
+        Коэффициент Шарпа
+        <span id="sharpeSampleSize" style="font-size:.6rem;color:var(--text-tertiary)"></span>
+      </div>
+      <div class="pf-stat-value" id="sharpeValue" style="color:var(--text-secondary)">—</div>
+      <div class="pf-stat-sub" id="sharpeSub"></div>
     </div>
     <div class="pf-stat">
       <div class="pf-stat-label">
@@ -479,6 +493,15 @@
           <line x1="4.5" y1="10" x2="7" y2="10"/>
         </svg>
         Налоги
+      </button>
+      <button class="pf-tab" id="compare-tab"
+              data-bs-toggle="tab" data-bs-target="#compare-pane"
+              type="button" role="tab">
+        <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+          <polyline points="1,10 4,5 7,8 10,3 13,5"/>
+          <polyline points="1,12 4,8 7,11 10,6 13,8" stroke-dasharray="2 1.5" opacity=".6"/>
+        </svg>
+        Сравнение
       </button>
     </div>
 
@@ -658,6 +681,61 @@
               </td></tr>
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {# ── Compare two bonds ──────────────────────────────────── #}
+      <div class="tab-pane fade" id="compare-pane" role="tabpanel">
+        <div class="pf-toolbar" style="flex-wrap:wrap;gap:.5rem">
+          <div style="display:flex;gap:.5rem;flex-wrap:wrap;flex:1;align-items:flex-end">
+            <div>
+              <div class="small mb-1" style="color:var(--text-tertiary)">ISIN первой облигации</div>
+              <input type="text" id="compareIsin1" class="form-control form-control-sm"
+                     placeholder="RU000A1038V6" maxlength="12" style="width:160px;text-transform:uppercase">
+            </div>
+            <div>
+              <div class="small mb-1" style="color:var(--text-tertiary)">ISIN второй облигации</div>
+              <input type="text" id="compareIsin2" class="form-control form-control-sm"
+                     placeholder="RU000A0ZYG52" maxlength="12" style="width:160px;text-transform:uppercase">
+            </div>
+            <div>
+              <div class="small mb-1" style="color:var(--text-tertiary)">Период</div>
+              <select id="compareRange" class="form-select form-select-sm" style="width:110px">
+                <option value="month" selected>1 месяц</option>
+                <option value="week">1 неделя</option>
+                <option value="3m">3 месяца</option>
+                <option value="year">1 год</option>
+                <option value="all">Всё время</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:flex;gap:.4rem;align-items:flex-end;padding-bottom:.05rem">
+            <button class="btn btn-primary btn-sm" onclick="runCompare()">Сравнить</button>
+            <button class="btn btn-outline-secondary btn-sm" onclick="clearCompare()">✕</button>
+          </div>
+        </div>
+        <div id="compare-loading" class="text-center py-4" style="display:none;color:var(--text-tertiary)">
+          <div class="spinner-border spinner-border-sm me-2" role="status"></div>Загрузка данных с MOEX…
+        </div>
+        <div id="compareLegend" style="display:none;padding:.5rem 1rem;display:flex;gap:1.5rem;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:.4rem">
+            <div style="width:22px;height:3px;background:#3b82f6;border-radius:2px"></div>
+            <span id="compareName1" style="font-size:.82rem;font-weight:600"></span>
+          </div>
+          <div style="display:flex;align-items:center;gap:.4rem">
+            <div style="width:22px;height:3px;background:#f59e0b;border-radius:2px"></div>
+            <span id="compareName2" style="font-size:.82rem;font-weight:600"></span>
+          </div>
+          <span style="font-size:.75rem;color:var(--text-tertiary);margin-left:auto">
+            * Нормировано к 100 на начало периода
+          </span>
+        </div>
+        <div style="position:relative;height:320px;padding:.75rem 1rem">
+          <canvas id="compareChart"></canvas>
+          <div id="compareEmpty" class="position-absolute top-50 start-50 translate-middle text-center" style="display:none">
+            <div style="font-size:2rem;margin-bottom:.5rem">📊</div>
+            <div style="color:var(--text-tertiary);font-size:.85rem">Введите два ISIN и нажмите «Сравнить»</div>
+          </div>
         </div>
       </div>
 
@@ -1012,6 +1090,153 @@ function filterBondsTable(q) {
     const show = !s || r.dataset.name?.toLowerCase().includes(s) || r.dataset.isin?.toLowerCase().includes(s);
     r.style.display = show ? '' : 'none';
   });
+}
+
+// ── Sharpe Ratio ───────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  fetch('/api/portfolio/sharpe')
+    .then(r => r.json())
+    .then(data => {
+      const el = document.getElementById('sharpeValue');
+      const sub = document.getElementById('sharpeSub');
+      const sampleEl = document.getElementById('sharpeSampleSize');
+      if (!el) return;
+      if (data.sharpe == null) {
+        el.textContent = '—';
+        if (sub) sub.textContent = data.reason || '';
+        return;
+      }
+      const sharpe = parseFloat(data.sharpe);
+      el.textContent = sharpe.toFixed(2);
+      el.style.color = sharpe >= 1 ? 'var(--emerald-500)' : sharpe >= 0 ? 'var(--text-info)' : '#ef4444';
+      if (sub) sub.textContent = `Доход: ${data.mean_return_pct}% · Волат.: ${data.volatility_pct}%`;
+      if (sampleEl) sampleEl.textContent = ` · ${data.sample_size} сделок`;
+    })
+    .catch(() => {});
+});
+
+// ── Compare two bonds ──────────────────────────────────────────────────────────
+
+let _compareChart = null;
+
+function runCompare() {
+  const isin1 = (document.getElementById('compareIsin1')?.value || '').trim().toUpperCase();
+  const isin2 = (document.getElementById('compareIsin2')?.value || '').trim().toUpperCase();
+  const range  = document.getElementById('compareRange')?.value || 'month';
+
+  if (!isin1 || !isin2) { window.Common.showToast('Введите оба ISIN', true); return; }
+  if (isin1 === isin2)  { window.Common.showToast('ISIN должны быть разными', true); return; }
+
+  const loadEl  = document.getElementById('compare-loading');
+  const emptyEl = document.getElementById('compareEmpty');
+  const legendEl = document.getElementById('compareLegend');
+  if (loadEl)   loadEl.style.display = 'block';
+  if (emptyEl)  emptyEl.style.display = 'none';
+  if (legendEl) legendEl.style.display = 'none';
+
+  fetch(`/api/portfolio/compare?isin1=${isin1}&isin2=${isin2}&range=${range}`)
+    .then(r => r.json())
+    .then(data => {
+      if (loadEl) loadEl.style.display = 'none';
+      if (!data.status || data.status !== 'success') {
+        window.Common.showToast(data.message || 'Ошибка загрузки', true);
+        if (emptyEl) emptyEl.style.display = 'block';
+        return;
+      }
+      const labels = data.labels || [];
+      const d1 = data.bond1?.data || [];
+      const d2 = data.bond2?.data || [];
+      if (!labels.length) {
+        if (emptyEl) emptyEl.style.display = 'block';
+        return;
+      }
+
+      // Update legend
+      const n1El = document.getElementById('compareName1');
+      const n2El = document.getElementById('compareName2');
+      if (n1El) n1El.textContent = data.bond1?.name || isin1;
+      if (n2El) n2El.textContent = data.bond2?.name || isin2;
+      if (legendEl) legendEl.style.display = 'flex';
+
+      _onChartJsReady(() => {
+        const ctx = document.getElementById('compareChart');
+        if (!ctx) return;
+        if (_compareChart) _compareChart.destroy();
+        _compareChart = new Chart(ctx.getContext('2d'), {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [
+              {
+                label: data.bond1?.name || isin1,
+                data: d1,
+                borderColor: '#3b82f6',
+                backgroundColor: 'rgba(59,130,246,.08)',
+                borderWidth: 2,
+                fill: false,
+                tension: 0.25,
+                pointRadius: 0,
+                pointHoverRadius: 4,
+              },
+              {
+                label: data.bond2?.name || isin2,
+                data: d2,
+                borderColor: '#f59e0b',
+                backgroundColor: 'rgba(245,158,11,.06)',
+                borderWidth: 2,
+                fill: false,
+                tension: 0.25,
+                pointRadius: 0,
+                pointHoverRadius: 4,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)}`,
+                },
+              },
+            },
+            scales: {
+              x: {
+                ticks: { maxTicksLimit: 8, font: { size: 11 }, color: 'var(--text-tertiary)' },
+                grid: { display: false },
+              },
+              y: {
+                ticks: {
+                  font: { size: 11 }, color: 'var(--text-tertiary)',
+                  callback: v => v.toFixed(1),
+                },
+                grid: { color: 'rgba(var(--accent-rgb),.06)' },
+              },
+            },
+          },
+        });
+      });
+    })
+    .catch(() => {
+      if (loadEl)  loadEl.style.display = 'none';
+      if (emptyEl) emptyEl.style.display = 'block';
+      window.Common.showToast('Ошибка загрузки данных MOEX', true);
+    });
+}
+
+function clearCompare() {
+  ['compareIsin1','compareIsin2'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  if (_compareChart) { _compareChart.destroy(); _compareChart = null; }
+  const emptyEl = document.getElementById('compareEmpty');
+  if (emptyEl) emptyEl.style.display = 'block';
+  const legendEl = document.getElementById('compareLegend');
+  if (legendEl) legendEl.style.display = 'none';
 }
 
 // ── Benchmark Chart ────────────────────────────────────────────────────────────

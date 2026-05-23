@@ -10,12 +10,29 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%232563eb'/><polyline points='5,22 11,14 16,18 22,9 27,11' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap">
   <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" defer></script>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/variables.min.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebar.min.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/animations.min.css') }}">
+  <style>
+  /* ── CSS contain — performance boost for card layouts ─────── */
+  .pf-stat, .dash-card, .pf-card, .metric-card {
+    contain: layout style;
+  }
+  /* ── Page transitions ─────────────────────────────────────── */
+  .app-main { transition: opacity 180ms ease, transform 180ms ease; }
+  .app-main.page-leaving { opacity: 0; transform: translateY(6px); pointer-events: none; }
+  /* ── Form shake animation ─────────────────────────────────── */
+  @keyframes formShake {
+    0%,100% { transform: translateX(0); }
+    15%,55% { transform: translateX(-7px); }
+    35%,75% { transform: translateX(7px); }
+  }
+  .form-shake { animation: formShake .42s cubic-bezier(.36,.07,.19,.97) both; }
+  </style>
   {% block head_extra %}{% endblock %}
 </head>
 <body>
@@ -299,6 +316,37 @@
 
 {% if current_user.is_authenticated %}
 <script>
+/* ── Page transitions ───────────────────────────────────────────── */
+(function () {
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest('a[href]');
+    if (!a) return;
+    var href = a.getAttribute('href');
+    if (!href || href.startsWith('#') || href.startsWith('http') ||
+        href.startsWith('mailto') || a.target === '_blank' ||
+        a.hasAttribute('data-bs-toggle') || e.ctrlKey || e.metaKey) return;
+    var main = document.getElementById('appMain');
+    if (!main) return;
+    e.preventDefault();
+    main.classList.add('page-leaving');
+    setTimeout(function () { window.location.href = href; }, 170);
+  });
+})();
+
+/* ── Common.shake — form shake animation ───────────────────────── */
+(function () {
+  var orig = window.Common;
+  if (!orig) return;
+  orig.shake = function (el) {
+    if (!el) return;
+    el.classList.remove('form-shake');
+    void el.offsetWidth; // reflow to restart animation
+    el.classList.add('form-shake');
+    el.addEventListener('animationend', function h() { el.classList.remove('form-shake'); el.removeEventListener('animationend', h); });
+  };
+})();
+
+/* ── Bell dropdown ──────────────────────────────────────────────── */
 (function () {
   var _bellLoaded = false;
 

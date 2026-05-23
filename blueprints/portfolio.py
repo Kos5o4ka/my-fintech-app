@@ -26,7 +26,7 @@ from services.moex_service import get_bond_cached, get_bond_preview
 from services.portfolio_service import (
     build_portfolio_list, calc_portfolio_ytm,
     build_trade_entry, calc_coupon_income,
-    calc_monthly_profit, calc_tax_report,
+    calc_monthly_profit, calc_tax_report, calc_sharpe_ratio,
 )
 from schemas.portfolio import AddBondRequest, SellBondRequest, ScreenerRequest
 from constants import (
@@ -682,6 +682,139 @@ def portfolio_benchmark():
     result = {"range": range_param, "rgbi": rgbi}
     cache.set(cache_key, result, timeout=BENCHMARK_TTL)
     return jsonify(result)
+
+
+# ── Sharpe Ratio ─────────────────────────────────────────────────────────────
+
+@portfolio_bp.route("/api/portfolio/sharpe", methods=["GET"])
+@login_required
+def portfolio_sharpe():
+    """Коэффициент Шарпа по закрытым позициям портфеля (Stage 4)."""
+    sold = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=True).all()
+    result = calc_sharpe_ratio(sold)
+    if result is None:
+        return jsonify({
+            "sharpe": None,
+            "reason": f"Недостаточно данных (закрытых позиций: {len(sold)}, нужно ≥ 3)",
+        })
+    return jsonify(result)
+
+
+# ── Сравнение двух облигаций ──────────────────────────────────────────────────
+
+def _bond_history_for_compare(isin: str, range_param: str) -> dict:
+    """Вспомогательная функция: история цены одной облигации для вкладки Сравнение."""
+    cache_key = f"bond_chart:{isin}:{range_param}"
+    cached = cache.get(cache_key)
+    if cached:
+        return cached
+
+    moex_data = get_moex_bond(isin)
+    if not moex_data:
+        return {"labels": [], "data": [], "name": isin}
+
+    full = get_bond_history_all(moex_data["secid"], moex_data.get("facevalue", 1000))
+    labels = full.get("labels", [])
+    prices = full.get("data", [])
+
+    if range_param in ("day", "week", "month"):
+        days_map = {"day": 1, "week": 7, "month": 31}
+        cutoff = datetime.utcnow().date() - timedelta(days=days_map[range_param])
+        combined = [
+            (lbl, p)
+            for lbl, p in zip(labels, prices)
+            if _parse_date(lbl) and _parse_date(lbl) >= cutoff
+        ]
+        if not combined:
+            take = min(100, len(labels))
+            combined = list(zip(labels[-take:], prices[-take:]))
+    else:
+        combined = list(zip(labels, prices))
+
+    if len(combined) > MAX_CHART_POINTS:
+        step = math.ceil(len(combined) / MAX_CHART_POINTS)
+        combined = [combined[i] for i in range(0, len(combined), step)]
+
+    if combined:
+        lbl_out, price_out = zip(*combined)
+        result = {"labels": list(lbl_out), "data": list(price_out), "name": moex_data.get("name", isin)}
+    else:
+        result = {"labels": [], "data": [], "name": moex_data.get("name", isin)}
+
+    cache.set(cache_key, result, timeout=CHART_RANGE_TTL)
+    return result
+
+
+@portfolio_bp.route("/api/portfolio/compare", methods=["GET"])
+@login_required
+def compare_bonds():
+    """Сравнение динамики цен двух облигаций (нормировано к 100).
+
+    ?isin1=RU000A…&isin2=RU000A…&range=month|week|3m|year|all
+    """
+    isin1 = request.args.get("isin1", "").upper().strip()
+    isin2 = request.args.get("isin2", "").upper().strip()
+    range_param = request.args.get("range", "month")
+
+    if not isin1 or not isin2:
+        return jsonify({"status": "error", "message": "Оба ISIN обязательны"}), 400
+    if isin1 == isin2:
+        return jsonify({"status": "error", "message": "ISIN должны быть разными"}), 400
+
+    cache_key = f"compare:{isin1}:{isin2}:{range_param}"
+    cached = cache.get(cache_key)
+    if cached:
+        return jsonify(cached)
+
+    d1 = _bond_history_for_compare(isin1, range_param)
+    d2 = _bond_history_for_compare(isin2, range_param)
+
+    def _normalize(prices: list) -> list:
+        if not prices:
+            return prices
+        base = prices[0]
+        return [round(p / base * 100, 2) if base else p for p in prices]
+
+    response = {
+        "status": "success",
+        "labels": d1["labels"] or d2["labels"],
+        "bond1": {"isin": isin1, "name": d1["name"], "data": _normalize(d1["data"])},
+        "bond2": {"isin": isin2, "name": d2["name"], "data": _normalize(d2["data"])},
+    }
+    cache.set(cache_key, response, timeout=CHART_RANGE_TTL)
+    return jsonify(response)
+
+
+# ── Отчёт (print-to-PDF) ──────────────────────────────────────────────────────
+
+@portfolio_bp.route("/portfolio/report")
+@login_required
+def portfolio_report_page():
+    """Страница отчёта, оптимизированная для печати / сохранения как PDF."""
+    active = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False).all()
+    bonds, total_val = build_portfolio_list(active)
+    ytm = calc_portfolio_ytm(bonds, total_val)
+
+    year = date.today().year
+    sold_all = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=True).all()
+    sold_year = [b for b in sold_all if b.sell_date and b.sell_date.year == year]
+    tax = calc_tax_report(sold_year, active, year)
+
+    sharpe_data = calc_sharpe_ratio(sold_all)
+
+    return render_template(
+        "pdf_report.html",
+        bonds=bonds,
+        total_value=round(total_val, 2),
+        portfolio_ytm=ytm,
+        tax=tax,
+        sharpe=sharpe_data,
+        year=year,
+        username=current_user.username,
+        generated_at=datetime.now().strftime("%d.%m.%Y %H:%M"),
+        bond_count=len(active),
+        sold_count=len(sold_all),
+    )
 
 
 # ── Dashboard: P&L chart data ─────────────────────────────────────────────────
