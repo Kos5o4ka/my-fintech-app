@@ -1,16 +1,58 @@
-.venv/
-__pycache__/
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Секреты — НИКОГДА не включать в образ
+.env
+.env.*
+!.env.production.example
+
+# Python
+__pycache__
 *.pyc
 *.pyo
 *.pyd
+*.pdb
+.Python
+pip-log.txt
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Testing / coverage
 .pytest_cache/
-.git/
-.gitignore
-*.md
+.coverage
+htmlcov/
+.hypothesis/
+tests/
+
+# Runtime data (монтируется через volumes)
+.cache/
+instance/
+static/avatars/
+static/uploads/
 *.db
 *.sqlite3
-static/avatars/
-tests/
-.env
-.env.*
-instance/
+
+# Редакторы и OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+Thumbs.db
+
+# Документация (не нужна в образе)
+docs/
+*.md
+
+# Docker (не рекурсивно нужен внутри контейнера)
+docker-compose*.yml
+.dockerignore

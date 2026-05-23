@@ -1,29 +1,60 @@
-# ── Stage 1: install deps ────────────────────────────────────────────────────
-FROM python:3.12-slim AS builder
+# ── Stage 1: builder — компиляция зависимостей ────────────────────────────────
+# Устанавливаем пакеты в отдельном слое, чтобы не тащить gcc и dev-заголовки
+# в финальный образ (экономит ~200 МБ).
+FROM python:3.10-slim AS builder
 
-WORKDIR /install
+WORKDIR /build
+
+# Системные зависимости для компиляции psycopg2 и Pillow
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gcc \
+        libpq-dev \
+        libjpeg-dev \
+        zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir --prefix=/deps -r requirements.txt
 
-# ── Stage 2: runtime ──────────────────────────────────────────────────────────
-FROM python:3.12-slim
+
+# ── Stage 2: runtime — финальный образ ───────────────────────────────────────
+FROM python:3.10-slim AS runtime
+
+LABEL org.opencontainers.image.title="InvestTrack" \
+      org.opencontainers.image.description="Flask bond portfolio tracker with MOEX integration"
 
 WORKDIR /app
 
-# Copy installed packages from builder
+# Только runtime shared libs (без компилятора и dev-заголовков)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libpq5 \
+        libjpeg62-turbo \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Пакеты из builder-стадии
 COPY --from=builder /deps /usr/local
 
-# Copy application source
+# Исходный код
 COPY . .
 
-# Create avatar upload dir
-RUN mkdir -p static/avatars
-
+# Переменные окружения
 ENV FLASK_ENV=production \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
+# Директории для загрузок и кэша; непривилегированный пользователь
+RUN mkdir -p static/avatars static/uploads .cache \
+    && adduser --disabled-password --gecos '' --uid 1000 appuser \
+    && chown -R appuser:appuser /app
+
+USER appuser
+
 EXPOSE 5000
 
-# Run migrations then start Gunicorn
-CMD ["sh", "-c", "python scripts/init_db.py && gunicorn --workers 4 --threads 2 --bind 0.0.0.0:5000 --timeout 60 app:app"]
+# Docker HEALTHCHECK — используем /health из blueprints/main.py
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD curl -f http://localhost:5000/health || exit 1
+
+# Запуск через gunicorn с настройками из gunicorn.conf.py
+CMD ["sh", "-c", "flask db upgrade && gunicorn --config gunicorn.conf.py app:app"]

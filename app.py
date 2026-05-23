@@ -3,6 +3,30 @@ import logging
 import os
 from datetime import datetime, timezone
 
+# ── Sentry (опционально) ──────────────────────────────────────────────────────
+# Активируется только если задана переменная SENTRY_DSN.
+# Перехватывает необработанные исключения и отправляет в Sentry.io.
+if os.environ.get("SENTRY_DSN"):
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.flask import FlaskIntegration
+        from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+
+        sentry_sdk.init(
+            dsn=os.environ["SENTRY_DSN"],
+            integrations=[
+                FlaskIntegration(transaction_style="url"),
+                SqlalchemyIntegration(),
+            ],
+            # Трассировка производительности — 10% запросов (настройте под нагрузку)
+            traces_sample_rate=float(os.environ.get("SENTRY_TRACES_RATE", "0.1")),
+            # Не отправлять личные данные пользователей (IP, cookies)
+            send_default_pii=False,
+            environment=os.environ.get("FLASK_ENV", "development"),
+        )
+    except ImportError:
+        pass  # sentry-sdk не установлен — продолжаем без него
+
 from flask import Flask, request, jsonify, render_template, session
 from flask_cors import CORS
 from flask_login import current_user, logout_user
