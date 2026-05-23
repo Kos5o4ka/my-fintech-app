@@ -15,7 +15,7 @@
 | 3 | Безопасность + Telegram | ✅ Выполнен |
 | 4 | Новые фичи | ✅ Выполнен |
 | 5 | Тестирование | ✅ Выполнен (базовое) |
-| 6 | DevOps и деплой | 🔲 В плане |
+| 6 | DevOps и деплой | ✅ Выполнен |
 | 7 | Документация | 🔲 В плане |
 
 ---
@@ -228,16 +228,49 @@
 
 ---
 
-## Этап 6 — DevOps и деплой 🔲 В ПЛАНЕ
+## Этап 6 — DevOps и деплой ✅ ВЫПОЛНЕН
 
-- [ ] Multi-stage `Dockerfile` (builder + slim runtime)
-- [ ] `docker-compose.yml`: app + PostgreSQL + Redis + Nginx
-- [ ] `HEALTHCHECK` endpoint `/health`
-- [ ] Nginx reverse proxy (SSL, gzip, static files)
-- [ ] Gunicorn: `--workers 4 --threads 2`
-- [ ] Let's Encrypt + certbot
-- [ ] Sentry для ошибок
-- [ ] GitHub Actions: lint → test → build → deploy
+### 6.1 Docker
+
+- [x] **Multi-stage `Dockerfile`** — builder (gcc + компиляция psycopg2/Pillow) + runtime (~200 МБ меньше), непривилегированный `appuser uid=1000`
+- [x] **`.dockerignore`** — исключает .env, venv, тесты, кэш, загрузки
+- [x] **`HEALTHCHECK`** в Dockerfile — `curl -f /health` каждые 30с
+
+### 6.2 docker-compose
+
+- [x] **`docker-compose.yml`** — 4 сервиса: app + PostgreSQL 16-alpine + Redis 7-alpine + Nginx 1.27-alpine
+- [x] **Изолированная сеть** — app недоступен снаружи, только через Nginx
+- [x] **Health checks** на всех сервисах, `depends_on: condition: service_healthy`
+- [x] **Именованные volumes**: postgres_data, redis_data, app_avatars, app_uploads, app_cache, nginx_certs
+- [x] **`SECRET_KEY` обязателен** — docker compose падает с понятной ошибкой если не задан
+
+### 6.3 Gunicorn
+
+- [x] **`gunicorn.conf.py`** — auto workers (2×CPU+1, мин 2, макс 8), threads, timeouts, access log format, security limits для заголовков
+- [x] **Переменные**: GUNICORN_WORKERS, GUNICORN_THREADS, GUNICORN_TIMEOUT, PORT
+
+### 6.4 Nginx
+
+- [x] **`nginx/nginx.conf`** — worker_processes auto, gzip, rate-limit zones, proxy buffering, `server_tokens off`
+- [x] **`nginx/conf.d/app.conf`** — статика отдаётся Nginx напрямую (30d кэш + immutable), rate limit на login/api/general, `/health` без лога
+- [x] **HTTPS блок** готов (закомментирован), настраивается добавлением сертификатов
+- [ ] Let's Encrypt + certbot *(отдельный шаг при деплое на реальный сервер)*
+
+### 6.5 Sentry
+
+- [x] **`sentry-sdk[flask]`** — опциональная инициализация если задан `SENTRY_DSN`
+- [x] **FlaskIntegration + SqlalchemyIntegration** — трассировка запросов и SQL
+- [x] **`traces_sample_rate=0.1`** (10%), `send_default_pii=False`
+- [x] Graceful fallback — если sentry-sdk не установлен, продолжает работу без него
+
+### 6.6 GitHub Actions
+
+- [x] **`.github/workflows/ci.yml`** — 3 джоба: lint → test → docker build + smoke test
+- [x] **lint**: ruff check + ruff format + bandit security scan
+- [x] **test**: pytest --timeout=60, coverage → Codecov (non-blocking)
+- [x] **docker**: build образа, smoke test `/health` в контейнере
+- [x] **concurrency**: отмена предыдущего запуска при новом коммите в ту же ветку
+- [x] **deploy job** — шаблон (SSH + Docker Hub) закомментирован, готов к раскомментированию
 
 ---
 
