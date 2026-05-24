@@ -262,7 +262,7 @@ def _send_coupon_reminders() -> None:
 
             # Собираем пользователей с Telegram-каналом уведомлений
             users = User.query.filter(
-                db.and_(User.telegram_chat_id.isnot(None), User.telegram_notifications == True)
+                db.and_(User.telegram_chat_id.isnot(None), User.telegram_notifications.is_(True))
             ).all()
 
             for user in users:
@@ -279,8 +279,8 @@ def _send_coupon_reminders() -> None:
                 if not due:
                     continue
 
-                # Telegram
-                if has_tg and user.telegram_chat_id and user.telegram_notifications:
+                # Telegram (пользователи уже отфильтрованы запросом)
+                if has_tg:
                     lines = "\n".join(f"• {n} ({i}): <b>{v} ₽</b>" for n, i, v in due)
                     text = (
                         f"📅 <b>Купонные выплаты завтра ({tomorrow}):</b>\n\n"

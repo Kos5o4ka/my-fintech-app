@@ -61,9 +61,6 @@ class ProductionConfig(Config):
         "pool_recycle": 1800,  # переподключение каждые 30 мин (для NAT/firewall)
     }
 
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-
     @classmethod
     def validate(cls):
         key = os.environ.get('SECRET_KEY', '')

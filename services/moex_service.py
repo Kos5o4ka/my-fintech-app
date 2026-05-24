@@ -3,7 +3,7 @@ from typing import Optional
 
 from extensions import cache
 from moex import get_moex_bond, get_bond_details
-from constants import MOEX_BOND_TTL, BOND_PREVIEW_TTL
+from constants import MOEX_BOND_TTL, BOND_PREVIEW_TTL, COUPON_CALENDAR_TTL
 
 
 def get_bond_cached(isin: str) -> Optional[dict]:
@@ -59,7 +59,7 @@ def get_coupon_calendar_cached(secid: str) -> list[dict]:
         result = get_coupon_calendar(secid)
         if result:
             try:
-                cache.set(key, result, timeout=43200)  # 12 часов
+                cache.set(key, result, timeout=COUPON_CALENDAR_TTL)
             except Exception:
                 pass
     return result or []

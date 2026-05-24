@@ -109,6 +109,21 @@ def send_message(chat_id: str, text: str, parse_mode: str = "HTML") -> bool:
         return False
 
 
+def refresh_tg_username(user) -> None:
+    """Обновляет telegram_username пользователя через Telegram API (без commit).
+
+    Вызывается после успешного входа. Пропускает запрос если chat_id не задан.
+    """
+    if not user.telegram_chat_id:
+        return
+    try:
+        username = get_telegram_username(user.telegram_chat_id)
+        if username is not None and user.telegram_username != username:
+            user.telegram_username = username
+    except Exception as exc:
+        logger.warning("Could not refresh telegram username for user %s: %s", user.id, exc)
+
+
 def get_bot_deep_link(token: str) -> str:
     """Формирует deep-link для открытия бота с параметром start."""
     bot_username = current_app.config.get("TELEGRAM_BOT_USERNAME", "InvestTrackBot")

@@ -8,13 +8,13 @@ from typing import Optional
 from models import BondPortfolio
 from services.moex_service import get_bond_cached, get_coupon_calendar_cached
 from constants import NDFL_RATE
+from moex import get_currency_rates
 
 logger = logging.getLogger(__name__)
 
 
 def build_portfolio_entry(bond: BondPortfolio) -> dict:
     """Строит словарь с данными одной активной позиции, включая P&L и MOEX-данные."""
-    from moex import get_currency_rates
     rates = get_currency_rates()
     currency = bond.currency or 'RUB'
     
@@ -107,7 +107,6 @@ def build_trade_entry(bond) -> dict:
 
 def calc_coupon_income(active_bonds: list[BondPortfolio]) -> dict[str, float]:
     """Прогноз купонного дохода в разрезах 30/90/365 дней в пересчете на RUB."""
-    from moex import get_currency_rates
     rates = get_currency_rates()
     today = date.today()
     windows: dict[str, int] = {"30d": 30, "90d": 90, "365d": 365}
@@ -135,7 +134,6 @@ def calc_coupon_income(active_bonds: list[BondPortfolio]) -> dict[str, float]:
 
 def calc_monthly_profit(closed_bonds: list[BondPortfolio]) -> dict[str, float]:
     """Ежемесячная зафиксированная прибыль по закрытым позициям в пересчете на RUB."""
-    from moex import get_currency_rates
     rates = get_currency_rates()
     monthly: dict[str, float] = defaultdict(float)
     for bond in closed_bonds:
@@ -157,11 +155,9 @@ def calc_tax_report(
     year: int,
 ) -> dict:
     """Расчёт НДФЛ 13% с дохода от сделок и купонных выплат за год в пересчете на RUB."""
-    from moex import get_currency_rates
     rates = get_currency_rates()
     year_start = date(year, 1, 1)
     year_end = date(year, 12, 31)
-
     sales_income = 0.0
     for bond in sold_bonds:
         buy_p = float(bond.buy_price)

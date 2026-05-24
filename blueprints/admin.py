@@ -8,6 +8,7 @@ from werkzeug.security import generate_password_hash
 from extensions import db, limiter
 from models import User, AuditLog
 from constants import MIN_PASSWORD_LEN
+from utils import get_client_ip, get_user_agent
 
 logger = logging.getLogger(__name__)
 admin_bp = Blueprint("admin", __name__)
@@ -126,8 +127,8 @@ def admin_change_password(user_id):
     log = AuditLog(
         action="admin_change_password",
         user_id=current_user.id,
-        ip_address=(request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or request.remote_addr or ""),
-        user_agent=(request.headers.get("User-Agent") or "")[:255],
+        ip_address=get_client_ip(),
+        user_agent=get_user_agent(),
         details=f"target_user_id={target.id} target_username={target.username}",
     )
     db.session.add(log)

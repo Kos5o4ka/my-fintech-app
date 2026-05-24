@@ -33,14 +33,124 @@ from schemas.portfolio import AddBondRequest, SellBondRequest, ScreenerRequest
 from constants import (
     INCOME_TTL, CHART_RANGE_TTL, CHART_ALL_TTL,
     BENCHMARK_TTL, SCREENER_TTL, MAX_CHART_POINTS, STATS_TTL,
-    DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE,
+    DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, TIMEFRAME_DAYS,
 )
 
 logger = logging.getLogger(__name__)
 portfolio_bp = Blueprint("portfolio", __name__)
 
 
-# ── Утилиты ───────────────────────────────────────────────────────────────────
+# ── Утилиты импорта (module-level для тестируемости) ──────────────────────────
+
+def _norm_hdr(v) -> str:
+    """Нормализует заголовок: убирает переносы, лишние пробелы, lowercase."""
+    if v is None:
+        return ""
+    return " ".join(str(v).replace("\n", " ").replace("\r", " ").split()).lower()
+
+
+def _parse_num(v):
+    """Парсит число в русском формате: '100,70' / '2 014,00' → float."""
+    if isinstance(v, (int, float)):
+        return float(v)
+    if v is None:
+        return None
+    s = str(v).strip().replace("\xa0", "").replace(" ", "").replace(" ", "").replace(",", ".")
+    try:
+        return float(s) if s else None
+    except ValueError:
+        return None
+
+
+def _parse_any_date(v):
+    """Парсит дату из строки/datetime; понимает DD.MM.YYYY, ISO и другие форматы."""
+    if isinstance(v, datetime):
+        return v.date()
+    if isinstance(v, date):
+        return v
+    if not v:
+        return date.today()
+    s = str(v).strip().split()[0].split("/")[0].strip()
+    for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y", "%Y/%m/%d", "%d-%m-%Y"):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+    return date.today()
+
+
+def _is_valid_isin(s: str) -> bool:
+    """ISIN — ровно 12 alphanumeric символов, начинается с 2 букв."""
+    return len(s) == 12 and s.isalnum() and s[:2].isalpha()
+
+
+def _tx_type(val) -> str:
+    if not val:
+        return "buy"
+    v = str(val).strip().lower()
+    if v in ("продажа", "sell", "s", "-", "реализация", "погашение"):
+        return "sell"
+    return "buy"
+
+
+def _is_repo(val) -> bool:
+    """Возвращает True для РЕПО-сделок (не нужны в портфеле)."""
+    if not val:
+        return False
+    return "репо" in str(val).lower() or "repo" in str(val).lower()
+
+
+def _is_cancelled(val) -> bool:
+    if not val:
+        return False
+    v = str(val).strip().lower()
+    return v in ("отменена", "отменено", "cancelled", "canceled", "rejected")
+
+
+# ── Список псевдонимов столбцов для парсинга брокерских отчётов ───────────────
+_ISIN       = ["isin", "isin код", "код актива", "код бумаги", "код инструмента", "code"]
+_AMT        = ["количество", "кол-во", "кол.", "amount", "qty", "объем", "объём"]
+_PRICE      = ["цена за единицу", "цена сделки", "цена", "price", "курс"]
+_DATE       = ["дата заключения", "дата сделки", "дата", "date", "дата операции", "дата торгов"]
+_TYPE       = ["вид сделки", "тип сделки", "операция", "тип операции", "направление", "type"]
+_NAME       = ["наименование актива", "наименование инструмента", "наименование", "название", "инструмент", "name"]
+_COMM       = ["комиссия брокера", "сумма комиссии брокера", "комиссия", "commission", "broker_commission"]
+_CURR       = ["валюта расчетов", "валюта расчётов", "валюта", "currency"]
+_STATUS     = ["признак исполнения", "статус", "status"]
+_ANCHORS    = _ISIN + _AMT + _PRICE
+_PRICE_CURR = ["валюта цены", "единица цены", "валюта цены сделки"]
+_DEAL_NO    = ["номер сделки", "№ сделки", "n сделки", "номер"]
+
+
+def _find_header_row_xlsx(sheet, max_scan: int = 50):
+    """Возвращает (row_idx, {norm_name: col_idx}) или (None, {})."""
+    anchors = {_norm_hdr(a) for a in _ANCHORS}
+    for ri in range(1, min(max_scan + 1, sheet.max_row + 1)):
+        hdrs = {}
+        for cell in sheet[ri]:
+            n = _norm_hdr(cell.value)
+            if n:
+                hdrs[n] = cell.column
+        if sum(1 for a in anchors if a in hdrs) >= 2:
+            return ri, hdrs
+    return None, {}
+
+
+def _find_col(hdrs: dict, candidates: list):
+    """Первый совпадающий индекс столбца (1-based) или None."""
+    for name in candidates:
+        n = _norm_hdr(name)
+        if n in hdrs:
+            return hdrs[n]
+    for name in candidates:
+        n = _norm_hdr(name)
+        for hn, hc in hdrs.items():
+            if hn.startswith(n) or n.startswith(hn):
+                return hc
+    return None
+
+
+# ── Прочие утилиты blueprint'а ─────────────────────────────────────────────────
 
 def _etag(payload: dict) -> str:
     """Быстрый ETag из MD5 тела ответа (первые 16 символов)."""
@@ -452,8 +562,7 @@ def get_bond_chart_data(isin: str):
     ytm_hist = full.get("ytm", [])
 
     if range_param in ("day", "week", "month"):
-        days_map = {"day": 1, "week": 7, "month": 31}
-        cutoff = datetime.utcnow().date() - timedelta(days=days_map[range_param])
+        cutoff = datetime.utcnow().date() - timedelta(days=TIMEFRAME_DAYS[range_param])
         combined = [
             (lbl, p, n, y)
             for lbl, p, n, y in zip(labels, prices, nkd_hist, ytm_hist)
@@ -795,8 +904,7 @@ def portfolio_benchmark():
     if cached:
         return jsonify(cached)
 
-    days_map = {"week": 7, "month": 31, "3m": 91, "year": 365, "all": 9999}
-    days = days_map.get(range_param, 31)
+    days = TIMEFRAME_DAYS.get(range_param, 31)
     from_date = (date.today() - timedelta(days=days)).strftime("%Y-%m-%d") if days < 9999 else None
     rgbi = get_rgbi_history(from_date=from_date, to_date=date.today().strftime("%Y-%m-%d"))
     result = {"range": range_param, "rgbi": rgbi}
@@ -838,8 +946,7 @@ def _bond_history_for_compare(isin: str, range_param: str) -> dict:
     prices = full.get("data", [])
 
     if range_param in ("day", "week", "month"):
-        days_map = {"day": 1, "week": 7, "month": 31}
-        cutoff = datetime.utcnow().date() - timedelta(days=days_map[range_param])
+        cutoff = datetime.utcnow().date() - timedelta(days=TIMEFRAME_DAYS[range_param])
         combined = [
             (lbl, p)
             for lbl, p in zip(labels, prices)
@@ -1108,108 +1215,6 @@ def import_portfolio():
     таймаут воркера (gunicorn default 30 s) при большом числе ISINs.
     Актуальные цены/данные MOEX подтянутся при следующей загрузке портфеля.
     """
-
-    # ── утилиты ───────────────────────────────────────────────────────────────
-
-    def _norm_hdr(v):
-        """Нормализует заголовок: убирает переносы, лишние пробелы, lowercase."""
-        if v is None:
-            return ""
-        return " ".join(str(v).replace("\n", " ").replace("\r", " ").split()).lower()
-
-    def _parse_num(v):
-        """Парсит число в русском формате: '100,70' / '2 014,00' → float."""
-        if isinstance(v, (int, float)):
-            return float(v)
-        if v is None:
-            return None
-        s = str(v).strip().replace("\xa0", "").replace(" ", "").replace(" ", "").replace(",", ".")
-        try:
-            return float(s) if s else None
-        except ValueError:
-            return None
-
-    def _parse_date(v):
-        """Парсит дату из строки/datetime; понимает DD.MM.YYYY и ISO."""
-        if isinstance(v, datetime):
-            return v.date()
-        if isinstance(v, date):
-            return v
-        if not v:
-            return date.today()
-        s = str(v).strip().split()[0].split("/")[0].strip()
-        for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y", "%Y/%m/%d", "%d-%m-%Y"):
-            try:
-                return datetime.strptime(s, fmt).date()
-            except ValueError:
-                continue
-        return date.today()
-
-    def _is_valid_isin(s):
-        """ISIN — ровно 12 alphanumeric символов, начинается с 2 букв."""
-        return len(s) == 12 and s.isalnum() and s[:2].isalpha()
-
-    def _tx_type(val):
-        if not val:
-            return "buy"
-        v = str(val).strip().lower()
-        if v in ("продажа", "sell", "s", "-", "реализация", "погашение"):
-            return "sell"
-        return "buy"
-
-    def _is_repo(val):
-        """Возвращает True для РЕПО-сделок (не нужны в портфеле)."""
-        if not val:
-            return False
-        return "репо" in str(val).lower() or "repo" in str(val).lower()
-
-    def _is_cancelled(val):
-        if not val:
-            return False
-        v = str(val).strip().lower()
-        return v in ("отменена", "отменено", "cancelled", "canceled", "rejected")
-
-    # ── имена столбцов (стандарт + брокерские форматы) ────────────────────────
-    _ISIN   = ["isin", "isin код", "код актива", "код бумаги", "код инструмента", "code"]
-    _AMT    = ["количество", "кол-во", "кол.", "amount", "qty", "объем", "объём"]
-    _PRICE  = ["цена за единицу", "цена сделки", "цена", "price", "курс"]
-    _DATE   = ["дата заключения", "дата сделки", "дата", "date", "дата операции", "дата торгов"]
-    _TYPE   = ["вид сделки", "тип сделки", "операция", "тип операции", "направление", "type"]
-    _NAME   = ["наименование актива", "наименование инструмента", "наименование", "название", "инструмент", "name"]
-    _COMM   = ["комиссия брокера", "сумма комиссии брокера", "комиссия", "commission", "broker_commission"]
-    _CURR   = ["валюта расчетов", "валюта расчётов", "валюта", "currency"]
-    _STATUS = ["признак исполнения", "статус", "status"]
-    _ANCHORS    = _ISIN + _AMT + _PRICE  # якорные столбцы для поиска строки заголовка
-    _PRICE_CURR = ["валюта цены", "единица цены", "валюта цены сделки"]
-    _DEAL_NO    = ["номер сделки", "№ сделки", "n сделки", "номер"]
-
-    def _find_header_row_xlsx(sheet, max_scan=50):
-        """Возвращает (row_idx, {norm_name: col_idx}) или (None, {})."""
-        anchors = {_norm_hdr(a) for a in _ANCHORS}
-        for ri in range(1, min(max_scan + 1, sheet.max_row + 1)):
-            hdrs = {}
-            for cell in sheet[ri]:
-                n = _norm_hdr(cell.value)
-                if n:
-                    hdrs[n] = cell.column
-            if sum(1 for a in anchors if a in hdrs) >= 2:
-                return ri, hdrs
-        return None, {}
-
-    def _find_col(hdrs, candidates):
-        """Первый совпадающий индекс столбца (1-based) или None."""
-        for name in candidates:
-            n = _norm_hdr(name)
-            if n in hdrs:
-                return hdrs[n]
-        # Запасной вариант: начало строки совпадает
-        for name in candidates:
-            n = _norm_hdr(name)
-            for hn, hc in hdrs.items():
-                if hn.startswith(n) or n.startswith(hn):
-                    return hc
-        return None
-
     # ── читаем брокера из формы ────────────────────────────────────────────────
     broker = (request.form.get("broker") or "auto").strip().lower()
     # Т-Инвестиции: фильтруем РЕПО-строки дополнительно по типу сделки
@@ -1495,7 +1500,7 @@ def import_portfolio():
             errors.append(f"Пропущено {isin}: некорректная цена ({deal.get('price')!r})")
             continue
 
-        trade_date = _parse_date(deal.get("date"))
+        trade_date = _parse_any_date(deal.get("date"))
         commission = _parse_num(deal.get("commission"))
         currency   = deal.get("currency") or "RUB"
         bond_title = deal.get("name") or isin

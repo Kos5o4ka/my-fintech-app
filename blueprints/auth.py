@@ -11,6 +11,7 @@ from extensions import db, limiter
 from models import User, AuditLog
 from schemas.auth import ChangePasswordRequest
 from constants import MIN_PASSWORD_LEN
+from utils import get_client_ip, get_user_agent
 
 logger = logging.getLogger(__name__)
 auth_bp = Blueprint("auth", __name__)
@@ -18,39 +19,14 @@ auth_bp = Blueprint("auth", __name__)
 
 # ── Вспомогательные функции ───────────────────────────────────────────────────
 
-def _get_client_ip() -> str:
-    """Возвращает IP клиента с учётом X-Forwarded-For (за reverse proxy)."""
-    forwarded = request.headers.get("X-Forwarded-For", "")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.remote_addr or ""
-
-
-def _get_user_agent() -> str:
-    return (request.headers.get("User-Agent") or "")[:255]
-
-
-def _refresh_tg_username(user) -> None:
-    """Обновляет telegram_username пользователя через Telegram API (без commit)."""
-    if not user.telegram_chat_id:
-        return
-    try:
-        from services.telegram_service import get_telegram_username
-        username = get_telegram_username(user.telegram_chat_id)
-        if username is not None and user.telegram_username != username:
-            user.telegram_username = username
-    except Exception as exc:
-        logger.warning("Could not refresh telegram username for user %s: %s", user.id, exc)
-
-
 def _audit(action: str, user_id: Optional[int] = None, details: Optional[str] = None) -> None:
     """Записывает событие в журнал аудита (без commit — вызывать до commit сессии)."""
     try:
         log = AuditLog(
             action=action,
             user_id=user_id,
-            ip_address=_get_client_ip(),
-            user_agent=_get_user_agent(),
+            ip_address=get_client_ip(),
+            user_agent=get_user_agent(),
             details=details,
         )
         db.session.add(log)
@@ -91,7 +67,8 @@ def api_login():
     session.permanent = True
     login_user(user, remember=True)
     _audit("login_ok", user_id=user.id)
-    _refresh_tg_username(user)
+    from services.telegram_service import refresh_tg_username
+    refresh_tg_username(user)
     db.session.commit()
     return jsonify({
         "status": "success",
@@ -133,7 +110,8 @@ def verify_2fa():
     session.permanent = True
     login_user(user, remember=True)
     _audit("login_ok", user_id=user.id, details="2fa=telegram")
-    _refresh_tg_username(user)
+    from services.telegram_service import refresh_tg_username
+    refresh_tg_username(user)
     db.session.commit()
     return jsonify({
         "status": "success",
