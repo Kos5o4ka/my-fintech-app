@@ -72,7 +72,7 @@ class Transaction(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     isin = db.Column(db.String(12), nullable=False)
     name = db.Column(db.String(100), nullable=True)
-    tx_type = db.Column(db.String(4), nullable=False)  # 'buy' | 'sell'
+    tx_type = db.Column(db.String(10), nullable=False)  # 'buy' | 'sell' | 'coupon'
     amount = db.Column(db.Integer, nullable=False)
     price = db.Column(db.Numeric(10, 2), nullable=False)
     commission = db.Column(db.Numeric(10, 4), nullable=True)

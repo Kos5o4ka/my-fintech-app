@@ -4,6 +4,7 @@ import csv
 import json
 import logging
 import math
+import re
 from datetime import datetime, date, timedelta
 from typing import Optional
 
@@ -1178,7 +1179,9 @@ def import_portfolio():
     _COMM   = ["комиссия брокера", "сумма комиссии брокера", "комиссия", "commission", "broker_commission"]
     _CURR   = ["валюта расчетов", "валюта расчётов", "валюта", "currency"]
     _STATUS = ["признак исполнения", "статус", "status"]
-    _ANCHORS = _ISIN + _AMT + _PRICE  # якорные столбцы для поиска строки заголовка
+    _ANCHORS    = _ISIN + _AMT + _PRICE  # якорные столбцы для поиска строки заголовка
+    _PRICE_CURR = ["валюта цены", "единица цены", "валюта цены сделки"]
+    _DEAL_NO    = ["номер сделки", "№ сделки", "n сделки", "номер"]
 
     def _find_header_row_xlsx(sheet, max_scan=50):
         """Возвращает (row_idx, {norm_name: col_idx}) или (None, {})."""
@@ -1243,15 +1246,19 @@ def import_portfolio():
                         ),
                     }), 400
 
-                isin_col   = _find_col(hdrs, _ISIN)
-                amt_col    = _find_col(hdrs, _AMT)
-                price_col  = _find_col(hdrs, _PRICE)
-                date_col   = _find_col(hdrs, _DATE)
-                type_col   = _find_col(hdrs, _TYPE)
-                name_col   = _find_col(hdrs, _NAME)
-                comm_col   = _find_col(hdrs, _COMM)
-                curr_col   = _find_col(hdrs, _CURR)
-                status_col = _find_col(hdrs, _STATUS)
+                isin_col       = _find_col(hdrs, _ISIN)
+                amt_col        = _find_col(hdrs, _AMT)
+                price_col      = _find_col(hdrs, _PRICE)
+                date_col       = _find_col(hdrs, _DATE)
+                type_col       = _find_col(hdrs, _TYPE)
+                name_col       = _find_col(hdrs, _NAME)
+                comm_col       = _find_col(hdrs, _COMM)
+                curr_col       = _find_col(hdrs, _CURR)
+                status_col     = _find_col(hdrs, _STATUS)
+                price_curr_col = _find_col(hdrs, _PRICE_CURR)
+                deal_no_col    = _find_col(hdrs, _DEAL_NO)
+                is_tinkoff     = broker in ("tinkoff", "tbank")
+                seen_deals: set = set()
 
                 if not isin_col or not amt_col or not price_col:
                     missing = []
@@ -1273,6 +1280,21 @@ def import_portfolio():
 
                     gc = lambda col: sheet.cell(row=ri, column=col).value if col else None  # noqa
 
+                    # Т-Инвестиции: фильтр акций по валюте цены (% = облигация, RUB = акция)
+                    _pc_v = str(sheet.cell(row=ri, column=price_curr_col).value or '').strip() if price_curr_col else ''
+                    if is_tinkoff and _pc_v.upper() == 'RUB':
+                        continue  # акция или инструмент с ценой в рублях — пропускаем
+
+                    # Т-Инвестиции: дедупликация OTC-сделок (RFP + DFP = одна сделка)
+                    if is_tinkoff:
+                        _dc = deal_no_col or 1
+                        _dn = sheet.cell(row=ri, column=_dc).value
+                        _dk = str(_dn).strip() if _dn is not None else ''
+                        if _dk and _dk in seen_deals:
+                            continue
+                        if _dk:
+                            seen_deals.add(_dk)
+
                     # Пропускаем РЕПО-сделки
                     type_v = gc(type_col)
                     if filter_repo and _is_repo(type_v):
@@ -1286,10 +1308,18 @@ def import_portfolio():
                     raw_curr = str(gc(curr_col) or "").strip().upper()
                     currency = raw_curr if raw_curr.isalpha() and len(raw_curr) == 3 else "RUB"
 
+                    # Т-Инвестиции: цена в % от номинала (номинал = 1000 ₽) → рублей
+                    _price_v = gc(price_col)
+                    if is_tinkoff and _pc_v == '%' and _price_v is not None:
+                        try:
+                            _price_v = float(_price_v) * 10
+                        except (TypeError, ValueError):
+                            pass
+
                     deals.append({
                         "isin":       isin_s,
                         "amount":     gc(amt_col),
-                        "price":      gc(price_col),
+                        "price":      _price_v,
                         "date":       gc(date_col),
                         "tx_type":    _tx_type(type_v),
                         "name":       str(gc(name_col)).strip() if gc(name_col) else None,
@@ -1297,6 +1327,56 @@ def import_portfolio():
                         "currency":   currency,
                         "notes":      "",
                     })
+
+                # Т-Инвестиции: купонные выплаты из Раздела 2 отчёта
+                if is_tinkoff:
+                    _re_isin  = re.compile(r'ISIN:\s*([A-Z0-9]{12})', re.IGNORECASE)
+                    _re_qty   = re.compile(r'[Кк]оличество[^:]*:\s*(\d+)')
+                    _re_punit = re.compile(r'(?:купоны за 1 бумагу|за 1 ценную бумагу)[^:]*:\s*([\d,.]+)')
+                    _re_date  = re.compile(r'Дата операции:\s*(\d{2})-([A-Za-z]{3})-(\d{2,4})')
+                    _MON = {m: i for i, m in enumerate(
+                        ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'], 1
+                    )}
+                    for ri in range(1, sheet.max_row + 1):
+                        desc = next(
+                            (str(cell.value) for cell in sheet[ri]
+                             if cell.value
+                             and 'isin' in str(cell.value).lower()
+                             and 'купон' in str(cell.value).lower()),
+                            None,
+                        )
+                        if not desc:
+                            continue
+                        m_isin  = _re_isin.search(desc)
+                        m_qty   = _re_qty.search(desc)
+                        m_punit = _re_punit.search(desc)
+                        if not (m_isin and m_qty and m_punit):
+                            continue
+                        c_isin  = m_isin.group(1).upper()
+                        c_qty   = int(m_qty.group(1))
+                        c_punit = float(m_punit.group(1).replace(',', '.'))
+                        c_date  = date.today()
+                        m_date  = _re_date.search(desc)
+                        if m_date:
+                            try:
+                                day = int(m_date.group(1))
+                                mon = _MON.get(m_date.group(2).upper(), 1)
+                                yr  = int(m_date.group(3))
+                                c_date = date(2000 + yr if yr < 100 else yr, mon, day)
+                            except (ValueError, KeyError):
+                                pass
+                        deals.append({
+                            "isin":       c_isin,
+                            "amount":     c_qty,
+                            "price":      c_punit,
+                            "date":       c_date,
+                            "tx_type":    "coupon",
+                            "name":       None,
+                            "commission": None,
+                            "currency":   "RUB",
+                            "notes":      "Купонный доход (Т-Инвестиции)",
+                        })
+
             except Exception as exc:
                 logger.error("XLSX import parse error: %s", exc, exc_info=True)
                 return jsonify({"status": "error", "message": f"Ошибка обработки XLSX: {exc}"}), 400
@@ -1393,7 +1473,8 @@ def import_portfolio():
     # ── обработка сделок — БЕЗ вызовов MOEX API (предотвращает таймаут) ───────
     # Цены/secid обновятся автоматически при следующей загрузке портфеля.
     imported_count = 0
-    errors: list = []
+    coupon_count   = 0
+    errors: list   = []
 
     for deal in deals:
         isin    = str(deal.get("isin", "")).strip().upper()
@@ -1447,6 +1528,21 @@ def import_portfolio():
             ))
             imported_count += 1
 
+        elif tx_type == "coupon":
+            db.session.add(Transaction(
+                user_id=current_user.id,
+                isin=isin,
+                name=bond_title,
+                tx_type="coupon",
+                amount=amount,
+                price=price,
+                commission=None,
+                currency=currency,
+                tx_date=trade_date,
+            ))
+            coupon_count   += 1
+            imported_count += 1
+
         else:  # sell
             active = BondPortfolio.query.filter_by(
                 user_id=current_user.id, isin=isin, is_sold=False
@@ -1489,7 +1585,9 @@ def import_portfolio():
     db.session.commit()
     _bust_user_cache(current_user.id)
 
-    msg = f"Импортировано {imported_count} сделок."
+    msg = f"Импортировано {imported_count} записей."
+    if coupon_count:
+        msg += f" Купонных выплат: {coupon_count}."
     if skipped_repo:
         msg += f" РЕПО-сделок пропущено: {skipped_repo}."
     if errors:
@@ -1498,5 +1596,6 @@ def import_portfolio():
         "status": "success",
         "message": msg,
         "imported_count": imported_count,
+        "coupon_count": coupon_count,
         "errors": errors,
     }), 200
