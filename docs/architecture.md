@@ -32,7 +32,7 @@ graph TB
 
             Services["⚙️ Services Layer\n──────────────\nportfolio_service.py\nmoex_service.py\nuser_service.py\ntelegram_service.py"]
 
-            Scheduler["⏰ APScheduler\n──────────────\nЦены каждые 15м\nКупоны ежедн. 09:00"]
+            Scheduler["⏰ APScheduler\n──────────────\nЦены каждые 15 мин\nКупоны ежедн. 09:00"]
         end
 
         DB[("🗄️ PostgreSQL 16\n(SQLite в dev)\n──────────────\nUser\nBondPortfolio\nWatchlist\nTransaction\nAuditLog")]
@@ -123,6 +123,8 @@ erDiagram
         bool email_notifications
         int telegram_chat_id
         bool telegram_notifications
+        bool two_fa_enabled
+        string telegram_username
     }
 
     BOND_PORTFOLIO {
@@ -162,9 +164,23 @@ erDiagram
         datetime created_at
     }
 
+    TRANSACTION {
+        int id PK
+        int user_id FK
+        string isin
+        string name
+        string tx_type
+        int amount
+        float price
+        float commission
+        string currency
+        date tx_date
+    }
+
     USER ||--o{ BOND_PORTFOLIO : "has"
     USER ||--o{ WATCHLIST_ITEM : "watches"
     USER ||--o{ AUDIT_LOG : "generates"
+    USER ||--o{ TRANSACTION : "logs"
 ```
 
 ---
@@ -205,7 +221,7 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    participant Scheduler as APScheduler (60s)
+    participant Scheduler as APScheduler (15 мин)
     participant Portfolio as portfolio.py
     participant MoexService as moex_service.py
     participant Cache
