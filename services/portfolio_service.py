@@ -187,7 +187,11 @@ def calc_tax_report(
                 cd = datetime.strptime(c["date"], "%Y-%m-%d").date()
             except ValueError:
                 continue
-            if year_start <= cd <= year_end:
+            owned_from = bond.purchase_date
+            owned_to = bond.sell_date  # None for active positions
+            if (year_start <= cd <= year_end
+                    and cd >= owned_from
+                    and (owned_to is None or cd <= owned_to)):
                 coupon_income += float(c["value"]) * bond.amount * rate
 
     total_income = round(sales_income + coupon_income, 2)

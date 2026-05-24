@@ -76,24 +76,50 @@
       .catch(function () {});
   }
 
+  function positionBellDropdown() {
+    var btn = document.getElementById('bellBtn');
+    var dd = document.getElementById('bellDropdown');
+    if (!btn || !dd) return;
+    var rect = btn.getBoundingClientRect();
+    var top = rect.top;
+    var left = rect.right + 8;
+    var ddHeight = dd.offsetHeight || 360;
+    if (top + ddHeight > window.innerHeight) {
+      top = Math.max(8, window.innerHeight - ddHeight - 8);
+    }
+    dd.style.top = top + 'px';
+    dd.style.left = left + 'px';
+  }
+
   window.toggleBellDropdown = function (e) {
     if (e) e.stopPropagation();
     var dd = document.getElementById('bellDropdown');
     if (!dd) return;
     var isOpen = dd.style.display !== 'none';
     dd.style.display = isOpen ? 'none' : 'block';
-    if (!isOpen && !_bellLoaded) loadBellData();
+    if (!isOpen) {
+      positionBellDropdown();
+      if (!_bellLoaded) loadBellData();
+    }
   };
 
-  // Close on outside click
+  // Close on outside click — checks both button and teleported dropdown
   document.addEventListener('click', function (e) {
-    var wrap = document.getElementById('sidebarBellWrap');
-    if (wrap && !wrap.contains(e.target)) {
-      var dd = document.getElementById('bellDropdown');
-      if (dd) dd.style.display = 'none';
-    }
+    var btn = document.getElementById('bellBtn');
+    var dd = document.getElementById('bellDropdown');
+    if (!dd || dd.style.display === 'none') return;
+    if (btn && btn.contains(e.target)) return;
+    if (dd.contains(e.target)) return;
+    dd.style.display = 'none';
   });
 
-  // Load badge count on page load (no dropdown)
-  document.addEventListener('DOMContentLoaded', loadBellData);
+  document.addEventListener('DOMContentLoaded', function () {
+    // Teleport #bellDropdown to body to escape sidebar overflow:hidden
+    var dd = document.getElementById('bellDropdown');
+    if (dd && dd.parentNode !== document.body) {
+      document.body.appendChild(dd);
+      dd.style.position = 'fixed';
+    }
+    loadBellData();
+  });
 })();
