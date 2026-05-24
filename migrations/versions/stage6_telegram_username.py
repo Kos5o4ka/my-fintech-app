@@ -8,7 +8,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = 'stage6_telegram_username'
-down_revision = 'stage5_2fa_toggle'
+down_revision = 'g7h8i9j0k1l2'
 branch_labels = None
 depends_on = None
 
