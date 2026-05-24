@@ -276,10 +276,10 @@ pre-commit run --all-files
 
 ## Pull Request Flow
 
-1. **Создать ветку** от `update-fr` (текущая рабочая ветка):
+1. **Создать ветку** от `main`:
    ```bash
-   git checkout update-fr
-   git pull origin update-fr
+   git checkout main
+   git pull origin main
    git checkout -b feat/my-feature
    ```
 
