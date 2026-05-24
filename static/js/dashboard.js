@@ -154,10 +154,10 @@ async function loadDonutChart() {
 async function loadDashboard() {
   try {
     const [portfolio, income, coupons, history] = await Promise.all([
-      fetch('/api/portfolio').then(r => r.json()),
-      fetch('/api/portfolio/income').then(r => r.json()),
-      fetch('/api/portfolio/calendar').then(r => r.json()),
-      fetch('/api/portfolio/history').then(r => r.json()),
+      fetch('/api/portfolio').then(r => r.ok ? r.json() : {}),
+      fetch('/api/portfolio/income').then(r => r.ok ? r.json() : {}),
+      fetch('/api/portfolio/calendar').then(r => r.ok ? r.json() : []),
+      fetch('/api/portfolio/history').then(r => r.ok ? r.json() : {}),
     ]);
 
     const bonds = portfolio.bonds || [];

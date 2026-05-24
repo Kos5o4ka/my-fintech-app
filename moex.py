@@ -4,7 +4,7 @@ from threading import Lock
 from typing import Optional
 
 import requests
-from datetime import datetime
+from datetime import datetime, date
 from tenacity import (
     retry,
     retry_if_exception_type,
@@ -258,7 +258,9 @@ def get_coupon_calendar(secid: str) -> list[dict]:
                     "date": row[cols.index('coupondate')],
                     "value": row[cols.index('value')],
                 })
-        return calendar[:6]
+        today_str = date.today().isoformat()
+        future = [c for c in calendar if c.get("date") and c["date"] >= today_str]
+        return future[:12]
     except Exception as e:
         logger.warning("MOEX coupon calendar error for %s: %s", secid, e)
         return []

@@ -175,7 +175,7 @@ my-fintech-app/
 │   ├── test_app.py          # 36 интеграционных тестов
 │   └── test_properties.py   # 17 Hypothesis property-based тестов
 │
-├── bruno/                   # API коллекция Bruno (41 запрос)
+├── bruno/                   # API коллекция Bruno (42 запроса)
 │   ├── auth/                # login, verify_2fa, logout, change_password
 │   ├── portfolio/           # 26 эндпоинтов: CRUD, export, screener, …
 │   ├── profile/             # 6 эндпоинтов: stats, telegram, activity

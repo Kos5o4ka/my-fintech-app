@@ -9,15 +9,21 @@
 
 ## [Unreleased]
 
-### Planned (v1.4.0 — Архитектура и Безопасность)
-- **Security**: Строгий одноразовый сброс OTP в `verify_otp` при любой попытке верификации для исключения brute-force.
-- **Security**: Аутентификация вебхука Telegram с использованием секретного ключа в URL.
-- **Fixed**: Коррекция расчета налоговой базы (`calc_tax_report`) — учет купонных доходов по проданным за год бумагам.
-- **Fixed**: Математическая формула средневзвешенного YTM портфеля — исключение стоимости бумаг без доходности из знаменателя.
-- **Fixed**: Баг "Limit before Filter" в скринере облигаций.
-- **Performance**: Кэширование купонного календаря на 12 часов для ликвидации N+1 HTTP-запросов к MOEX ISS.
-- **Performance**: Перенос Circuit Breaker в Redis для предотвращения сплит-брейна в Gunicorn воркерах.
-- **Architecture**: Вынос фонового планировщика APScheduler из процесса Flask во избежание дублирования фоновых задач.
+### Added
+- **Импорт отчётов Tinkoff/Т-Банк**: поддержка брокерских `.xlsx`-отчётов — сделки с облигациями, дедупликация OTC-операций, купонный доход
+
+### Changed
+- **Performance**: кэширование купонного календаря на 12 часов — ликвидация N+1 HTTP-запросов к MOEX ISS
+- **Performance**: перенос Circuit Breaker в Redis — предотвращение сплит-брейна в Gunicorn воркерах
+- **Architecture**: вынос фонового планировщика APScheduler из процесса Flask — исключение дублирования задач при multi-worker деплое
+- **Refactor**: устранение дублирования кода, вынос вспомогательных функций и именованных констант
+
+### Fixed
+- **Security**: строгий одноразовый сброс OTP в `verify_otp` при любой попытке верификации — исключение brute-force
+- **Security**: аутентификация вебхука Telegram секретным ключом в URL — защита от спуфинга
+- Коррекция расчёта налоговой базы (`calc_tax_report`) — учёт купонных доходов по проданным за год бумагам
+- Математическая формула средневзвешенного YTM портфеля — знаменатель теперь включает только бумаги с валидным YTM
+- Баг «Limit before Filter» в скринере облигаций
 
 ---
 
@@ -144,7 +150,7 @@
 
 ---
 
-[Unreleased]: https://github.com/Kos5o4ka/my-fintech-app/compare/v1.3.3...HEAD
+[Unreleased]: https://github.com/Kos5o4ka/my-fintech-app/compare/v1.3.3...bugfix/v1.4.0-ui-data
 [1.3.3]: https://github.com/Kos5o4ka/my-fintech-app/compare/v1.3.0...v1.3.3
 [1.3.0]: https://github.com/Kos5o4ka/my-fintech-app/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/Kos5o4ka/my-fintech-app/compare/v1.1.0...v1.2.0

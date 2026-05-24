@@ -3,7 +3,6 @@ from pathlib import Path
 
 JS_FILES = [
     "static/js/common.js",
-    "static/js/index.js",
     "static/js/portfolio.js",
     "static/js/sidebar.js",
     # Per-page bundles (extracted from inline scripts)
