@@ -457,7 +457,13 @@ def get_currency_rates() -> dict[str, float]:
     except Exception:
         pass
 
-    rates = {"RUB": 1.0, "USD": 90.0, "CNY": 12.5, "EUR": 98.0}
+    # Сначала пробуем CBR как базовый фолбэк (актуальнее хардкода)
+    try:
+        from cbr import get_rates as _cbr_rates
+        cbr = _cbr_rates({"USD", "EUR", "CNY"})
+        rates = {"RUB": 1.0, **cbr}
+    except Exception:
+        rates = {"RUB": 1.0, "USD": 90.0, "CNY": 12.5, "EUR": 98.0}
     tickers = {"USD": "USD000UTSTOM", "CNY": "CNYRUB_TOM", "EUR": "EUR_RUB__TOM"}
 
     for currency, ticker in tickers.items():

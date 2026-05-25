@@ -281,8 +281,14 @@ function renderBondRows() {
                     <b class="isin-link" onclick="openBondChart(this.dataset.isin)" data-isin="${esc(g.isin)}">${esc(g.isin)}</b>
                 </td>
                 <td data-label="Кол-во">${g.total_amount} шт.</td>
-                <td data-label="Цена покупки">${avgBuyPrice.toFixed(2)} ${sym}</td>
-                <td data-label="Текущая цена">${g.last_price.toFixed(2)} ${sym}</td>
+                <td data-label="Цена покупки">
+                    ${avgBuyPrice.toFixed(2)} ${sym}
+                    ${g.currency !== 'RUB' && g.lots[0]?.buy_price_rub ? `<br><small style="color:var(--text-tertiary)">≈ ${(g.total_cost / g.total_amount * (g.lots[0].rate_rub || 1)).toFixed(0)} ₽</small>` : ''}
+                </td>
+                <td data-label="Текущая цена">
+                    ${g.last_price.toFixed(2)} ${sym}
+                    ${g.currency !== 'RUB' && g.lots[0]?.last_price_rub ? `<br><small style="color:var(--text-tertiary)">≈ ${g.lots[0].last_price_rub.toFixed(0)} ₽</small>` : ''}
+                </td>
                 <td data-label="НКД" class="text-primary"><b>${g.nkd.toFixed(2)} ${sym}</b></td>
                 <td data-label="YTM" class="text-info"><b>${g.ytm.toFixed(2)} %</b></td>
                 <td data-label="P&L" class="${pnlClass}">
@@ -973,7 +979,7 @@ async function addScreenerToWatchlist(isin) {
     const brokerHints = {
         tinkoff: 'Отчёт по сделкам из личного кабинета Т‑Инвестиций (.xlsx)',
         vtb:     'Брокерский отчёт ВТБ (.xlsx) — раздел «Заключённые сделки»',
-        auto:    'Универсальный парсер — для других брокеров с похожим форматом',
+        auto:    'Брокер определяется автоматически по содержимому файла (ВТБ, Т‑Инвестиции или универсальный парсер)',
     };
     document.querySelectorAll('.broker-chip').forEach(chip => {
         chip.addEventListener('click', () => {

@@ -198,6 +198,8 @@
 
 .sidebar-theme-btn .theme-icon svg { width: 14px; height: 14px; }
 
+.theme-icon-spin { animation: themeIconSpin 220ms cubic-bezier(.34,1.56,.64,1) both; }
+
 .sidebar-theme-btn .theme-label {
   opacity: 1;
   transition: opacity var(--dur-base) var(--ease-base);
