@@ -25,7 +25,7 @@ graph TB
             direction TB
             Auth["blueprints/auth.py\n──────────────\n/api/auth/login\n/api/auth/verify_2fa\n/api/auth/logout\n/api/auth/change_password"]
             Portfolio["blueprints/portfolio.py\n──────────────\n/api/portfolio/*\n/portfolio/report\n/api/search_bond"]
-            Profile["blueprints/profile.py\n──────────────\n/api/profile/*\n/profile"]
+            Profile["blueprints/profile.py\n──────────────\n/api/profile/*\n/api/profile/avatar (DELETE)\n/profile"]
             Main["blueprints/main.py\n──────────────\n/ (лендинг)\n/dashboard\n/api/init"]
             Admin["blueprints/admin.py\n──────────────\n/admin\n/api/admin/*"]
             TGBot["blueprints/telegram_bot.py\n──────────────\n/api/telegram/webhook"]
@@ -254,6 +254,7 @@ sequenceDiagram
 | Ключ | TTL | Инвалидация / Описание |
 |------|-----|-------------------------|
 | `moex_bond:{isin}` | 15 мин | Цены и параметры активных облигаций с MOEX ISS. |
+| `moex_coupons:{secid}` | 12 ч | Купонный календарь облигации — ликвидация N+1 HTTP-запросов к MOEX. |
 | `bond_preview:{isin}` | 5 мин | Превью цены и деталей облигации для UI добавления. |
 | `portfolio_stats:{user_id}` | 15 мин | `_bust_user_cache()` при add/sell bond. Статистика P&L по месяцам. |
 | `portfolio_income:{user_id}` | 15 мин | `_bust_user_cache()` при add/sell bond. Прогноз купонов. |

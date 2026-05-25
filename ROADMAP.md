@@ -1,7 +1,21 @@
 # InvestTrack — Полный Roadmap
 
-> **Ветка активной разработки:** `bugfix/v1.4.0-ui-data`
-> Последнее обновление: 2026-05-25
+> **Ветка активной разработки:** `bugfix/v1.3.4-ui-bugs`  
+> Последнее обновление: 2026-05-25  
+> **Версионность:** патч-фиксы поднимают версию на `+0.0.1`, новые фичи — на `+0.1.0`
+
+---
+
+## 🔧 Текущая работа — Bug fixes v1.3.4 (`bugfix/v1.3.4-ui-bugs`)
+
+Исправление 6 UI-багов, найденных в v1.3.3.
+
+- [x] **Logout**: кнопка «Выйти из аккаунта» в профиле не работала — перенесена из inline `onclick` в `addEventListener` (DOMContentLoaded), убран defer race-condition
+- [x] **Delete avatar**: добавлена кнопка «Удалить аватар» + `DELETE /api/profile/avatar` + `delete_avatar()` в `user_service.py`
+- [x] **Sidebar Excel**: убрана дублирующая кнопка «Экспорт Excel» из сайдбара (кнопка остаётся на странице портфеля)
+- [x] **Broker report CPU**: `openpyxl read_only=True` + `iter_rows(values_only=True)` — SAX streaming, памяти ×5–10 меньше, CPU ×3–5 быстрее; единый проход по строкам вместо DOM-дерева
+- [x] **Bell mark-as-read**: кнопка «✓ Прочитано» в дропдауне купонов; бадж скрывается через `localStorage.bellReadCount` до появления новых уведомлений
+- [x] **ISIN modal**: `#bondChartModal` перемещён из `{% block content %}` в `{% block extra_modals %}` — вне `.app-main`, Bootstrap stacking context восстановлен
 
 ---
 

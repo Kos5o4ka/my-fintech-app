@@ -12,6 +12,31 @@ document.getElementById('avatarFileInput')?.addEventListener('change', function 
 });
 
 document.addEventListener('DOMContentLoaded', () => {
+  // ── Logout ───────────────────────────────────────────────────────────
+  document.getElementById('logoutBtn')?.addEventListener('click', () => {
+    window.Common.handleLogout();
+  });
+
+  // ── Удаление аватара ─────────────────────────────────────────────────
+  document.getElementById('deleteAvatarBtn')?.addEventListener('click', async () => {
+    if (!confirm('Удалить аватар? Вместо него будут показаны ваши инициалы.')) return;
+    const btn = document.getElementById('deleteAvatarBtn');
+    btn.disabled = true; btn.textContent = 'Удаляем…';
+    try {
+      const res = await window.Common.csrfFetch('/api/profile/avatar', { method: 'DELETE' });
+      const data = await res.json();
+      if (res.ok) {
+        window.Common.showToast(data.message);
+        setTimeout(() => location.reload(), 900);
+      } else {
+        window.Common.showSystemMessage(data.message, true);
+        btn.disabled = false; btn.textContent = 'Удалить аватар';
+      }
+    } catch {
+      btn.disabled = false; btn.textContent = 'Удалить аватар';
+    }
+  });
+
   // ── Hero quick stats ─────────────────────────────────────────────────
   fetch('/api/profile/stats').then(r => r.json()).then(d => {
     const bc = document.getElementById('hsBondCount');

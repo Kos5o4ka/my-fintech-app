@@ -99,6 +99,20 @@ def save_avatar(user: User, file: FileStorage) -> str:
     return new_filename
 
 
+def delete_avatar(user: User) -> None:
+    """Удаляет аватар пользователя с диска и обнуляет user.avatar."""
+    if user.avatar:
+        avatars_dir = current_app.config["UPLOAD_FOLDER"]
+        old_path = os.path.join(avatars_dir, user.avatar)
+        try:
+            if os.path.isfile(old_path):
+                os.remove(old_path)
+        except OSError as exc:
+            logger.warning("Не удалось удалить аватар %s: %s", old_path, exc)
+    user.avatar = None
+    db.session.commit()
+
+
 def update_email_settings(
     user: User,
     email: Optional[str],

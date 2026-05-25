@@ -1,7 +1,6 @@
-# Bugfix Roadmap — v1.4.0 (Architecture & Security)
+# Bugfix Roadmap — v1.3.4 & v1.4.0 (UI Bugs + Architecture & Security)
 
-**Ветка:** `feature/architecture-optimization`  
-**Дата:** 2026-05-24  
+**Последнее обновление:** 2026-05-25
 
 ---
 
@@ -11,15 +10,22 @@
 |---|----------|-----------------|--------|
 | BUG-1 | Нет кнопки выхода на странице профиля | `templates/profile.html` | ✅ Исправлено (v1.3.0) |
 | BUG-2 | В админке нельзя сменить пароль пользователя | `blueprints/admin.py`, `templates/admin.html`, `static/js/admin.js` | ✅ Исправлено (v1.3.0) |
-| BUG-3 | Упущен купонный доход по проданным бумагам в налоговом отчёте | `services/portfolio_service.py` | ✅ Исправлено (v1.4.0) |
-| BUG-4 | Уязвимость brute-force OTP 2FA (отсутствие сброса при ошибке) | `services/telegram_service.py` | ✅ Исправлено (v1.4.0) |
-| BUG-5 | Отсутствие аутентификации вебхука Telegram (риск спуфинга) | `blueprints/telegram_bot.py` | ✅ Исправлено (v1.4.0) |
-| BUG-6 | Искажение средневзвешенного YTM портфеля при пустых значениях | `services/portfolio_service.py` | ✅ Исправлено (v1.4.0) |
-| BUG-7 | Баг "Limit before Filter" в скринере облигаций | `moex.py` | ✅ Исправлено (v1.4.0) |
+| BUG-3 | Упущен купонный доход по проданным бумагам в налоговом отчёте | `services/portfolio_service.py` | ✅ Исправлено (v1.3.4) |
+| BUG-4 | Уязвимость brute-force OTP 2FA (отсутствие сброса при ошибке) | `services/telegram_service.py` | ✅ Исправлено (v1.3.4) |
+| BUG-5 | Отсутствие аутентификации вебхука Telegram (риск спуфинга) | `blueprints/telegram_bot.py` | ✅ Исправлено (v1.3.4) |
+| BUG-6 | Искажение средневзвешенного YTM портфеля при пустых значениях | `services/portfolio_service.py` | ✅ Исправлено (v1.3.4) |
+| BUG-7 | Баг "Limit before Filter" в скринере облигаций | `moex.py` | ✅ Исправлено (v1.3.4) |
 | BUG-8 | `compareLegend` всегда отображался из-за конфликта `display:none`/`display:flex` в inline style | `templates/portfolio.html` | ✅ Исправлено (v1.3.3) |
 | BUG-9 | Опечатка `"МУНИЦИN"` (лат. N) в фильтре муниципальных облигаций скринера | `blueprints/portfolio.py` | ✅ Исправлено (v1.3.3) |
 | BUG-10 | Пустое состояние таблицы портфеля: `colspan="8"` при 9 столбцах | `static/js/portfolio.js` | ✅ Исправлено (v1.3.3) |
 | BUG-11 | Ошибки импорта брокерских отчётов не отображались в UI (`data.skipped` вместо `data.errors`) | `static/js/portfolio.js` | ✅ Исправлено (v1.3.3) |
+| BUG-12 | Кнопка «Выйти из аккаунта» на странице профиля не срабатывала (inline `onclick` + defer race-condition) | `templates/profile.html`, `static/js/profile.js` | ✅ Исправлено (v1.3.4) |
+| BUG-13 | Отсутствие кнопки удаления аватара — пользователь не мог сбросить фото профиля | `templates/profile.html`, `static/js/profile.js`, `blueprints/profile.py`, `services/user_service.py` | ✅ Исправлено (v1.3.4) |
+| BUG-14 | Дублирующая кнопка «Экспорт Excel» в сайдбаре — та же функция уже есть на странице `/portfolio` | `templates/base.html` | ✅ Исправлено (v1.3.4) |
+| BUG-15 | Импорт брокерского отчёта нагружал CPU на 50%+ в течение 5 минут при обработке годовых XLSX | `blueprints/portfolio.py` | ✅ Исправлено (v1.3.4) |
+| BUG-16 | Bell-дропдаун без кнопки «Прочитано» — бадж уведомлений появлялся заново при каждой загрузке страницы | `templates/base.html`, `static/js/base.js` | ✅ Исправлено (v1.3.4) |
+| BUG-17 | Клик по ISIN: экран затемнялся, но модал с графиком цены не появлялся (сломан Bootstrap stacking context) | `templates/portfolio.html` | ✅ Исправлено (v1.3.4) |
+| BUG-18 | `#changePwModal` в `{% block content %}` admin.html — та же stacking context проблема | `templates/admin.html` | ✅ Исправлено (v1.3.4) |
 
 ---
 

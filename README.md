@@ -31,6 +31,7 @@
 | ⭐ **Вотчлист** | Список наблюдения с актуальными ценами и YTM с MOEX |
 | 🔐 **2FA через Telegram** | Двухфакторная аутентификация — OTP-код в личный бот с мгновенным сгоранием при попытке |
 | 🔔 **Уведомления** | Telegram-уведомления за день до купонной выплаты |
+| 🖼️ **Управление аватаром** | Загрузка (Pillow re-encode + strip EXIF) и удаление фото профиля — `DELETE /api/profile/avatar` |
 | 🌓 **Тёмная тема** | Переключение с View Transitions API (сглаженное перетекание) и сохранением в localStorage |
 | 🖨️ **PDF-отчёт** | Отчёт портфеля с Sharpe и налогами через `window.print()` |
 | 🍕 **Частичная продажа** | Поддержка дробного уменьшения лотов с авто-разделением сделок и пересчётом P&L |
@@ -175,10 +176,10 @@ my-fintech-app/
 │   ├── test_app.py          # 36 интеграционных тестов
 │   └── test_properties.py   # 17 Hypothesis property-based тестов
 │
-├── bruno/                   # API коллекция Bruno (42 запроса)
+├── bruno/                   # API коллекция Bruno (43 запроса)
 │   ├── auth/                # login, verify_2fa, logout, change_password
 │   ├── portfolio/           # 26 эндпоинтов: CRUD, export, screener, …
-│   ├── profile/             # 6 эндпоинтов: stats, telegram, activity
+│   ├── profile/             # 7 эндпоинтов: stats, telegram, activity, delete_avatar
 │   ├── admin/               # get_users, add_user, delete_user
 │   └── misc/                # health, init
 │
