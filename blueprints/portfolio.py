@@ -184,6 +184,109 @@ def _find_header_row_xlsx(sheet, max_scan: int = 50):
     return None, {}
 
 
+def _parse_vtb_xlsx(all_rows: list) -> list:
+    """Парсер брокерского отчёта ВТБ (.xlsx).
+
+    Разделы «Заключённые / Завершённые в отчёте сделки»:
+      col 1  — «Наименование, Рег.код, ISIN»
+      col 2  — дата и время заключения (datetime)
+      col 5  — вид сделки (Покупка / Продажа)
+      col 7  — количество (шт.)
+      col 9  — цена (% от номинала для облигаций)
+      col 11 — валюта расчётов (RUR → нормализуем в RUB)
+      col 15 — комиссия Банка за расчёты
+      col 17 — комиссия Банка за заключение
+      col 25 — № сделки (дедупликация между разделами)
+
+    Фильтр облигаций: рег.код начинается на «4B» (корп./биржевые)
+    или содержит «RMFS» (ОФЗ).
+    """
+    seen_deals: set = set()
+    deals: list = []
+
+    for row in all_rows:
+        if not row or len(row) < 18:
+            continue
+
+        type_cell = row[5]
+        if not type_cell:
+            continue
+        type_s = str(type_cell).strip().lower()
+        if type_s not in ("покупка", "продажа"):
+            continue
+
+        name_cell = row[1]
+        if not name_cell:
+            continue
+
+        parts = [p.strip() for p in str(name_cell).split(",")]
+        if len(parts) < 3:
+            continue
+
+        isin = parts[-1].upper()
+        if not _is_valid_isin(isin):
+            continue
+
+        reg_code = parts[-2].upper()
+        if not (reg_code.startswith("4B") or "RMFS" in reg_code):
+            continue
+
+        deal_no = (
+            str(row[25]).strip()
+            if len(row) > 25 and row[25] is not None
+            else ""
+        )
+        if deal_no and deal_no in seen_deals:
+            continue
+        if deal_no:
+            seen_deals.add(deal_no)
+
+        price_pct = row[9]
+        qty_v = row[7]
+        date_v = row[2]
+        comm1 = row[15] if len(row) > 15 else None
+        comm2 = row[17] if len(row) > 17 else None
+        curr_v = row[11] if len(row) > 11 else None
+
+        try:
+            price_rub = float(price_pct) * 10
+        except (TypeError, ValueError):
+            continue
+        if price_rub <= 0:
+            continue
+
+        commission = 0.0
+        for c in (comm1, comm2):
+            try:
+                commission += float(c)
+            except (TypeError, ValueError):
+                pass
+
+        raw_curr = str(curr_v or "").strip().upper()
+        if raw_curr in ("RUR", "RUB"):
+            currency = "RUB"
+        elif raw_curr.isalpha() and len(raw_curr) == 3:
+            currency = raw_curr
+        else:
+            currency = "RUB"
+
+        deals.append(
+            {
+                "isin": isin,
+                "amount": qty_v,
+                "price": price_rub,
+                "date": date_v,
+                "tx_type": "sell" if type_s == "продажа" else "buy",
+                "name": ", ".join(parts[:-2]),
+                "commission": commission if commission > 0 else None,
+                "currency": currency,
+                "notes": None,
+            }
+        )
+
+    return deals
+
+
 def _find_header_row_from_list(rows: list, max_scan: int = 50):
     """Возвращает (row_idx_0based, {norm_name: col_idx_1based}) или (None, {}).
     Работает с результатом iter_rows(values_only=True) — списком кортежей.
@@ -1510,10 +1613,11 @@ def import_portfolio():
         # ── XLSX ──────────────────────────────────────────────────────────────
         if filename.endswith((".xlsx", ".xls")):
             try:
-                # read_only=True включает SAX-streaming: экономия памяти ×5–10
-                # и CPU ×3–5 по сравнению с полной загрузкой DOM-модели.
+                # Т-Инвестиции генерирует файлы с <dimension ref="A1"/> вместо
+                # реального диапазона, поэтому read_only=True (SAX-streaming)
+                # останавливается после первой строки. Используем обычный режим.
                 file_bytes = io.BytesIO(f.read())
-                wb = openpyxl.load_workbook(file_bytes, read_only=True, data_only=True)
+                wb = openpyxl.load_workbook(file_bytes, data_only=True)
 
                 # Ищем нужный лист: первый, или с ключевым словом «сделки»/«trades»
                 sheet = wb.active
@@ -1526,196 +1630,213 @@ def import_portfolio():
                 # Один проход: собираем все строки как кортежи raw-значений.
                 # Tuple значительно легче Cell-объектов openpyxl (нет стилей, формул).
                 all_rows = list(sheet.iter_rows(values_only=True))
-                wb.close()  # освобождаем SAX-парсер
+                wb.close()
 
-                header_row_idx, hdrs = _find_header_row_from_list(all_rows)
-                if not hdrs:
-                    return jsonify(
-                        {
-                            "status": "error",
-                            "message": (
-                                "Не найдена строка заголовков. "
-                                "Убедитесь, что отчёт содержит столбцы: "
-                                "«Код актива» (ISIN), «Количество», «Цена за единицу»."
-                            ),
-                        }
-                    ), 400
+                # ── ВТБ: специализированный парсер ─────────────────────────
+                if broker == "vtb":
+                    deals.extend(_parse_vtb_xlsx(all_rows))
+                    if not deals:
+                        return jsonify(
+                            {
+                                "status": "error",
+                                "message": (
+                                    "ВТБ: сделки с облигациями не найдены. "
+                                    "Убедитесь, что файл содержит раздел "
+                                    "«Заключённые/Завершённые сделки» с покупками "
+                                    "или продажами облигаций."
+                                ),
+                            }
+                        ), 400
+                else:
 
-                isin_col = _find_col(hdrs, _ISIN)
-                amt_col = _find_col(hdrs, _AMT)
-                price_col = _find_col(hdrs, _PRICE)
-                date_col = _find_col(hdrs, _DATE)
-                type_col = _find_col(hdrs, _TYPE)
-                name_col = _find_col(hdrs, _NAME)
-                comm_col = _find_col(hdrs, _COMM)
-                curr_col = _find_col(hdrs, _CURR)
-                status_col = _find_col(hdrs, _STATUS)
-                price_curr_col = _find_col(hdrs, _PRICE_CURR)
-                deal_no_col = _find_col(hdrs, _DEAL_NO)
-                is_tinkoff = broker in ("tinkoff", "tbank")
-                seen_deals: set = set()
+                    header_row_idx, hdrs = _find_header_row_from_list(all_rows)
+                    if not hdrs:
+                        return jsonify(
+                            {
+                                "status": "error",
+                                "message": (
+                                    "Не найдена строка заголовков. "
+                                    "Убедитесь, что отчёт содержит столбцы: "
+                                    "«Код актива» (ISIN), «Количество», «Цена за единицу»."
+                                ),
+                            }
+                        ), 400
 
-                if not isin_col or not amt_col or not price_col:
-                    missing = []
-                    if not isin_col:
-                        missing.append("ISIN / Код актива")
-                    if not amt_col:
-                        missing.append("Количество")
-                    if not price_col:
-                        missing.append("Цена за единицу")
-                    return jsonify(
-                        {
-                            "status": "error",
-                            "message": f"Не найдены обязательные столбцы: {', '.join(missing)}.",
-                        }
-                    ), 400
+                    isin_col = _find_col(hdrs, _ISIN)
+                    amt_col = _find_col(hdrs, _AMT)
+                    price_col = _find_col(hdrs, _PRICE)
+                    date_col = _find_col(hdrs, _DATE)
+                    type_col = _find_col(hdrs, _TYPE)
+                    name_col = _find_col(hdrs, _NAME)
+                    comm_col = _find_col(hdrs, _COMM)
+                    curr_col = _find_col(hdrs, _CURR)
+                    status_col = _find_col(hdrs, _STATUS)
+                    price_curr_col = _find_col(hdrs, _PRICE_CURR)
+                    deal_no_col = _find_col(hdrs, _DEAL_NO)
+                    is_tinkoff = broker in ("tinkoff", "tbank")
+                    seen_deals: set = set()
 
-                # Вспомогательная: безопасно достать значение по 1-based col_idx из кортежа
-                def _gc(rv, col):
-                    if not col or col > len(rv):
-                        return None
-                    return rv[col - 1]
+                    if not isin_col or not amt_col or not price_col:
+                        missing = []
+                        if not isin_col:
+                            missing.append("ISIN / Код актива")
+                        if not amt_col:
+                            missing.append("Количество")
+                        if not price_col:
+                            missing.append("Цена за единицу")
+                        return jsonify(
+                            {
+                                "status": "error",
+                                "message": f"Не найдены обязательные столбцы: {', '.join(missing)}.",
+                            }
+                        ), 400
 
-                for row_values in all_rows[header_row_idx + 1 :]:
-                    isin_v = _gc(row_values, isin_col)
-                    if isin_v is None:
-                        continue
-                    isin_s = str(isin_v).strip().upper()
-                    if not _is_valid_isin(isin_s):
-                        continue  # пропускаем тикеры акций, РЕПО-тикеры и т.д.
+                    # Вспомогательная: безопасно достать значение по 1-based col_idx из кортежа
+                    def _gc(rv, col):
+                        if not col or col > len(rv):
+                            return None
+                        return rv[col - 1]
 
-                    # Т-Инвестиции: фильтр акций по валюте цены (% = облигация, RUB = акция)
-                    _pc_v = (
-                        str(_gc(row_values, price_curr_col) or "").strip()
-                        if price_curr_col
-                        else ""
-                    )
-                    if is_tinkoff and _pc_v.upper() == "RUB":
-                        continue  # акция или инструмент с ценой в рублях — пропускаем
-
-                    # Т-Инвестиции: дедупликация OTC-сделок (RFP + DFP = одна сделка)
-                    if is_tinkoff:
-                        _dc = deal_no_col or 1
-                        _dn = _gc(row_values, _dc)
-                        _dk = str(_dn).strip() if _dn is not None else ""
-                        if _dk and _dk in seen_deals:
+                    for row_values in all_rows[header_row_idx + 1 :]:
+                        isin_v = _gc(row_values, isin_col)
+                        if isin_v is None:
                             continue
-                        if _dk:
-                            seen_deals.add(_dk)
+                        isin_s = str(isin_v).strip().upper()
+                        if not _is_valid_isin(isin_s):
+                            continue  # пропускаем тикеры акций, РЕПО-тикеры и т.д.
 
-                    # Пропускаем РЕПО-сделки
-                    type_v = _gc(row_values, type_col)
-                    if filter_repo and _is_repo(type_v):
-                        skipped_repo += 1
-                        continue
-
-                    # Пропускаем отменённые
-                    if status_col and _is_cancelled(_gc(row_values, status_col)):
-                        continue
-
-                    raw_curr = str(_gc(row_values, curr_col) or "").strip().upper()
-                    currency = (
-                        raw_curr if raw_curr.isalpha() and len(raw_curr) == 3 else "RUB"
-                    )
-
-                    # Т-Инвестиции: цена в % от номинала (номинал = 1000 ₽) → рублей
-                    _price_v = _gc(row_values, price_col)
-                    if is_tinkoff and _pc_v == "%" and _price_v is not None:
-                        try:
-                            _price_v = float(_price_v) * 10
-                        except (TypeError, ValueError):
-                            pass
-
-                    name_v = _gc(row_values, name_col)
-                    deals.append(
-                        {
-                            "isin": isin_s,
-                            "amount": _gc(row_values, amt_col),
-                            "price": _price_v,
-                            "date": _gc(row_values, date_col),
-                            "tx_type": _tx_type(type_v),
-                            "name": str(name_v).strip() if name_v else None,
-                            "commission": _gc(row_values, comm_col),
-                            "currency": currency,
-                            "notes": "",
-                        }
-                    )
-
-                # Т-Инвестиции: купонные выплаты из Раздела 2 отчёта
-                if is_tinkoff:
-                    _re_isin = re.compile(r"ISIN:\s*([A-Z0-9]{12})", re.IGNORECASE)
-                    _re_qty = re.compile(r"[Кк]оличество[^:]*:\s*(\d+)")
-                    _re_punit = re.compile(
-                        r"(?:купоны за 1 бумагу|за 1 ценную бумагу)[^:]*:\s*([\d,.]+)"
-                    )
-                    _re_date = re.compile(
-                        r"Дата операции:\s*(\d{2})-([A-Za-z]{3})-(\d{2,4})"
-                    )
-                    _MON = {
-                        m: i
-                        for i, m in enumerate(
-                            [
-                                "JAN",
-                                "FEB",
-                                "MAR",
-                                "APR",
-                                "MAY",
-                                "JUN",
-                                "JUL",
-                                "AUG",
-                                "SEP",
-                                "OCT",
-                                "NOV",
-                                "DEC",
-                            ],
-                            1,
+                        # Т-Инвестиции: фильтр акций по валюте цены (% = облигация, RUB = акция)
+                        _pc_v = (
+                            str(_gc(row_values, price_curr_col) or "").strip()
+                            if price_curr_col
+                            else ""
                         )
-                    }
-                    # Сканируем все строки (all_rows уже в памяти — повторный проход бесплатен)
-                    for row_values in all_rows:
-                        desc = next(
-                            (
-                                str(v)
-                                for v in row_values
-                                if v
-                                and "isin" in str(v).lower()
-                                and "купон" in str(v).lower()
-                            ),
-                            None,
+                        if is_tinkoff and _pc_v.upper() == "RUB":
+                            continue  # акция или инструмент с ценой в рублях — пропускаем
+
+                        # Т-Инвестиции: дедупликация OTC-сделок (RFP + DFP = одна сделка)
+                        if is_tinkoff:
+                            _dc = deal_no_col or 1
+                            _dn = _gc(row_values, _dc)
+                            _dk = str(_dn).strip() if _dn is not None else ""
+                            if _dk and _dk in seen_deals:
+                                continue
+                            if _dk:
+                                seen_deals.add(_dk)
+
+                        # Пропускаем РЕПО-сделки
+                        type_v = _gc(row_values, type_col)
+                        if filter_repo and _is_repo(type_v):
+                            skipped_repo += 1
+                            continue
+
+                        # Пропускаем отменённые
+                        if status_col and _is_cancelled(_gc(row_values, status_col)):
+                            continue
+
+                        raw_curr = str(_gc(row_values, curr_col) or "").strip().upper()
+                        currency = (
+                            raw_curr if raw_curr.isalpha() and len(raw_curr) == 3 else "RUB"
                         )
-                        if not desc:
-                            continue
-                        m_isin = _re_isin.search(desc)
-                        m_qty = _re_qty.search(desc)
-                        m_punit = _re_punit.search(desc)
-                        if not (m_isin and m_qty and m_punit):
-                            continue
-                        c_isin = m_isin.group(1).upper()
-                        c_qty = int(m_qty.group(1))
-                        c_punit = float(m_punit.group(1).replace(",", "."))
-                        c_date = date.today()
-                        m_date = _re_date.search(desc)
-                        if m_date:
+
+                        # Т-Инвестиции: цена в % от номинала (номинал = 1000 ₽) → рублей
+                        _price_v = _gc(row_values, price_col)
+                        if is_tinkoff and _pc_v == "%" and _price_v is not None:
                             try:
-                                day = int(m_date.group(1))
-                                mon = _MON.get(m_date.group(2).upper(), 1)
-                                yr = int(m_date.group(3))
-                                c_date = date(2000 + yr if yr < 100 else yr, mon, day)
-                            except (ValueError, KeyError):
+                                _price_v = float(_price_v) * 10
+                            except (TypeError, ValueError):
                                 pass
+
+                        name_v = _gc(row_values, name_col)
                         deals.append(
                             {
-                                "isin": c_isin,
-                                "amount": c_qty,
-                                "price": c_punit,
-                                "date": c_date,
-                                "tx_type": "coupon",
-                                "name": None,
-                                "commission": None,
-                                "currency": "RUB",
-                                "notes": "Купонный доход (Т-Инвестиции)",
+                                "isin": isin_s,
+                                "amount": _gc(row_values, amt_col),
+                                "price": _price_v,
+                                "date": _gc(row_values, date_col),
+                                "tx_type": _tx_type(type_v),
+                                "name": str(name_v).strip() if name_v else None,
+                                "commission": _gc(row_values, comm_col),
+                                "currency": currency,
+                                "notes": "",
                             }
                         )
+
+                    # Т-Инвестиции: купонные выплаты из Раздела 2 отчёта
+                    if is_tinkoff:
+                        _re_isin = re.compile(r"ISIN:\s*([A-Z0-9]{12})", re.IGNORECASE)
+                        _re_qty = re.compile(r"[Кк]оличество[^:]*:\s*(\d+)")
+                        _re_punit = re.compile(
+                            r"(?:купоны за 1 бумагу|за 1 ценную бумагу)[^:]*:\s*([\d,.]+)"
+                        )
+                        _re_date = re.compile(
+                            r"Дата операции:\s*(\d{2})-([A-Za-z]{3})-(\d{2,4})"
+                        )
+                        _MON = {
+                            m: i
+                            for i, m in enumerate(
+                                [
+                                    "JAN",
+                                    "FEB",
+                                    "MAR",
+                                    "APR",
+                                    "MAY",
+                                    "JUN",
+                                    "JUL",
+                                    "AUG",
+                                    "SEP",
+                                    "OCT",
+                                    "NOV",
+                                    "DEC",
+                                ],
+                                1,
+                            )
+                        }
+                        # Сканируем все строки (all_rows уже в памяти — повторный проход бесплатен)
+                        for row_values in all_rows:
+                            desc = next(
+                                (
+                                    str(v)
+                                    for v in row_values
+                                    if v
+                                    and "isin" in str(v).lower()
+                                    and "купон" in str(v).lower()
+                                ),
+                                None,
+                            )
+                            if not desc:
+                                continue
+                            m_isin = _re_isin.search(desc)
+                            m_qty = _re_qty.search(desc)
+                            m_punit = _re_punit.search(desc)
+                            if not (m_isin and m_qty and m_punit):
+                                continue
+                            c_isin = m_isin.group(1).upper()
+                            c_qty = int(m_qty.group(1))
+                            c_punit = float(m_punit.group(1).replace(",", "."))
+                            c_date = date.today()
+                            m_date = _re_date.search(desc)
+                            if m_date:
+                                try:
+                                    day = int(m_date.group(1))
+                                    mon = _MON.get(m_date.group(2).upper(), 1)
+                                    yr = int(m_date.group(3))
+                                    c_date = date(2000 + yr if yr < 100 else yr, mon, day)
+                                except (ValueError, KeyError):
+                                    pass
+                            deals.append(
+                                {
+                                    "isin": c_isin,
+                                    "amount": c_qty,
+                                    "price": c_punit,
+                                    "date": c_date,
+                                    "tx_type": "coupon",
+                                    "name": None,
+                                    "commission": None,
+                                    "currency": "RUB",
+                                    "notes": "Купонный доход (Т-Инвестиции)",
+                                }
+                            )
 
             except Exception as exc:
                 logger.error("XLSX import parse error: %s", exc, exc_info=True)
