@@ -4,7 +4,7 @@ from threading import Lock
 from typing import Optional
 
 import requests
-from datetime import datetime, date
+from datetime import date
 from tenacity import (
     retry,
     retry_if_exception_type,
@@ -14,8 +14,10 @@ from tenacity import (
 )
 
 from constants import (
-    MOEX_REQUEST_TIMEOUT, MOEX_MAX_HISTORY_OFFSET,
-    MOEX_CIRCUIT_FAIL_THRESHOLD, MOEX_CIRCUIT_OPEN_SECONDS,
+    MOEX_REQUEST_TIMEOUT,
+    MOEX_MAX_HISTORY_OFFSET,
+    MOEX_CIRCUIT_FAIL_THRESHOLD,
+    MOEX_CIRCUIT_OPEN_SECONDS,
 )
 
 logger = logging.getLogger(__name__)
@@ -33,6 +35,7 @@ _cb_open_until: float = 0.0
 def _circuit_check() -> None:
     """Бросает RuntimeError, если автомат открыт."""
     from extensions import cache
+
     try:
         open_until = cache.get("moex_cb:open_until") or 0.0
     except Exception:
@@ -48,6 +51,7 @@ def _circuit_check() -> None:
 
 def _circuit_success() -> None:
     from extensions import cache
+
     global _cb_fail_count
     with _cb_lock:
         _cb_fail_count = 0
@@ -59,10 +63,11 @@ def _circuit_success() -> None:
 
 def _circuit_failure() -> None:
     from extensions import cache
+
     global _cb_fail_count, _cb_open_until
     with _cb_lock:
         _cb_fail_count += 1
-        
+
         # Интеграция с распределенным кэшем
         try:
             fail_count = (cache.get("moex_cb:fail_count") or 0) + 1
@@ -70,12 +75,17 @@ def _circuit_failure() -> None:
         except Exception:
             fail_count = _cb_fail_count
 
-        if fail_count >= MOEX_CIRCUIT_FAIL_THRESHOLD or _cb_fail_count >= MOEX_CIRCUIT_FAIL_THRESHOLD:
+        if (
+            fail_count >= MOEX_CIRCUIT_FAIL_THRESHOLD
+            or _cb_fail_count >= MOEX_CIRCUIT_FAIL_THRESHOLD
+        ):
             open_until = time.time() + MOEX_CIRCUIT_OPEN_SECONDS
             _cb_open_until = open_until
             _cb_fail_count = 0
             try:
-                cache.set("moex_cb:open_until", open_until, timeout=MOEX_CIRCUIT_OPEN_SECONDS)
+                cache.set(
+                    "moex_cb:open_until", open_until, timeout=MOEX_CIRCUIT_OPEN_SECONDS
+                )
                 cache.delete("moex_cb:fail_count")
             except Exception:
                 pass
@@ -107,20 +117,26 @@ def _fetch_json(url: str) -> dict:
 def get_moex_bond(isin_code: str) -> Optional[dict]:
     isin_code = isin_code.strip().upper()
     try:
-        search_res = _fetch_json(f"https://iss.moex.com/iss/securities.json?q={isin_code}")
-        if not search_res.get('securities') or not search_res['securities']['data']:
+        search_res = _fetch_json(
+            f"https://iss.moex.com/iss/securities.json?q={isin_code}"
+        )
+        if not search_res.get("securities") or not search_res["securities"]["data"]:
             return None
 
-        sec_cols = search_res['securities']['columns']
-        sec_data = search_res['securities']['data'][0]
-        secid = sec_data[sec_cols.index('secid')]
+        sec_cols = search_res["securities"]["columns"]
+        sec_data = search_res["securities"]["data"][0]
+        secid = sec_data[sec_cols.index("secid")]
 
-        board = "TQOB" if (isin_code.startswith("SU") or isin_code.startswith("RU000A0")) else "TQCB"
+        board = (
+            "TQOB"
+            if (isin_code.startswith("SU") or isin_code.startswith("RU000A0"))
+            else "TQCB"
+        )
         res = None
         try:
             board_url = f"https://iss.moex.com/iss/engines/stock/markets/bonds/boards/{board}/securities/{secid}.json"
             res = _fetch_json(board_url)
-            if not res.get('securities') or not res['securities']['data']:
+            if not res.get("securities") or not res["securities"]["data"]:
                 res = None
         except Exception:
             res = None
@@ -130,13 +146,17 @@ def get_moex_bond(isin_code: str) -> Optional[dict]:
                 f"https://iss.moex.com/iss/engines/stock/markets/bonds/securities/{secid}.json"
             )
 
-        if not res.get('securities') or not res['securities']['data']:
+        if not res.get("securities") or not res["securities"]["data"]:
             return None
 
-        sec_cols = res['securities']['columns']
-        sec_data = res['securities']['data'][0]
-        mkt_cols = res['marketdata']['columns'] if 'marketdata' in res else []
-        mkt_data = res['marketdata']['data'][0] if ('marketdata' in res and res['marketdata']['data']) else []
+        sec_cols = res["securities"]["columns"]
+        sec_data = res["securities"]["data"][0]
+        mkt_cols = res["marketdata"]["columns"] if "marketdata" in res else []
+        mkt_data = (
+            res["marketdata"]["data"][0]
+            if ("marketdata" in res and res["marketdata"]["data"])
+            else []
+        )
 
         def get_val(data, cols, name):
             if not data or name not in cols:
@@ -144,40 +164,42 @@ def get_moex_bond(isin_code: str) -> Optional[dict]:
             return data[cols.index(name)]
 
         faceunit = (
-            get_val(sec_data, sec_cols, 'FACEUNIT')
-            or get_val(sec_data, sec_cols, 'CURRENCYID')
-            or 'SUR'
+            get_val(sec_data, sec_cols, "FACEUNIT")
+            or get_val(sec_data, sec_cols, "CURRENCYID")
+            or "SUR"
         )
         faceunit_str = str(faceunit).strip().upper()
-        if faceunit_str in ['SUR', 'RUB', 'RUR']:
-            currency = 'RUB'
-        elif faceunit_str in ['USD', 'USD000000TOD']:
-            currency = 'USD'
-        elif faceunit_str in ['CNY', 'CNYRUB']:
-            currency = 'CNY'
-        elif faceunit_str in ['EUR', 'EUR000000TOD']:
-            currency = 'EUR'
-        elif faceunit_str in ['GLD', 'GOLD', 'ГРАММ', 'ГР']:
-            currency = 'GLD'
+        if faceunit_str in ["SUR", "RUB", "RUR"]:
+            currency = "RUB"
+        elif faceunit_str in ["USD", "USD000000TOD"]:
+            currency = "USD"
+        elif faceunit_str in ["CNY", "CNYRUB"]:
+            currency = "CNY"
+        elif faceunit_str in ["EUR", "EUR000000TOD"]:
+            currency = "EUR"
+        elif faceunit_str in ["GLD", "GOLD", "ГРАММ", "ГР"]:
+            currency = "GLD"
         else:
-            currency = 'RUB'
+            currency = "RUB"
 
-        if currency == 'GLD':
-            gld_grams = float(get_val(sec_data, sec_cols, 'FACEVALUE') or 1)
+        if currency == "GLD":
+            gld_grams = float(get_val(sec_data, sec_cols, "FACEVALUE") or 1)
             facevalue = gld_grams * get_gold_price()
         else:
-            facevalue = get_val(sec_data, sec_cols, 'FACEVALUE') or 1000
+            facevalue = get_val(sec_data, sec_cols, "FACEVALUE") or 1000
 
-        last_pct = get_val(mkt_data, mkt_cols, 'LAST') or get_val(sec_data, sec_cols, 'PREVPRICE')
+        last_pct = get_val(mkt_data, mkt_cols, "LAST") or get_val(
+            sec_data, sec_cols, "PREVPRICE"
+        )
         if not last_pct:
             last_pct = 100
         price_rub = (last_pct / 100) * facevalue
 
         # Precedence: marketdata.YIELD -> marketdata.YIELDATWAPRICE -> securities.YIELDATPREVWAPRICE
         ytm_val = (
-            get_val(mkt_data, mkt_cols, 'YIELD')
-            or get_val(mkt_data, mkt_cols, 'YIELDATWAPRICE')
-            or get_val(sec_data, sec_cols, 'YIELDATPREVWAPRICE')
+            get_val(mkt_data, mkt_cols, "YIELD")
+            or get_val(mkt_data, mkt_cols, "YIELDATWAPRICE")
+            or get_val(sec_data, sec_cols, "YIELDATPREVWAPRICE")
             or 0
         )
         try:
@@ -186,13 +208,13 @@ def get_moex_bond(isin_code: str) -> Optional[dict]:
             ytm = 0.0
 
         return {
-            'secid': secid,
-            'name': get_val(sec_data, sec_cols, 'SHORTNAME'),
-            'price': round(price_rub, 2),
-            'facevalue': facevalue,
-            'nkd': round(get_val(sec_data, sec_cols, 'ACCRUEDINT') or 0, 2),
-            'ytm': round(ytm, 2),
-            'currency': currency,
+            "secid": secid,
+            "name": get_val(sec_data, sec_cols, "SHORTNAME"),
+            "price": round(price_rub, 2),
+            "facevalue": facevalue,
+            "nkd": round(get_val(sec_data, sec_cols, "ACCRUEDINT") or 0, 2),
+            "ytm": round(ytm, 2),
+            "currency": currency,
         }
     except Exception as e:
         logger.error("MOEX bond fetch error for %s: %s", isin_code, e)
@@ -215,16 +237,16 @@ def get_bond_history_all(secid: str, facevalue: float = 1000) -> dict:
                 f"&start={start_offset}"
             )
             res = _fetch_json(url)
-            if not res.get('history') or not res['history'].get('data'):
+            if not res.get("history") or not res["history"].get("data"):
                 break
 
-            columns = res['history']['columns']
-            date_idx = columns.index('TRADEDATE')
-            close_idx = columns.index('CLOSE')
-            accint_idx = columns.index('ACCINT')
-            yield_idx = columns.index('YIELDCLOSE')
+            columns = res["history"]["columns"]
+            date_idx = columns.index("TRADEDATE")
+            close_idx = columns.index("CLOSE")
+            accint_idx = columns.index("ACCINT")
+            yield_idx = columns.index("YIELDCLOSE")
 
-            page_data = res['history']['data']
+            page_data = res["history"]["data"]
             if not page_data:
                 break
 
@@ -232,8 +254,12 @@ def get_bond_history_all(secid: str, facevalue: float = 1000) -> dict:
                 if row[close_idx] is not None:
                     labels.append(row[date_idx])
                     prices.append(round((float(row[close_idx]) / 100) * facevalue, 2))
-                    nkd_history.append(round(float(row[accint_idx]) if row[accint_idx] else 0, 2))
-                    ytm_history.append(round(float(row[yield_idx]) if row[yield_idx] else 0, 2))
+                    nkd_history.append(
+                        round(float(row[accint_idx]) if row[accint_idx] else 0, 2)
+                    )
+                    ytm_history.append(
+                        round(float(row[yield_idx]) if row[yield_idx] else 0, 2)
+                    )
 
             if len(page_data) < 100:
                 break
@@ -251,13 +277,15 @@ def get_coupon_calendar(secid: str) -> list[dict]:
             f"/bonds/bondization/{secid}.json"
         )
         calendar = []
-        if res.get('coupons') and res['coupons'].get('data'):
-            cols = res['coupons']['columns']
-            for row in res['coupons']['data']:
-                calendar.append({
-                    "date": row[cols.index('coupondate')],
-                    "value": row[cols.index('value')],
-                })
+        if res.get("coupons") and res["coupons"].get("data"):
+            cols = res["coupons"]["columns"]
+            for row in res["coupons"]["data"]:
+                calendar.append(
+                    {
+                        "date": row[cols.index("coupondate")],
+                        "value": row[cols.index("value")],
+                    }
+                )
         today_str = date.today().isoformat()
         future = [c for c in calendar if c.get("date") and c["date"] >= today_str]
         return future[:12]
@@ -292,7 +320,9 @@ def get_bond_details(secid: str) -> dict:
         return {}
 
 
-def get_rgbi_history(from_date: Optional[str] = None, to_date: Optional[str] = None) -> dict:
+def get_rgbi_history(
+    from_date: Optional[str] = None, to_date: Optional[str] = None
+) -> dict:
     """Fetch RGBI index price history from MOEX ISS."""
     try:
         url = (
@@ -367,14 +397,16 @@ def get_screener_bonds(
                     continue
             elif maturity_from is not None or maturity_to is not None:
                 continue
-            results.append({
-                "secid": gv(row, "SECID"),
-                "isin": isin,
-                "name": gv(row, "SHORTNAME") or gv(row, "SECID"),
-                "ytm": round(float(ytm_val), 2) if ytm_val is not None else None,
-                "matdate": mat_date,
-                "coupon": gv(row, "COUPONVALUE"),
-            })
+            results.append(
+                {
+                    "secid": gv(row, "SECID"),
+                    "isin": isin,
+                    "name": gv(row, "SHORTNAME") or gv(row, "SECID"),
+                    "ytm": round(float(ytm_val), 2) if ytm_val is not None else None,
+                    "matdate": mat_date,
+                    "coupon": gv(row, "COUPONVALUE"),
+                }
+            )
         return results
     except Exception as e:
         logger.error("MOEX screener error: %s", e)
@@ -416,6 +448,7 @@ def get_currency_rates() -> dict[str, float]:
     резервные значения.
     """
     from extensions import cache
+
     key = "moex_currency_rates"
     try:
         cached = cache.get(key)
@@ -425,12 +458,8 @@ def get_currency_rates() -> dict[str, float]:
         pass
 
     rates = {"RUB": 1.0, "USD": 90.0, "CNY": 12.5, "EUR": 98.0}
-    tickers = {
-        "USD": "USD000UTSTOM",
-        "CNY": "CNYRUB_TOM",
-        "EUR": "EUR_RUB__TOM"
-    }
-    
+    tickers = {"USD": "USD000UTSTOM", "CNY": "CNYRUB_TOM", "EUR": "EUR_RUB__TOM"}
+
     for currency, ticker in tickers.items():
         try:
             url = f"https://iss.moex.com/iss/engines/currency/markets/selt/boards/CETS/securities/{ticker}.json"
@@ -439,7 +468,7 @@ def get_currency_rates() -> dict[str, float]:
                 m_cols = res["marketdata"]["columns"]
                 m_data = res["marketdata"]["data"][0]
                 price = None
-                
+
                 for col in ["LAST", "CURRENTVALUE", "WAPRICE"]:
                     if col in m_cols:
                         val = m_data[m_cols.index(col)]
@@ -453,17 +482,17 @@ def get_currency_rates() -> dict[str, float]:
                         val = s_data[s_cols.index("PREVPRICE")]
                         if val is not None:
                             price = float(val)
-                            
+
                 if price:
                     rates[currency] = round(price, 4)
         except Exception as e:
             logger.warning("Failed to fetch MOEX exchange rate for %s: %s", currency, e)
-            
+
     try:
         cache.set(key, rates, timeout=3600)
     except Exception:
         pass
-        
+
     return rates
 
 
@@ -472,6 +501,7 @@ def get_gold_price() -> float:
     Кэш на 1 час, резервное значение — 7000.0 рублей.
     """
     from extensions import cache
+
     key = "moex_gold_price"
     try:
         cached = cache.get(key)

@@ -6,6 +6,7 @@
   GUNICORN_TIMEOUT  — таймаут воркера в секундах (по умолчанию 60)
   PORT              — порт (по умолчанию 5000)
 """
+
 import multiprocessing
 import os
 
@@ -26,8 +27,8 @@ graceful_timeout = 30
 keepalive = 5
 
 # ── Logging ───────────────────────────────────────────────────────────────────
-accesslog = "-"        # stdout
-errorlog = "-"         # stderr
+accesslog = "-"  # stdout
+errorlog = "-"  # stderr
 loglevel = os.environ.get("LOG_LEVEL", "info")
 access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s %(D)sµs'
 

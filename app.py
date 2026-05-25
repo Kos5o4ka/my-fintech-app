@@ -64,7 +64,7 @@ else:
     _cache_config = {
         "CACHE_TYPE": "FileSystemCache",
         "CACHE_DIR": os.path.join(app.root_path, ".cache"),
-        "CACHE_THRESHOLD": 1000,          # макс. кол-во записей
+        "CACHE_THRESHOLD": 1000,  # макс. кол-во записей
         "CACHE_DEFAULT_TIMEOUT": 300,
     }
 cache.init_app(app, config=_cache_config)
@@ -77,12 +77,12 @@ CORS(app, supports_credentials=True, origins=app.config["CORS_ORIGINS"])
 
 
 # ── Blueprints ────────────────────────────────────────────────────────────────
-from blueprints.main import main_bp
-from blueprints.auth import auth_bp
-from blueprints.admin import admin_bp
-from blueprints.profile import profile_bp
-from blueprints.portfolio import portfolio_bp
-from blueprints.telegram_bot import telegram_bp
+from blueprints.main import main_bp  # noqa: E402
+from blueprints.auth import auth_bp  # noqa: E402
+from blueprints.admin import admin_bp  # noqa: E402
+from blueprints.profile import profile_bp  # noqa: E402
+from blueprints.portfolio import portfolio_bp  # noqa: E402
+from blueprints.telegram_bot import telegram_bp  # noqa: E402
 
 app.register_blueprint(main_bp)
 app.register_blueprint(auth_bp)
@@ -111,11 +111,13 @@ def enforce_idle_timeout():
         session.clear()
         # Для API возвращаем 401, для страниц — ничего (Flask-Login перенаправит)
         if request.path.startswith("/api/"):
-            return jsonify({
-                "status": "error",
-                "code": 401,
-                "message": "Сессия истекла из-за неактивности. Войдите снова.",
-            }), 401
+            return jsonify(
+                {
+                    "status": "error",
+                    "code": 401,
+                    "message": "Сессия истекла из-за неактивности. Войдите снова.",
+                }
+            ), 401
         return
 
     session["_last_active"] = now
@@ -180,7 +182,9 @@ def handle_api_errors(error):
         or request.headers.get("Content-Type") == "application/json"
     ):
         message = (
-            error.description if hasattr(error, "description") else "Внутренняя ошибка сервера"
+            error.description
+            if hasattr(error, "description")
+            else "Внутренняя ошибка сервера"
         )
         if isinstance(error, RequestEntityTooLarge):
             message = "Загруженный файл слишком велик. Максимальный размер — 5 МБ."
@@ -223,7 +227,11 @@ def _update_bond_prices() -> None:
                     seen[bond.isin] = get_moex_bond(bond.isin)
                     if seen[bond.isin]:
                         try:
-                            cache.set(f"moex_bond:{bond.isin}", seen[bond.isin], timeout=MOEX_BOND_TTL)
+                            cache.set(
+                                f"moex_bond:{bond.isin}",
+                                seen[bond.isin],
+                                timeout=MOEX_BOND_TTL,
+                            )
                         except Exception:
                             pass
 
@@ -262,20 +270,27 @@ def _send_coupon_reminders() -> None:
 
             # Собираем пользователей с Telegram-каналом уведомлений
             users = User.query.filter(
-                db.and_(User.telegram_chat_id.isnot(None), User.telegram_notifications.is_(True))
+                db.and_(
+                    User.telegram_chat_id.isnot(None),
+                    User.telegram_notifications.is_(True),
+                )
             ).all()
 
             for user in users:
-                bonds = BondPortfolio.query.filter_by(user_id=user.id, is_sold=False).all()
+                bonds = BondPortfolio.query.filter_by(
+                    user_id=user.id, is_sold=False
+                ).all()
                 due = []
                 for bond in bonds:
                     for c in get_coupon_calendar(bond.secid or bond.isin):
                         if c["date"] == tomorrow.strftime("%Y-%m-%d") and c["value"]:
-                            due.append((
-                                bond.name or bond.isin,
-                                bond.isin,
-                                round(float(c["value"]) * bond.amount, 2),
-                            ))
+                            due.append(
+                                (
+                                    bond.name or bond.isin,
+                                    bond.isin,
+                                    round(float(c["value"]) * bond.amount, 2),
+                                )
+                            )
                 if not due:
                     continue
 

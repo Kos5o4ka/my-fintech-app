@@ -1,4 +1,5 @@
 """Сервис Telegram-бота — привязка аккаунта, OTP 2FA, уведомления."""
+
 import logging
 import secrets
 from typing import Optional
@@ -11,12 +12,13 @@ from extensions import cache
 logger = logging.getLogger(__name__)
 
 # TTL для одноразовых токенов
-_LINK_TOKEN_TTL = 600   # 10 минут — для привязки аккаунта
-_OTP_TTL = 300          # 5 минут — для кода 2FA
+_LINK_TOKEN_TTL = 600  # 10 минут — для привязки аккаунта
+_OTP_TTL = 300  # 5 минут — для кода 2FA
 _PENDING_2FA_TTL = 300  # 5 минут — для ожидающего входа (2FA сессия)
 
 
 # ── Привязка аккаунта ─────────────────────────────────────────────────────────
+
 
 def generate_link_token(user_id: int) -> str:
     """Создаёт одноразовый токен для привязки Telegram.
@@ -38,6 +40,7 @@ def verify_link_token(token: str) -> Optional[int]:
 
 
 # ── OTP 2FA ───────────────────────────────────────────────────────────────────
+
 
 def generate_otp(chat_id: str) -> str:
     """Генерирует 6-значный OTP, сохраняет в кэше и отправляет через бота.
@@ -69,10 +72,15 @@ def verify_otp(chat_id: str, code: str) -> bool:
 
 # ── Pending 2FA сессия ────────────────────────────────────────────────────────
 
+
 def create_pending_2fa(user_id: int, chat_id: str) -> str:
     """Создаёт pending-токен 2FA. Возвращает токен для клиента."""
     token = secrets.token_urlsafe(32)
-    cache.set(f"tg_2fa:{token}", {"user_id": user_id, "chat_id": chat_id}, timeout=_PENDING_2FA_TTL)
+    cache.set(
+        f"tg_2fa:{token}",
+        {"user_id": user_id, "chat_id": chat_id},
+        timeout=_PENDING_2FA_TTL,
+    )
     return token
 
 
@@ -85,6 +93,7 @@ def resolve_pending_2fa(token: str) -> Optional[dict]:
 
 
 # ── Отправка сообщений ────────────────────────────────────────────────────────
+
 
 def send_message(chat_id: str, text: str, parse_mode: str = "HTML") -> bool:
     """Отправляет сообщение через Telegram Bot API.
@@ -101,7 +110,9 @@ def send_message(chat_id: str, text: str, parse_mode: str = "HTML") -> bool:
     try:
         resp = http_requests.post(url, json=payload, timeout=10)
         if not resp.ok:
-            logger.warning("Telegram API error %s: %s", resp.status_code, resp.text[:200])
+            logger.warning(
+                "Telegram API error %s: %s", resp.status_code, resp.text[:200]
+            )
             return False
         return True
     except http_requests.RequestException as exc:
@@ -121,7 +132,9 @@ def refresh_tg_username(user) -> None:
         if username is not None and user.telegram_username != username:
             user.telegram_username = username
     except Exception as exc:
-        logger.warning("Could not refresh telegram username for user %s: %s", user.id, exc)
+        logger.warning(
+            "Could not refresh telegram username for user %s: %s", user.id, exc
+        )
 
 
 def get_bot_deep_link(token: str) -> str:

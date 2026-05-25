@@ -8,6 +8,7 @@ Equivalent to:
     flask db upgrade          # apply all Alembic migrations
     (create admin if absent)
 """
+
 import sys
 import os
 import secrets
@@ -24,11 +25,11 @@ with app.app_context():
     db_upgrade()
     print("Database migrations applied (flask db upgrade)")
 
-    admin = db.session.query(User).filter_by(username='admin').first()
+    admin = db.session.query(User).filter_by(username="admin").first()
     if not admin:
         admin_password = secrets.token_urlsafe(16)
         admin = User(
-            username='admin',
+            username="admin",
             password_hash=generate_password_hash(admin_password),
             is_admin=True,
         )

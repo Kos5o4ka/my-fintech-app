@@ -46,7 +46,9 @@ def admin_add_user():
     is_admin = data.get("is_admin", False)
 
     if not username or not password:
-        return jsonify({"status": "error", "message": "Логин и пароль обязательны."}), 400
+        return jsonify(
+            {"status": "error", "message": "Логин и пароль обязательны."}
+        ), 400
 
     if not re.fullmatch(r"[A-Za-z0-9]{3,20}", username):
         return (
@@ -61,7 +63,12 @@ def admin_add_user():
 
     if User.query.filter_by(username=username).first():
         return (
-            jsonify({"status": "error", "message": "Пользователь с таким логином уже существует."}),
+            jsonify(
+                {
+                    "status": "error",
+                    "message": "Пользователь с таким логином уже существует.",
+                }
+            ),
             400,
         )
 
@@ -94,11 +101,18 @@ def delete_user(user_id):
     if user_to_delete is None:
         abort(404)
     if user_to_delete.id == current_user.id:
-        return jsonify({"status": "error", "message": "Вы не можете удалить сами себя."}), 400
+        return jsonify(
+            {"status": "error", "message": "Вы не можете удалить сами себя."}
+        ), 400
 
     db.session.delete(user_to_delete)
     db.session.commit()
-    return jsonify({"status": "success", "message": f"Пользователь {user_to_delete.username} удален."})
+    return jsonify(
+        {
+            "status": "success",
+            "message": f"Пользователь {user_to_delete.username} удален.",
+        }
+    )
 
 
 @admin_bp.route("/api/admin/change_password/<int:user_id>", methods=["POST"])
@@ -113,14 +127,19 @@ def admin_change_password(user_id):
         abort(404)
 
     if target.username == "root":
-        return jsonify({"status": "error", "message": "Пароль root-пользователя изменить нельзя."}), 403
+        return jsonify(
+            {"status": "error", "message": "Пароль root-пользователя изменить нельзя."}
+        ), 403
 
     data = request.get_json() or {}
     new_password = data.get("new_password", "").strip()
 
     if not new_password or len(new_password) < MIN_PASSWORD_LEN:
         return jsonify(
-            {"status": "error", "message": f"Пароль должен содержать минимум {MIN_PASSWORD_LEN} символов."}
+            {
+                "status": "error",
+                "message": f"Пароль должен содержать минимум {MIN_PASSWORD_LEN} символов.",
+            }
         ), 400
 
     target.password_hash = generate_password_hash(new_password)
@@ -133,4 +152,9 @@ def admin_change_password(user_id):
     )
     db.session.add(log)
     db.session.commit()
-    return jsonify({"status": "success", "message": f"Пароль пользователя «{target.username}» успешно изменён."})
+    return jsonify(
+        {
+            "status": "success",
+            "message": f"Пароль пользователя «{target.username}» успешно изменён.",
+        }
+    )

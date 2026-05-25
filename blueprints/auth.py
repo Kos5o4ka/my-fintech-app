@@ -1,4 +1,5 @@
 """Blueprint аутентификации — вход, выход, смена пароля, 2FA через Telegram."""
+
 import logging
 from typing import Optional
 
@@ -10,7 +11,6 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from extensions import db, limiter
 from models import User, AuditLog
 from schemas.auth import ChangePasswordRequest
-from constants import MIN_PASSWORD_LEN
 from utils import get_client_ip, get_user_agent
 
 logger = logging.getLogger(__name__)
@@ -19,7 +19,10 @@ auth_bp = Blueprint("auth", __name__)
 
 # ── Вспомогательные функции ───────────────────────────────────────────────────
 
-def _audit(action: str, user_id: Optional[int] = None, details: Optional[str] = None) -> None:
+
+def _audit(
+    action: str, user_id: Optional[int] = None, details: Optional[str] = None
+) -> None:
     """Записывает событие в журнал аудита (без commit — вызывать до commit сессии)."""
     try:
         log = AuditLog(
@@ -36,6 +39,7 @@ def _audit(action: str, user_id: Optional[int] = None, details: Optional[str] = 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
+
 @auth_bp.route("/api/auth/login", methods=["POST"])
 @limiter.limit("10 per minute")
 def api_login():
@@ -48,32 +52,44 @@ def api_login():
     if not user or not check_password_hash(user.password_hash, password):
         _audit("login_fail", details=f"username={username[:50]}")
         db.session.commit()
-        return jsonify({"status": "error", "message": "Неверный логин или пароль."}), 401
+        return jsonify(
+            {"status": "error", "message": "Неверный логин или пароль."}
+        ), 401
 
     # Если у пользователя привязан Telegram — включаем 2FA
     if user.telegram_chat_id:
         from services.telegram_service import generate_otp, create_pending_2fa
+
         token = create_pending_2fa(user.id, user.telegram_chat_id)
         generate_otp(user.telegram_chat_id)
         _audit("login_2fa_sent", user_id=user.id)
         db.session.commit()
-        return jsonify({
-            "status": "2fa_required",
-            "token": token,
-            "message": "Код подтверждения отправлен в Telegram.",
-        })
+        return jsonify(
+            {
+                "status": "2fa_required",
+                "token": token,
+                "message": "Код подтверждения отправлен в Telegram.",
+            }
+        )
 
     # Обычный вход без 2FA
     session.permanent = True
     login_user(user, remember=True)
     _audit("login_ok", user_id=user.id)
     from services.telegram_service import refresh_tg_username
+
     refresh_tg_username(user)
     db.session.commit()
-    return jsonify({
-        "status": "success",
-        "user": {"id": user.id, "username": user.username, "is_admin": user.is_admin},
-    })
+    return jsonify(
+        {
+            "status": "success",
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "is_admin": user.is_admin,
+            },
+        }
+    )
 
 
 @auth_bp.route("/api/auth/verify_2fa", methods=["POST"])
@@ -88,12 +104,15 @@ def verify_2fa():
         return jsonify({"status": "error", "message": "Токен и код обязательны."}), 400
 
     from services.telegram_service import resolve_pending_2fa, verify_otp
+
     pending = resolve_pending_2fa(token)
     if not pending:
-        return jsonify({
-            "status": "error",
-            "message": "Сессия истекла. Войдите заново.",
-        }), 401
+        return jsonify(
+            {
+                "status": "error",
+                "message": "Сессия истекла. Войдите заново.",
+            }
+        ), 401
 
     chat_id = pending["chat_id"]
     user_id = pending["user_id"]
@@ -101,7 +120,9 @@ def verify_2fa():
     if not verify_otp(chat_id, code):
         _audit("login_2fa_fail", user_id=user_id)
         db.session.commit()
-        return jsonify({"status": "error", "message": "Неверный или просроченный код."}), 401
+        return jsonify(
+            {"status": "error", "message": "Неверный или просроченный код."}
+        ), 401
 
     user = db.session.get(User, user_id)
     if not user:
@@ -111,12 +132,19 @@ def verify_2fa():
     login_user(user, remember=True)
     _audit("login_ok", user_id=user.id, details="2fa=telegram")
     from services.telegram_service import refresh_tg_username
+
     refresh_tg_username(user)
     db.session.commit()
-    return jsonify({
-        "status": "success",
-        "user": {"id": user.id, "username": user.username, "is_admin": user.is_admin},
-    })
+    return jsonify(
+        {
+            "status": "success",
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "is_admin": user.is_admin,
+            },
+        }
+    )
 
 
 @auth_bp.route("/api/auth/logout", methods=["POST", "GET"])
@@ -141,7 +169,9 @@ def change_password():
         return jsonify({"status": "error", "message": "Неверный текущий пароль."}), 401
 
     if req.new_password != req.confirm_password:
-        return jsonify({"status": "error", "message": "Новые пароли не совпадают."}), 400
+        return jsonify(
+            {"status": "error", "message": "Новые пароли не совпадают."}
+        ), 400
 
     current_user.password_hash = generate_password_hash(req.new_password)
     _audit("change_password", user_id=current_user.id)

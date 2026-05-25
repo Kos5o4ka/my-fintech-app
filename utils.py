@@ -1,4 +1,5 @@
 """Общие утилиты — переиспользуются в нескольких blueprints."""
+
 from flask import request
 
 

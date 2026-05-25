@@ -3,6 +3,7 @@ InvestTrack — full test suite.
 
 To avoid starting APScheduler during tests, set FLASK_TESTING=1 before importing app.
 """
+
 import io
 import os
 import unittest
@@ -11,11 +12,11 @@ from unittest.mock import MagicMock, patch
 
 os.environ["FLASK_TESTING"] = "1"  # must be set before 'from app import app'
 
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.pool import StaticPool  # noqa: E402
 
-from app import app
-from extensions import db
-from werkzeug.exceptions import RequestEntityTooLarge
+from app import app  # noqa: E402
+from extensions import db  # noqa: E402
+from werkzeug.exceptions import RequestEntityTooLarge  # noqa: E402
 
 
 # ── Shared MOEX stub ──────────────────────────────────────────────────────────
@@ -47,7 +48,7 @@ class BaseTest(unittest.TestCase):
         }
         self.client = app.test_client()
         with app.app_context():
-            db.drop_all()   # clean any leftover tables
+            db.drop_all()  # clean any leftover tables
             db.create_all()
 
     def tearDown(self):
@@ -85,8 +86,16 @@ class BaseTest(unittest.TestCase):
             sess["_user_id"] = str(user_id)
             sess["_fresh"] = True
 
-    def _make_bond(self, user_id, isin="SU26238RMFS4", is_sold=False,
-                   sell_price=None, sell_date=None, buy_price=900.0, amount=10):
+    def _make_bond(
+        self,
+        user_id,
+        isin="SU26238RMFS4",
+        is_sold=False,
+        sell_price=None,
+        sell_date=None,
+        buy_price=900.0,
+        amount=10,
+    ):
         from models import BondPortfolio
 
         with app.app_context():
@@ -147,7 +156,8 @@ class SmokTests(BaseTest):
         self.assertEqual(resp.status_code, 413)
         payload = resp.get_json()
         self.assertEqual(
-            payload["message"], "Загруженный файл слишком велик. Максимальный размер — 5 МБ."
+            payload["message"],
+            "Загруженный файл слишком велик. Максимальный размер — 5 МБ.",
         )
 
     def test_portfolio_requires_auth(self):
@@ -349,7 +359,7 @@ class PortfolioTests(BaseTest):
         )
         self.assertEqual(r.status_code, 400)
 
-    @patch("blueprints.portfolio.requests.get")
+    @patch("moex.requests.get")
     @patch("blueprints.portfolio.get_moex_bond")
     def test_add_bond_success(self, mock_moex, mock_req):
         mock_moex.return_value = MOCK_MOEX
@@ -369,7 +379,7 @@ class PortfolioTests(BaseTest):
         self.assertEqual(r.status_code, 201)
         self.assertEqual(r.get_json()["status"], "success")
 
-    @patch("blueprints.portfolio.requests.get")
+    @patch("moex.requests.get")
     @patch("blueprints.portfolio.get_moex_bond")
     def test_add_bond_not_found(self, mock_moex, mock_req):
         mock_moex.return_value = None
@@ -411,7 +421,7 @@ class PortfolioTests(BaseTest):
         uid = self._make_user()
         self._set_logged_in(uid)
         bond_id = self._make_bond(uid, amount=10, buy_price=900.0)
-        
+
         r = self.client.post(
             f"/api/sell_bond/{bond_id}",
             json={"sell_price": 950.0, "amount": 4, "broker_commission": 2.5},
@@ -419,19 +429,20 @@ class PortfolioTests(BaseTest):
         )
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.get_json()["status"], "success")
-        
+
         with app.app_context():
             from models import BondPortfolio, Transaction
+
             orig_bond = db.session.get(BondPortfolio, bond_id)
             self.assertEqual(orig_bond.amount, 6)
             self.assertFalse(orig_bond.is_sold)
-            
+
             sold_bonds = BondPortfolio.query.filter_by(user_id=uid, is_sold=True).all()
             self.assertEqual(len(sold_bonds), 1)
             self.assertEqual(sold_bonds[0].amount, 4)
             self.assertEqual(float(sold_bonds[0].sell_price), 950.0)
             self.assertEqual(float(sold_bonds[0].broker_commission), 2.5)
-            
+
             txs = Transaction.query.filter_by(user_id=uid, tx_type="sell").all()
             self.assertEqual(len(txs), 1)
             self.assertEqual(txs[0].amount, 4)
@@ -441,7 +452,7 @@ class PortfolioTests(BaseTest):
         uid = self._make_user()
         self._set_logged_in(uid)
         bond_id = self._make_bond(uid, amount=10)
-        
+
         r = self.client.post(
             f"/api/sell_bond/{bond_id}",
             json={"sell_price": 950.0, "amount": 15},
@@ -455,7 +466,7 @@ class PortfolioTests(BaseTest):
         uid = self._make_user()
         self._set_logged_in(uid)
         bond_id = self._make_bond(uid)
-        
+
         r = self.client.patch(
             f"/api/portfolio/{bond_id}/notes",
             json={"notes": "Great long term investment"},
@@ -464,9 +475,10 @@ class PortfolioTests(BaseTest):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.get_json()["status"], "success")
         self.assertEqual(r.get_json()["notes"], "Great long term investment")
-        
+
         with app.app_context():
             from models import BondPortfolio
+
             bond = db.session.get(BondPortfolio, bond_id)
             self.assertEqual(bond.notes, "Great long term investment")
 
@@ -475,7 +487,7 @@ class PortfolioTests(BaseTest):
         uid2 = self._make_user(username="hacker", password="pass456")
         self._set_logged_in(uid2)
         bond_id = self._make_bond(uid1)
-        
+
         r = self.client.patch(
             f"/api/portfolio/{bond_id}/notes",
             json={"notes": "Hacked"},
@@ -499,7 +511,7 @@ class PortfolioTests(BaseTest):
         trades = r.get_json()["trades"]
         self.assertEqual(len(trades), 1)
         t = trades[0]
-        self.assertAlmostEqual(t["pnl"], 500.0, places=1)    # (950-900)*10
+        self.assertAlmostEqual(t["pnl"], 500.0, places=1)  # (950-900)*10
         self.assertAlmostEqual(t["pnl_pct"], 5.556, places=1)
 
     def test_portfolio_stats_empty(self):
@@ -519,7 +531,9 @@ class PortfolioTests(BaseTest):
         self.assertEqual(r.status_code, 200)
         self.assertIn("text/csv", r.content_type)
         # UTF-8 BOM present for Excel compatibility
-        self.assertTrue(r.data.startswith(b"\xef\xbb\xbf") or r.data.startswith("ï»¿".encode()))
+        self.assertTrue(
+            r.data.startswith(b"\xef\xbb\xbf") or r.data.startswith("ï»¿".encode())
+        )
 
     def test_search_bond_too_short(self):
         uid = self._make_user()
@@ -560,6 +574,7 @@ class MoexCurrencyRatesTests(BaseTest):
     def test_currency_rates_fallback_on_error(self):
         """When MOEX is unreachable, fallback static rates are returned and valid."""
         from moex import get_currency_rates
+
         with patch("moex._fetch_json", side_effect=Exception("Network error")):
             rates = get_currency_rates()
         self.assertIsInstance(rates, dict)
@@ -576,6 +591,7 @@ class MoexCurrencyRatesTests(BaseTest):
     def test_currency_rates_parses_moex_response(self):
         """When MOEX returns a price, it overrides the fallback."""
         from moex import get_currency_rates
+
         fake_response = {
             "marketdata": {
                 "columns": ["LAST", "CURRENTVALUE"],
@@ -584,11 +600,13 @@ class MoexCurrencyRatesTests(BaseTest):
             "securities": {"columns": [], "data": []},
         }
         # Cache miss → _fetch_json called for each currency
-        with patch("moex._fetch_json", return_value=fake_response), \
-             patch("moex.get_currency_rates.__wrapped__", create=True):
+        with patch("moex._fetch_json", return_value=fake_response), patch(
+            "moex.get_currency_rates.__wrapped__", create=True
+        ):
             # Clear cache before test
             try:
                 from extensions import cache
+
                 cache.delete("moex_currency_rates")
             except Exception:
                 pass
@@ -600,9 +618,11 @@ class MoexCurrencyRatesTests(BaseTest):
     def test_gold_price_fallback_on_error(self):
         """When MOEX gold endpoint fails, the static fallback 7000.0 is returned."""
         from moex import get_gold_price
+
         # Clear cache so the cached value from a previous test doesn't leak in
         try:
             from extensions import cache
+
             cache.delete("moex_gold_price")
         except Exception:
             pass
@@ -614,6 +634,7 @@ class MoexCurrencyRatesTests(BaseTest):
     def test_gold_price_parses_moex_response(self):
         """When MOEX returns a valid gold spot price, it is returned correctly."""
         from moex import get_gold_price
+
         fake_response = {
             "marketdata": {
                 "columns": ["LAST", "WAPRICE"],
@@ -623,6 +644,7 @@ class MoexCurrencyRatesTests(BaseTest):
         }
         try:
             from extensions import cache
+
             cache.delete("moex_gold_price")
         except Exception:
             pass
@@ -639,6 +661,7 @@ class GoldBondValuationTests(BaseTest):
     def _make_gld_bond(self, user_id, buy_price=100.0, amount=5):
         """Helper: inserts a BondPortfolio entry with currency='GLD'."""
         from models import BondPortfolio
+
         with app.app_context():
             bond = BondPortfolio(
                 user_id=user_id,
@@ -662,6 +685,7 @@ class GoldBondValuationTests(BaseTest):
         bond_id = self._make_gld_bond(uid)
         with app.app_context():
             from models import BondPortfolio
+
             bond = db.session.get(BondPortfolio, bond_id)
             self.assertEqual(bond.currency, "GLD")
             self.assertFalse(bond.is_sold)
@@ -675,7 +699,7 @@ class GoldBondValuationTests(BaseTest):
         mock_gld_moex = {
             "secid": "GOLD001",
             "name": "Золотая облигация",
-            "price": 8400.0,   # gold_price * last_pct / 100
+            "price": 8400.0,  # gold_price * last_pct / 100
             "facevalue": 8000.0,
             "nkd": 0.0,
             "ytm": 0.0,
@@ -712,7 +736,6 @@ class GoldBondValuationTests(BaseTest):
         self.assertEqual(data["currency"], "GLD")
 
 
-
 # ── Broker Import tests ───────────────────────────────────────────────────────
 class BrokerImportTests(BaseTest):
     """Tests for POST /api/portfolio/import (CSV and JSON payloads)."""
@@ -721,6 +744,7 @@ class BrokerImportTests(BaseTest):
         """Helper: serialise list-of-dicts into UTF-8 CSV bytes."""
         import io as _io
         import csv as _csv
+
         buf = _io.StringIO()
         fieldnames = list(rows[0].keys())
         writer = _csv.DictWriter(buf, fieldnames=fieldnames)
@@ -743,9 +767,16 @@ class BrokerImportTests(BaseTest):
         uid = self._make_user()
         self._set_logged_in(uid)
 
-        csv_data = self._csv_bytes([
-            {"ISIN": "SU26238RMFS4", "Amount": "10", "Price": "900.00", "Date": "2025-01-15"}
-        ])
+        csv_data = self._csv_bytes(
+            [
+                {
+                    "ISIN": "SU26238RMFS4",
+                    "Amount": "10",
+                    "Price": "900.00",
+                    "Date": "2025-01-15",
+                }
+            ]
+        )
         r = self.client.post(
             "/api/portfolio/import",
             data={"file": (io.BytesIO(csv_data), "deals.csv")},
@@ -759,6 +790,7 @@ class BrokerImportTests(BaseTest):
 
         with app.app_context():
             from models import BondPortfolio, Transaction
+
             bonds = BondPortfolio.query.filter_by(user_id=uid, is_sold=False).all()
             self.assertEqual(len(bonds), 1)
             self.assertEqual(bonds[0].isin, "SU26238RMFS4")
@@ -786,9 +818,16 @@ class BrokerImportTests(BaseTest):
 
         r = self.client.post(
             "/api/portfolio/import",
-            json={"deals": [
-                {"isin": "SU26238RMFS4", "amount": "5", "price": "910.00", "date": "2025-03-10"},
-            ]},
+            json={
+                "deals": [
+                    {
+                        "isin": "SU26238RMFS4",
+                        "amount": "5",
+                        "price": "910.00",
+                        "date": "2025-03-10",
+                    },
+                ]
+            },
             content_type="application/json",
         )
         self.assertEqual(r.status_code, 200)
@@ -821,16 +860,14 @@ class BrokerImportTests(BaseTest):
         self.assertEqual(r.status_code, 400)
         self.assertIn("error", r.get_json()["status"])
 
-    @patch("blueprints.portfolio.get_moex_bond")
-    def test_import_csv_unknown_isin_recorded_as_error(self, mock_moex):
-        """Rows with ISINs not found on MOEX are skipped and reported in errors."""
-        mock_moex.return_value = None  # simulate MOEX not finding the bond
+    def test_import_csv_unknown_isin_imported_optimistically(self):
+        """Unknown ISINs are imported as-is; secid is resolved later on portfolio load."""
         uid = self._make_user()
         self._set_logged_in(uid)
 
-        csv_data = self._csv_bytes([
-            {"ISIN": "UNKNOWN00001", "Amount": "3", "Price": "500.00"}
-        ])
+        csv_data = self._csv_bytes(
+            [{"ISIN": "UNKNOWN00001", "Amount": "3", "Price": "500.00"}]
+        )
         r = self.client.post(
             "/api/portfolio/import",
             data={"file": (io.BytesIO(csv_data), "deals.csv")},
@@ -838,8 +875,8 @@ class BrokerImportTests(BaseTest):
         )
         self.assertEqual(r.status_code, 200)
         data = r.get_json()
-        self.assertEqual(data["imported_count"], 0)
-        self.assertTrue(len(data["errors"]) > 0)
+        self.assertEqual(data["imported_count"], 1)
+        self.assertEqual(len(data["errors"]), 0)
 
     def test_import_requires_auth(self):
         """POST /api/portfolio/import redirects unauthenticated users."""

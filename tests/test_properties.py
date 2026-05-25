@@ -4,18 +4,17 @@ Property-based tests for core financial calculations using Hypothesis.
 Tests pure calculation functions in services/portfolio_service.py without
 touching the database or Flask app context.
 """
+
 import os
 
 os.environ.setdefault("FLASK_TESTING", "1")
 
-import math
-from types import SimpleNamespace
+from types import SimpleNamespace  # noqa: E402
 
-import pytest
-from hypothesis import assume, given, settings
-from hypothesis import strategies as st
+from hypothesis import assume, given  # noqa: E402
+from hypothesis import strategies as st  # noqa: E402
 
-from services.portfolio_service import (
+from services.portfolio_service import (  # noqa: E402
     build_trade_entry,
     calc_portfolio_ytm,
     calc_sharpe_ratio,
@@ -24,8 +23,10 @@ from services.portfolio_service import (
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _make_sold_bond(buy_price: float, sell_price: float, amount: int = 1,
-                    commission: float = 0.0) -> SimpleNamespace:
+
+def _make_sold_bond(
+    buy_price: float, sell_price: float, amount: int = 1, commission: float = 0.0
+) -> SimpleNamespace:
     """Minimal sold-bond object that satisfies portfolio_service functions."""
     return SimpleNamespace(
         id=1,
@@ -43,17 +44,19 @@ def _make_sold_bond(buy_price: float, sell_price: float, amount: int = 1,
 
 # ── Floats strategy: finite, reasonable bond prices ──────────────────────────
 
-_price = st.floats(min_value=10.0, max_value=50_000.0,
-                   allow_nan=False, allow_infinity=False)
+_price = st.floats(
+    min_value=10.0, max_value=50_000.0, allow_nan=False, allow_infinity=False
+)
 _amount = st.integers(min_value=1, max_value=10_000)
-_return_factor = st.floats(min_value=0.5, max_value=2.0,
-                            allow_nan=False, allow_infinity=False)
+_return_factor = st.floats(
+    min_value=0.5, max_value=2.0, allow_nan=False, allow_infinity=False
+)
 
 
 # ── build_trade_entry properties ──────────────────────────────────────────────
 
-class TestTradeEntryProperties:
 
+class TestTradeEntryProperties:
     @given(buy=_price, sell=_price, amount=_amount)
     def test_pnl_sign_matches_price_direction(self, buy, sell, amount):
         """P&L sign must match the direction: sell > buy → profit, sell < buy → loss."""
@@ -73,22 +76,27 @@ class TestTradeEntryProperties:
         bond2 = _make_sold_bond(buy, sell, amount * 2)
         e1 = build_trade_entry(bond1)
         e2 = build_trade_entry(bond2)
-        assert abs(e2["pnl"] - e1["pnl"] * 2) < 0.02, (
-            f"P&L should double: {e1['pnl']} × 2 ≠ {e2['pnl']}"
-        )
+        assert (
+            abs(e2["pnl"] - e1["pnl"] * 2) < 0.02
+        ), f"P&L should double: {e1['pnl']} × 2 ≠ {e2['pnl']}"
 
-    @given(buy=_price, sell=_price, amount=_amount,
-           commission=st.floats(min_value=0.0, max_value=1000.0,
-                                allow_nan=False, allow_infinity=False))
+    @given(
+        buy=_price,
+        sell=_price,
+        amount=_amount,
+        commission=st.floats(
+            min_value=0.0, max_value=1000.0, allow_nan=False, allow_infinity=False
+        ),
+    )
     def test_commission_reduces_pnl(self, buy, sell, amount, commission):
         """Adding a positive commission must reduce (or keep equal) P&L."""
         bond_no_comm = _make_sold_bond(buy, sell, amount, commission=0.0)
         bond_with_comm = _make_sold_bond(buy, sell, amount, commission=commission)
         e_no = build_trade_entry(bond_no_comm)
         e_with = build_trade_entry(bond_with_comm)
-        assert e_with["pnl"] <= e_no["pnl"] + 0.01, (
-            f"Commission should reduce P&L: {e_with['pnl']} > {e_no['pnl']}"
-        )
+        assert (
+            e_with["pnl"] <= e_no["pnl"] + 0.01
+        ), f"Commission should reduce P&L: {e_with['pnl']} > {e_no['pnl']}"
 
     @given(buy=_price, sell=_price, amount=_amount)
     def test_sell_price_rounded_to_2dp(self, buy, sell, amount):
@@ -121,8 +129,8 @@ class TestTradeEntryProperties:
 
 # ── calc_sharpe_ratio properties ──────────────────────────────────────────────
 
-class TestSharpeRatioProperties:
 
+class TestSharpeRatioProperties:
     @given(st.lists(_return_factor, min_size=0, max_size=2))
     def test_returns_none_for_fewer_than_3_trades(self, factors):
         """With < 3 data points, result must be None."""
@@ -145,10 +153,13 @@ class TestSharpeRatioProperties:
         assert result is not None
         assert result["volatility_pct"] >= 0.0
 
-    @given(st.lists(
-        st.just(1.05),  # identical 5% return every trade
-        min_size=3, max_size=20,
-    ))
+    @given(
+        st.lists(
+            st.just(1.05),  # identical 5% return every trade
+            min_size=3,
+            max_size=20,
+        )
+    )
     def test_zero_volatility_returns_none_sharpe(self, factors):
         """All identical returns → zero volatility → sharpe should be None."""
         bonds = [_make_sold_bond(100.0, 100.0 * f) for f in factors]
@@ -167,7 +178,9 @@ class TestSharpeRatioProperties:
         # avg_factor > 1 → average return > 0 → mean_return_pct > 0
         # avg_factor < 1 → average return < 0 → mean_return_pct < 0
         expected_positive = avg_factor > 1.0
-        if abs(avg_factor - 1.0) > 1e-4:  # avoid floating point edge at exactly 1.0 / rounding to -0.0
+        if (
+            abs(avg_factor - 1.0) > 1e-4
+        ):  # avoid floating point edge at exactly 1.0 / rounding to -0.0
             if expected_positive:
                 assert result["mean_return_pct"] > 0
             else:
@@ -186,25 +199,31 @@ class TestSharpeRatioProperties:
 
 # ── calc_portfolio_ytm properties ─────────────────────────────────────────────
 
-class TestPortfolioYtmProperties:
 
+class TestPortfolioYtmProperties:
     @given(
         st.lists(
             st.tuples(
-                st.floats(min_value=1.0, max_value=10_000.0,
-                          allow_nan=False, allow_infinity=False),  # current_value
-                st.floats(min_value=0.01, max_value=30.0,
-                          allow_nan=False, allow_infinity=False),  # ytm
+                st.floats(
+                    min_value=1.0,
+                    max_value=10_000.0,
+                    allow_nan=False,
+                    allow_infinity=False,
+                ),  # current_value
+                st.floats(
+                    min_value=0.01,
+                    max_value=30.0,
+                    allow_nan=False,
+                    allow_infinity=False,
+                ),  # ytm
             ),
-            min_size=1, max_size=20,
+            min_size=1,
+            max_size=20,
         )
     )
     def test_ytm_within_bounds(self, value_ytm_pairs):
         """Weighted avg YTM must be within [min(ytm), max(ytm)] of the portfolio."""
-        portfolio = [
-            {"current_value": v, "ytm": y}
-            for v, y in value_ytm_pairs
-        ]
+        portfolio = [{"current_value": v, "ytm": y} for v, y in value_ytm_pairs]
         total_value = sum(b["current_value"] for b in portfolio)
         assume(total_value > 0)
 
@@ -212,9 +231,9 @@ class TestPortfolioYtmProperties:
 
         min_ytm = min(b["ytm"] for b in portfolio)
         max_ytm = max(b["ytm"] for b in portfolio)
-        assert min_ytm - 0.01 <= result <= max_ytm + 0.01, (
-            f"YTM {result} outside [{min_ytm}, {max_ytm}]"
-        )
+        assert (
+            min_ytm - 0.01 <= result <= max_ytm + 0.01
+        ), f"YTM {result} outside [{min_ytm}, {max_ytm}]"
 
     def test_ytm_zero_for_empty_portfolio(self):
         """Empty portfolio → YTM = 0.0."""
@@ -226,10 +245,12 @@ class TestPortfolioYtmProperties:
         assert calc_portfolio_ytm(portfolio, 0.0) == 0.0
 
     @given(
-        value=st.floats(min_value=1.0, max_value=100_000.0,
-                        allow_nan=False, allow_infinity=False),
-        ytm=st.floats(min_value=0.01, max_value=30.0,
-                      allow_nan=False, allow_infinity=False),
+        value=st.floats(
+            min_value=1.0, max_value=100_000.0, allow_nan=False, allow_infinity=False
+        ),
+        ytm=st.floats(
+            min_value=0.01, max_value=30.0, allow_nan=False, allow_infinity=False
+        ),
     )
     def test_single_bond_ytm_equals_bond_ytm(self, value, ytm):
         """Single-bond portfolio → weighted YTM equals that bond's YTM."""

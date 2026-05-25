@@ -1,4 +1,5 @@
 """Сервис пользователей — аватары, email, настройки."""
+
 import logging
 import os
 import uuid
@@ -41,11 +42,12 @@ def save_avatar(user: User, file: FileStorage) -> str:
     # Читаем данные для проверки размера
     data = file.read()
     if len(data) > MAX_AVATAR_BYTES:
-        raise ValueError(f"Файл слишком большой. Максимальный размер — 5 МБ.")
+        raise ValueError("Файл слишком большой. Максимальный размер — 5 МБ.")
 
     # Открываем через Pillow — проверка, что это реальное изображение + стриппинг EXIF
     try:
         from io import BytesIO
+
         img = Image.open(BytesIO(data))
         img.verify()  # проверяет целостность файла
         # После verify() нужно переоткрыть (файл "потреблён")
@@ -76,6 +78,7 @@ def save_avatar(user: User, file: FileStorage) -> str:
 
     # Сохраняем как JPEG с удалением EXIF (Pillow не копирует EXIF по умолчанию)
     from io import BytesIO as _IO
+
     buf = _IO()
     img.save(buf, format="JPEG", quality=88, optimize=True)
     buf.seek(0)

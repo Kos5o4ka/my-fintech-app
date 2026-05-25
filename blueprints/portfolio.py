@@ -8,7 +8,6 @@ import re
 from datetime import datetime, date, timedelta
 from typing import Optional
 
-import requests
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
 from io import StringIO
@@ -20,20 +19,38 @@ from flask_login import login_required, current_user
 from extensions import db, cache
 from models import BondPortfolio, Watchlist, Transaction
 from moex import (
-    get_moex_bond, get_bond_history_all,
-    search_bonds, _fetch_json, get_rgbi_history, get_screener_bonds,
+    get_moex_bond,
+    get_bond_history_all,
+    search_bonds,
+    _fetch_json,
+    get_rgbi_history,
+    get_screener_bonds,
 )
-from services.moex_service import get_bond_cached, get_bond_preview, get_coupon_calendar_cached
+from services.moex_service import (
+    get_bond_cached,
+    get_bond_preview,
+    get_coupon_calendar_cached,
+)
 from services.portfolio_service import (
-    build_portfolio_list, calc_portfolio_ytm,
-    build_trade_entry, calc_coupon_income,
-    calc_monthly_profit, calc_tax_report, calc_sharpe_ratio,
+    build_portfolio_list,
+    calc_portfolio_ytm,
+    calc_coupon_income,
+    calc_monthly_profit,
+    calc_tax_report,
+    calc_sharpe_ratio,
 )
 from schemas.portfolio import AddBondRequest, SellBondRequest, ScreenerRequest
 from constants import (
-    INCOME_TTL, CHART_RANGE_TTL, CHART_ALL_TTL,
-    BENCHMARK_TTL, SCREENER_TTL, MAX_CHART_POINTS, STATS_TTL,
-    DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, TIMEFRAME_DAYS,
+    INCOME_TTL,
+    CHART_RANGE_TTL,
+    CHART_ALL_TTL,
+    BENCHMARK_TTL,
+    SCREENER_TTL,
+    MAX_CHART_POINTS,
+    STATS_TTL,
+    DEFAULT_PAGE_SIZE,
+    MAX_PAGE_SIZE,
+    TIMEFRAME_DAYS,
 )
 
 logger = logging.getLogger(__name__)
@@ -41,6 +58,7 @@ portfolio_bp = Blueprint("portfolio", __name__)
 
 
 # ── Утилиты импорта (module-level для тестируемости) ──────────────────────────
+
 
 def _norm_hdr(v) -> str:
     """Нормализует заголовок: убирает переносы, лишние пробелы, lowercase."""
@@ -55,7 +73,14 @@ def _parse_num(v):
         return float(v)
     if v is None:
         return None
-    s = str(v).strip().replace("\xa0", "").replace(" ", "").replace(" ", "").replace(",", ".")
+    s = (
+        str(v)
+        .strip()
+        .replace("\xa0", "")
+        .replace(" ", "")
+        .replace(" ", "")
+        .replace(",", ".")
+    )
     try:
         return float(s) if s else None
     except ValueError:
@@ -108,18 +133,38 @@ def _is_cancelled(val) -> bool:
 
 
 # ── Список псевдонимов столбцов для парсинга брокерских отчётов ───────────────
-_ISIN       = ["isin", "isin код", "код актива", "код бумаги", "код инструмента", "code"]
-_AMT        = ["количество", "кол-во", "кол.", "amount", "qty", "объем", "объём"]
-_PRICE      = ["цена за единицу", "цена сделки", "цена", "price", "курс"]
-_DATE       = ["дата заключения", "дата сделки", "дата", "date", "дата операции", "дата торгов"]
-_TYPE       = ["вид сделки", "тип сделки", "операция", "тип операции", "направление", "type"]
-_NAME       = ["наименование актива", "наименование инструмента", "наименование", "название", "инструмент", "name"]
-_COMM       = ["комиссия брокера", "сумма комиссии брокера", "комиссия", "commission", "broker_commission"]
-_CURR       = ["валюта расчетов", "валюта расчётов", "валюта", "currency"]
-_STATUS     = ["признак исполнения", "статус", "status"]
-_ANCHORS    = _ISIN + _AMT + _PRICE
+_ISIN = ["isin", "isin код", "код актива", "код бумаги", "код инструмента", "code"]
+_AMT = ["количество", "кол-во", "кол.", "amount", "qty", "объем", "объём"]
+_PRICE = ["цена за единицу", "цена сделки", "цена", "price", "курс"]
+_DATE = [
+    "дата заключения",
+    "дата сделки",
+    "дата",
+    "date",
+    "дата операции",
+    "дата торгов",
+]
+_TYPE = ["вид сделки", "тип сделки", "операция", "тип операции", "направление", "type"]
+_NAME = [
+    "наименование актива",
+    "наименование инструмента",
+    "наименование",
+    "название",
+    "инструмент",
+    "name",
+]
+_COMM = [
+    "комиссия брокера",
+    "сумма комиссии брокера",
+    "комиссия",
+    "commission",
+    "broker_commission",
+]
+_CURR = ["валюта расчетов", "валюта расчётов", "валюта", "currency"]
+_STATUS = ["признак исполнения", "статус", "status"]
+_ANCHORS = _ISIN + _AMT + _PRICE
 _PRICE_CURR = ["валюта цены", "единица цены", "валюта цены сделки"]
-_DEAL_NO    = ["номер сделки", "№ сделки", "n сделки", "номер"]
+_DEAL_NO = ["номер сделки", "№ сделки", "n сделки", "номер"]
 
 
 def _find_header_row_xlsx(sheet, max_scan: int = 50):
@@ -171,6 +216,7 @@ def _find_col(hdrs: dict, candidates: list):
 
 # ── Прочие утилиты blueprint'а ─────────────────────────────────────────────────
 
+
 def _etag(payload: dict) -> str:
     """Быстрый ETag из MD5 тела ответа (первые 16 символов)."""
     raw = json.dumps(payload, ensure_ascii=False, sort_keys=True)
@@ -191,6 +237,7 @@ def _bust_user_cache(user_id: int) -> None:
 
 # ── Страница ──────────────────────────────────────────────────────────────────
 
+
 @portfolio_bp.route("/portfolio")
 @login_required
 def portfolio_page() -> str:
@@ -199,15 +246,20 @@ def portfolio_page() -> str:
 
 # ── Активный портфель ─────────────────────────────────────────────────────────
 
+
 @portfolio_bp.route("/api/portfolio", methods=["GET"])
 @login_required
 def get_portfolio():
     page = max(request.args.get("page", 1, type=int), 1)
-    per_page = min(request.args.get("per_page", DEFAULT_PAGE_SIZE, type=int), MAX_PAGE_SIZE)
+    per_page = min(
+        request.args.get("per_page", DEFAULT_PAGE_SIZE, type=int), MAX_PAGE_SIZE
+    )
 
     q = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False)
     total_count = q.count()
-    active = q.order_by(BondPortfolio.id).offset((page - 1) * per_page).limit(per_page).all()
+    active = (
+        q.order_by(BondPortfolio.id).offset((page - 1) * per_page).limit(per_page).all()
+    )
 
     bonds, total_val = build_portfolio_list(active)
     ytm = calc_portfolio_ytm(bonds, total_val)
@@ -238,11 +290,14 @@ def get_portfolio():
 
 # ── Заметки к позиции ────────────────────────────────────────────────────────
 
+
 @portfolio_bp.route("/api/portfolio/<int:bond_id>/notes", methods=["PATCH"])
 @login_required
 def update_bond_notes(bond_id: int):
     """Обновляет заметку к позиции портфеля (Stage 4)."""
-    bond = BondPortfolio.query.filter_by(id=bond_id, user_id=current_user.id).first_or_404()
+    bond = BondPortfolio.query.filter_by(
+        id=bond_id, user_id=current_user.id
+    ).first_or_404()
     data = request.get_json() or {}
     raw = (data.get("notes") or "").strip()
     bond.notes = raw if raw else None
@@ -267,12 +322,14 @@ def build_transaction_entry(t: Transaction) -> dict:
             isin=t.isin,
             is_sold=True,
             amount=t.amount,
-            sell_date=t.tx_date
+            sell_date=t.tx_date,
         ).first()
         if bond:
             buy_p = float(bond.buy_price)
             sell_p = float(bond.sell_price) if bond.sell_price else float(t.price)
-            commission = float(bond.broker_commission) if bond.broker_commission else commission
+            commission = (
+                float(bond.broker_commission) if bond.broker_commission else commission
+            )
             pnl = (sell_p - buy_p) * t.amount - commission
             pnl_pct = (pnl / (buy_p * t.amount) * 100) if buy_p else 0.0
             if bond.purchase_date:
@@ -300,11 +357,14 @@ def build_transaction_entry(t: Transaction) -> dict:
 
 # ── История сделок ────────────────────────────────────────────────────────────
 
+
 @portfolio_bp.route("/api/portfolio/history", methods=["GET"])
 @login_required
 def portfolio_history():
     page = max(request.args.get("page", 1, type=int), 1)
-    per_page = min(request.args.get("per_page", DEFAULT_PAGE_SIZE, type=int), MAX_PAGE_SIZE)
+    per_page = min(
+        request.args.get("per_page", DEFAULT_PAGE_SIZE, type=int), MAX_PAGE_SIZE
+    )
     date_from_str = request.args.get("date_from", "").strip()
     date_to_str = request.args.get("date_to", "").strip()
     tx_type = request.args.get("tx_type")
@@ -322,7 +382,7 @@ def portfolio_history():
                 amount=b.amount,
                 price=b.buy_price,
                 tx_date=b.purchase_date,
-                commission=0.0
+                commission=0.0,
             )
             db.session.add(buy_tx)
             if b.is_sold:
@@ -334,7 +394,7 @@ def portfolio_history():
                     amount=b.amount,
                     price=b.sell_price if b.sell_price is not None else b.buy_price,
                     tx_date=b.sell_date if b.sell_date is not None else b.purchase_date,
-                    commission=b.broker_commission
+                    commission=b.broker_commission,
                 )
                 db.session.add(sell_tx)
         db.session.commit()
@@ -345,11 +405,12 @@ def portfolio_history():
     query = Transaction.query.filter_by(user_id=current_user.id)
     if tx_type in ("buy", "sell"):
         query = query.filter_by(tx_type=tx_type)
-    
+
     if date_from_str:
         try:
             query = query.filter(
-                Transaction.tx_date >= datetime.strptime(date_from_str, "%Y-%m-%d").date()
+                Transaction.tx_date
+                >= datetime.strptime(date_from_str, "%Y-%m-%d").date()
             )
         except ValueError:
             pass
@@ -362,20 +423,28 @@ def portfolio_history():
             pass
 
     total_count = query.count()
-    tx_list = query.order_by(Transaction.tx_date.desc(), Transaction.id.desc()).offset((page - 1) * per_page).limit(per_page).all()
-    return jsonify({
-        "status": "success",
-        "trades": [build_transaction_entry(t) for t in tx_list],
-        "pagination": {
-            "page": page,
-            "per_page": per_page,
-            "total": total_count,
-            "pages": math.ceil(total_count / per_page) if per_page else 1,
-        },
-    })
+    tx_list = (
+        query.order_by(Transaction.tx_date.desc(), Transaction.id.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+    return jsonify(
+        {
+            "status": "success",
+            "trades": [build_transaction_entry(t) for t in tx_list],
+            "pagination": {
+                "page": page,
+                "per_page": per_page,
+                "total": total_count,
+                "pages": math.ceil(total_count / per_page) if per_page else 1,
+            },
+        }
+    )
 
 
 # ── Поиск облигаций ───────────────────────────────────────────────────────────
+
 
 @portfolio_bp.route("/api/search_bond", methods=["GET"])
 @login_required
@@ -388,17 +457,21 @@ def search_bond():
 
 # ── Превью облигации ──────────────────────────────────────────────────────────
 
+
 @portfolio_bp.route("/api/bond_preview/<isin>", methods=["GET"])
 @login_required
 def bond_preview(isin: str):
     isin = isin.upper().strip()
     result = get_bond_preview(isin)
     if not result:
-        return jsonify({"status": "error", "message": "Облигация не найдена на Московской Бирже"}), 404
+        return jsonify(
+            {"status": "error", "message": "Облигация не найдена на Московской Бирже"}
+        ), 404
     return jsonify(result)
 
 
 # ── Добавить облигацию ────────────────────────────────────────────────────────
+
 
 @portfolio_bp.route("/api/add_bond", methods=["POST"])
 @login_required
@@ -418,7 +491,12 @@ def add_bond():
 
     moex_data = get_moex_bond(isin)
     if not moex_data:
-        return jsonify({"status": "error", "message": f"Облигация {isin} не найдена на Московской Бирже."}), 404
+        return jsonify(
+            {
+                "status": "error",
+                "message": f"Облигация {isin} не найдена на Московской Бирже.",
+            }
+        ), 404
 
     secid = moex_data["secid"]
     bond_title = moex_data.get("name", "Облигация")
@@ -435,19 +513,25 @@ def add_bond():
                 if row[0] == "MATDATE" and row[2]:
                     mat_date = datetime.strptime(row[2], "%Y-%m-%d").date()
             if issue_date and purchase_date < issue_date:
-                return jsonify({
-                    "status": "error",
-                    "message": f"Ошибка валидации: облигация выпущена {issue_date}. Нельзя купить бумагу до эмиссии.",
-                }), 400
+                return jsonify(
+                    {
+                        "status": "error",
+                        "message": f"Ошибка валидации: облигация выпущена {issue_date}. Нельзя купить бумагу до эмиссии.",
+                    }
+                ), 400
             if mat_date and purchase_date > mat_date:
-                return jsonify({
-                    "status": "error",
-                    "message": f"Ошибка валидации: облигация погашена {mat_date}. Торги закрыты.",
-                }), 400
+                return jsonify(
+                    {
+                        "status": "error",
+                        "message": f"Ошибка валидации: облигация погашена {mat_date}. Торги закрыты.",
+                    }
+                ), 400
     except Exception as exc:
         logger.warning("Date spec validation error for %s: %s", secid, exc)
 
-    existing = BondPortfolio.query.filter_by(user_id=current_user.id, isin=isin, is_sold=False).first()
+    existing = BondPortfolio.query.filter_by(
+        user_id=current_user.id, isin=isin, is_sold=False
+    ).first()
     existing_amount = existing.amount if existing else 0
 
     live_price = moex_data.get("price", float(req.buy_price))
@@ -466,27 +550,32 @@ def add_bond():
         notes=req.notes.strip() if req.notes else None,
     )
     db.session.add(new_bond)
-    db.session.add(Transaction(
-        user_id=current_user.id,
-        isin=isin,
-        name=bond_title,
-        tx_type="buy",
-        amount=int(req.amount),
-        price=float(req.buy_price),
-        currency=currency,
-        tx_date=purchase_date,
-    ))
+    db.session.add(
+        Transaction(
+            user_id=current_user.id,
+            isin=isin,
+            name=bond_title,
+            tx_type="buy",
+            amount=int(req.amount),
+            price=float(req.buy_price),
+            currency=currency,
+            tx_date=purchase_date,
+        )
+    )
     db.session.commit()
     _bust_user_cache(current_user.id)
-    return jsonify({
-        "status": "success",
-        "message": f"Бумага {bond_title} успешно добавлена!",
-        "duplicate_warning": existing_amount > 0,
-        "existing_amount": existing_amount,
-    }), 201
+    return jsonify(
+        {
+            "status": "success",
+            "message": f"Бумага {bond_title} успешно добавлена!",
+            "duplicate_warning": existing_amount > 0,
+            "existing_amount": existing_amount,
+        }
+    ), 201
 
 
 # ── Продать облигацию ─────────────────────────────────────────────────────────
+
 
 @portfolio_bp.route("/api/sell_bond/<int:bond_id>", methods=["POST"])
 @login_required
@@ -504,7 +593,12 @@ def sell_bond(bond_id: int):
         return jsonify({"status": "error", "message": first_error}), 400
 
     if req.amount and req.amount > bond.amount:
-        return jsonify({"status": "error", "message": f"Нельзя продать больше, чем есть в наличии ({bond.amount} шт.)."}), 400
+        return jsonify(
+            {
+                "status": "error",
+                "message": f"Нельзя продать больше, чем есть в наличии ({bond.amount} шт.).",
+            }
+        ), 400
 
     sell_price = (
         req.sell_price
@@ -542,24 +636,26 @@ def sell_bond(bond_id: int):
         sold_bond = bond
         message = f"Облигация {bond.name} полностью продана и переведена в архив."
 
-    db.session.add(Transaction(
-        user_id=current_user.id,
-        isin=bond.isin,
-        name=bond.name,
-        tx_type="sell",
-        amount=sell_qty,
-        price=sell_price,
-        commission=req.broker_commission,
-        tx_date=sold_bond.sell_date,
-        currency=bond.currency or 'RUB',
-    ))
+    db.session.add(
+        Transaction(
+            user_id=current_user.id,
+            isin=bond.isin,
+            name=bond.name,
+            tx_type="sell",
+            amount=sell_qty,
+            price=sell_price,
+            commission=req.broker_commission,
+            tx_date=sold_bond.sell_date,
+            currency=bond.currency or "RUB",
+        )
+    )
     db.session.commit()
     _bust_user_cache(current_user.id)
     return jsonify({"status": "success", "message": message})
 
 
-
 # ── График цены облигации ─────────────────────────────────────────────────────
+
 
 @portfolio_bp.route("/api/bond_chart/<isin>", methods=["GET"])
 @login_required
@@ -589,7 +685,9 @@ def get_bond_chart_data(isin: str):
         ]
         if not combined:
             take = min(100, len(labels))
-            combined = list(zip(labels[-take:], prices[-take:], nkd_hist[-take:], ytm_hist[-take:]))
+            combined = list(
+                zip(labels[-take:], prices[-take:], nkd_hist[-take:], ytm_hist[-take:])
+            )
     else:
         combined = list(zip(labels, prices, nkd_hist, ytm_hist))
 
@@ -599,7 +697,12 @@ def get_bond_chart_data(isin: str):
 
     if combined:
         labels_out, prices_out, nkd_out, ytm_out = zip(*combined)
-        result = {"labels": list(labels_out), "data": list(prices_out), "nkd": list(nkd_out), "ytm": list(ytm_out)}
+        result = {
+            "labels": list(labels_out),
+            "data": list(prices_out),
+            "nkd": list(nkd_out),
+            "ytm": list(ytm_out),
+        }
     else:
         result = {"labels": [], "data": [], "nkd": [], "ytm": []}
 
@@ -620,6 +723,7 @@ def _parse_date(lbl: str) -> date | None:
 
 # ── Купонный календарь ────────────────────────────────────────────────────────
 
+
 @portfolio_bp.route("/api/portfolio/calendar", methods=["GET"])
 @login_required
 def get_portfolio_calendar():
@@ -628,17 +732,20 @@ def get_portfolio_calendar():
     for bond in active:
         target = bond.secid or bond.isin
         for c in get_coupon_calendar_cached(target):
-            events.append({
-                "name": bond.name or bond.isin,
-                "isin": bond.isin,
-                "date": c["date"],
-                "total_payout": round(c["value"] * bond.amount, 2),
-            })
+            events.append(
+                {
+                    "name": bond.name or bond.isin,
+                    "isin": bond.isin,
+                    "date": c["date"],
+                    "total_payout": round(c["value"] * bond.amount, 2),
+                }
+            )
     events.sort(key=lambda x: x["date"])
     return jsonify(events[:10])
 
 
 # ── Прогноз купонного дохода ──────────────────────────────────────────────────
+
 
 @portfolio_bp.route("/api/portfolio/income", methods=["GET"])
 @login_required
@@ -655,12 +762,20 @@ def portfolio_income():
 
 # ── Распределение по эмитентам ────────────────────────────────────────────────
 
+
 @portfolio_bp.route("/api/portfolio/allocation", methods=["GET"])
 @login_required
 def portfolio_allocation():
     active = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False).all()
     slices = [
-        {"name": b.name or b.isin, "value": round((float(b.last_price) if b.last_price else float(b.buy_price)) * b.amount, 2)}
+        {
+            "name": b.name or b.isin,
+            "value": round(
+                (float(b.last_price) if b.last_price else float(b.buy_price))
+                * b.amount,
+                2,
+            ),
+        }
         for b in active
     ]
     slices.sort(key=lambda x: x["value"], reverse=True)
@@ -669,28 +784,46 @@ def portfolio_allocation():
 
 # ── Экспорт CSV ───────────────────────────────────────────────────────────────
 
+
 @portfolio_bp.route("/api/portfolio/export", methods=["GET"])
 @login_required
 def export_portfolio_csv():
     active = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False).all()
     si = StringIO()
     cw = csv.writer(si)
-    cw.writerow(["Название бумаги", "ISIN код", "Количество (шт)", "Цена покупки (руб)", "Дата сделки"])
+    cw.writerow(
+        [
+            "Название бумаги",
+            "ISIN код",
+            "Количество (шт)",
+            "Цена покупки (руб)",
+            "Дата сделки",
+        ]
+    )
     for bond in active:
-        cw.writerow([bond.name, bond.isin, bond.amount, bond.buy_price, bond.purchase_date])
-    response = make_response('﻿' + si.getvalue())
-    response.headers["Content-Disposition"] = "attachment; filename=portfolio_report.csv"
+        cw.writerow(
+            [bond.name, bond.isin, bond.amount, bond.buy_price, bond.purchase_date]
+        )
+    response = make_response("﻿" + si.getvalue())
+    response.headers["Content-Disposition"] = (
+        "attachment; filename=portfolio_report.csv"
+    )
     response.headers["Content-Type"] = "text/csv; charset=utf-8-sig"
     return response
 
 
 # ── Экспорт XLSX ──────────────────────────────────────────────────────────────
 
+
 @portfolio_bp.route("/api/portfolio/export/xlsx", methods=["GET"])
 @login_required
 def export_portfolio_xlsx():
     active = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False).all()
-    sold = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=True).order_by(BondPortfolio.sell_date.desc()).all()
+    sold = (
+        BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=True)
+        .order_by(BondPortfolio.sell_date.desc())
+        .all()
+    )
 
     wb = openpyxl.Workbook()
     header_font = Font(bold=True, color="FFFFFF")
@@ -698,7 +831,15 @@ def export_portfolio_xlsx():
 
     ws1 = wb.active
     ws1.title = "Портфель"
-    headers1 = ["Название", "ISIN", "Кол-во", "Цена покупки (₽)", "Посл. цена (₽)", "P&L (₽)", "Дата покупки"]
+    headers1 = [
+        "Название",
+        "ISIN",
+        "Кол-во",
+        "Цена покупки (₽)",
+        "Посл. цена (₽)",
+        "P&L (₽)",
+        "Дата покупки",
+    ]
     for col, h in enumerate(headers1, 1):
         cell = ws1.cell(row=1, column=col, value=h)
         cell.font = header_font
@@ -707,13 +848,34 @@ def export_portfolio_xlsx():
     for bond in active:
         last_p = float(bond.last_price) if bond.last_price else float(bond.buy_price)
         pnl = round((last_p - float(bond.buy_price)) * bond.amount, 2)
-        ws1.append([bond.name, bond.isin, bond.amount, float(bond.buy_price), round(last_p, 2), pnl,
-                    bond.purchase_date.strftime("%Y-%m-%d") if bond.purchase_date else ""])
+        ws1.append(
+            [
+                bond.name,
+                bond.isin,
+                bond.amount,
+                float(bond.buy_price),
+                round(last_p, 2),
+                pnl,
+                bond.purchase_date.strftime("%Y-%m-%d") if bond.purchase_date else "",
+            ]
+        )
     for col in ws1.columns:
-        ws1.column_dimensions[col[0].column_letter].width = max(len(str(cell.value or "")) for cell in col) + 4
+        ws1.column_dimensions[col[0].column_letter].width = (
+            max(len(str(cell.value or "")) for cell in col) + 4
+        )
 
     ws2 = wb.create_sheet("История сделок")
-    headers2 = ["Название", "ISIN", "Кол-во", "Цена покупки (₽)", "Цена продажи (₽)", "Комиссия (₽)", "P&L (₽)", "P&L %", "Дата продажи"]
+    headers2 = [
+        "Название",
+        "ISIN",
+        "Кол-во",
+        "Цена покупки (₽)",
+        "Цена продажи (₽)",
+        "Комиссия (₽)",
+        "P&L (₽)",
+        "P&L %",
+        "Дата продажи",
+    ]
     for col, h in enumerate(headers2, 1):
         cell = ws2.cell(row=1, column=col, value=h)
         cell.font = header_font
@@ -725,37 +887,61 @@ def export_portfolio_xlsx():
         comm = float(bond.broker_commission) if bond.broker_commission else 0.0
         pnl = round((sell_p - buy_p) * bond.amount - comm, 2)
         pnl_pct = round(pnl / (buy_p * bond.amount) * 100, 2) if buy_p else 0.0
-        ws2.append([bond.name, bond.isin, bond.amount, round(buy_p, 2), round(sell_p, 2), round(comm, 2), pnl, pnl_pct,
-                    bond.sell_date.strftime("%Y-%m-%d") if bond.sell_date else ""])
+        ws2.append(
+            [
+                bond.name,
+                bond.isin,
+                bond.amount,
+                round(buy_p, 2),
+                round(sell_p, 2),
+                round(comm, 2),
+                pnl,
+                pnl_pct,
+                bond.sell_date.strftime("%Y-%m-%d") if bond.sell_date else "",
+            ]
+        )
     for col in ws2.columns:
-        ws2.column_dimensions[col[0].column_letter].width = max(len(str(cell.value or "")) for cell in col) + 4
+        ws2.column_dimensions[col[0].column_letter].width = (
+            max(len(str(cell.value or "")) for cell in col) + 4
+        )
 
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
     response = make_response(buf.read())
-    response.headers["Content-Disposition"] = "attachment; filename=portfolio_report.xlsx"
-    response.headers["Content-Type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    response.headers["Content-Disposition"] = (
+        "attachment; filename=portfolio_report.xlsx"
+    )
+    response.headers["Content-Type"] = (
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
     return response
 
 
 # ── Вотчлист ──────────────────────────────────────────────────────────────────
 
+
 @portfolio_bp.route("/api/watchlist", methods=["GET"])
 @login_required
 def get_watchlist():
-    items = Watchlist.query.filter_by(user_id=current_user.id).order_by(Watchlist.added_at.desc()).all()
+    items = (
+        Watchlist.query.filter_by(user_id=current_user.id)
+        .order_by(Watchlist.added_at.desc())
+        .all()
+    )
     result = []
     for item in items:
         moex_data = get_bond_cached(item.isin) or {}
-        result.append({
-            "isin": item.isin,
-            "name": item.name or item.isin,
-            "added_at": item.added_at.strftime("%Y-%m-%d"),
-            "price": moex_data.get("price"),
-            "ytm": moex_data.get("ytm"),
-            "nkd": moex_data.get("nkd"),
-        })
+        result.append(
+            {
+                "isin": item.isin,
+                "name": item.name or item.isin,
+                "added_at": item.added_at.strftime("%Y-%m-%d"),
+                "price": moex_data.get("price"),
+                "ytm": moex_data.get("ytm"),
+                "nkd": moex_data.get("nkd"),
+            }
+        )
     return jsonify(result)
 
 
@@ -767,20 +953,33 @@ def add_to_watchlist():
     if not isin:
         return jsonify({"status": "error", "message": "ISIN обязателен."}), 400
     if Watchlist.query.filter_by(user_id=current_user.id, isin=isin).first():
-        return jsonify({"status": "error", "message": "Облигация уже в избранном."}), 409
+        return jsonify(
+            {"status": "error", "message": "Облигация уже в избранном."}
+        ), 409
     moex_data = get_moex_bond(isin)
     if not moex_data:
-        return jsonify({"status": "error", "message": f"Облигация {isin} не найдена на MOEX."}), 404
-    entry = Watchlist(user_id=current_user.id, isin=isin, secid=moex_data.get("secid"), name=moex_data.get("name", isin))
+        return jsonify(
+            {"status": "error", "message": f"Облигация {isin} не найдена на MOEX."}
+        ), 404
+    entry = Watchlist(
+        user_id=current_user.id,
+        isin=isin,
+        secid=moex_data.get("secid"),
+        name=moex_data.get("name", isin),
+    )
     db.session.add(entry)
     db.session.commit()
-    return jsonify({"status": "success", "message": f"{entry.name} добавлена в избранное."}), 201
+    return jsonify(
+        {"status": "success", "message": f"{entry.name} добавлена в избранное."}
+    ), 201
 
 
 @portfolio_bp.route("/api/watchlist/<isin>", methods=["DELETE"])
 @login_required
 def remove_from_watchlist(isin: str):
-    entry = Watchlist.query.filter_by(user_id=current_user.id, isin=isin.upper()).first()
+    entry = Watchlist.query.filter_by(
+        user_id=current_user.id, isin=isin.upper()
+    ).first()
     if not entry:
         return jsonify({"status": "error", "message": "Не найдено."}), 404
     db.session.delete(entry)
@@ -789,6 +988,7 @@ def remove_from_watchlist(isin: str):
 
 
 # ── Скринер ───────────────────────────────────────────────────────────────────
+
 
 @portfolio_bp.route("/api/screener", methods=["GET"])
 @login_required
@@ -806,10 +1006,14 @@ def screener():
     except ValidationError:
         return jsonify([])
 
-    cache_key = f"screener:{req.min_ytm}:{req.max_ytm}:{req.maturity_from}:{req.maturity_to}"
+    cache_key = (
+        f"screener:{req.min_ytm}:{req.max_ytm}:{req.maturity_from}:{req.maturity_to}"
+    )
     cached = cache.get(cache_key)
     if not cached:
-        cached = get_screener_bonds(req.min_ytm, req.max_ytm, req.maturity_from, req.maturity_to, limit=200)
+        cached = get_screener_bonds(
+            req.min_ytm, req.max_ytm, req.maturity_from, req.maturity_to, limit=200
+        )
         cache.set(cache_key, cached, timeout=SCREENER_TTL)
 
     results = cached
@@ -817,17 +1021,32 @@ def screener():
     # Stage 4: post-filter by issuer type (client-side semantic)
     if req.issuer_type:
         itype = req.issuer_type.lower()
+
         def _matches_type(b: dict) -> bool:
             name = (b.get("name") or b.get("secid") or "").upper()
             if itype == "ofz":
-                return "ОФЗ" in name or name.startswith("SU") or name.startswith("RU000A0")
+                return (
+                    "ОФЗ" in name or name.startswith("SU") or name.startswith("RU000A0")
+                )
             if itype == "muni":
-                return any(k in name for k in ("МУН", "МУНИЦИПАЛ", "ОБЛИГАЦ", "РЕГИОН", "ОБЛАСТЬ", "КРАЙ", "ГОРОД"))
+                return any(
+                    k in name
+                    for k in (
+                        "МУН",
+                        "МУНИЦИПАЛ",
+                        "ОБЛИГАЦ",
+                        "РЕГИОН",
+                        "ОБЛАСТЬ",
+                        "КРАЙ",
+                        "ГОРОД",
+                    )
+                )
             if itype == "corp":
                 return "ОФЗ" not in name and not any(
                     k in name for k in ("МУН", "РЕГИОН", "ОБЛАСТЬ", "КРАЙ", "ГОРОД")
                 )
             return True
+
         results = [b for b in results if _matches_type(b)]
 
     # Stage 4: post-filter by approximate duration (years to maturity)
@@ -856,6 +1075,7 @@ def screener():
 
 # ── Налоговый отчёт ───────────────────────────────────────────────────────────
 
+
 @portfolio_bp.route("/api/portfolio/tax", methods=["GET"])
 @login_required
 def portfolio_tax():
@@ -869,7 +1089,7 @@ def portfolio_tax():
     year_end = date(year, 12, 31)
     sold = BondPortfolio.query.filter(
         BondPortfolio.user_id == current_user.id,
-        BondPortfolio.is_sold == True,
+        BondPortfolio.is_sold == True,  # noqa: E712
         BondPortfolio.sell_date >= year_start,
         BondPortfolio.sell_date <= year_end,
     ).all()
@@ -887,32 +1107,39 @@ def portfolio_tax():
         pnl = (sell_p - buy_p) * bond.amount - comm
         gross_profit += pnl
         total_commission += comm
-        trades_list.append({
-            "id": bond.id,
-            "name": bond.name or bond.isin,
-            "isin": bond.isin,
-            "amount": bond.amount,
-            "buy_price": round(buy_p, 2),
-            "sell_price": round(sell_p, 2),
-            "commission": round(comm, 2),
-            "pnl": round(pnl, 2),
-            "sell_date": bond.sell_date.strftime("%Y-%m-%d") if bond.sell_date else None,
-        })
+        trades_list.append(
+            {
+                "id": bond.id,
+                "name": bond.name or bond.isin,
+                "isin": bond.isin,
+                "amount": bond.amount,
+                "buy_price": round(buy_p, 2),
+                "sell_price": round(sell_p, 2),
+                "commission": round(comm, 2),
+                "pnl": round(pnl, 2),
+                "sell_date": bond.sell_date.strftime("%Y-%m-%d")
+                if bond.sell_date
+                else None,
+            }
+        )
 
     taxable_base = max(0.0, round(gross_profit, 2))
     tax_amount = round(taxable_base * 0.13, 2)
 
-    return jsonify({
-        **summary,
-        "gross_profit": round(gross_profit, 2),
-        "total_commission": round(total_commission, 2),
-        "taxable_base": taxable_base,
-        "tax_amount": tax_amount,
-        "trades": trades_list,
-    })
+    return jsonify(
+        {
+            **summary,
+            "gross_profit": round(gross_profit, 2),
+            "total_commission": round(total_commission, 2),
+            "taxable_base": taxable_base,
+            "tax_amount": tax_amount,
+            "trades": trades_list,
+        }
+    )
 
 
 # ── Бенчмарк RGBI ─────────────────────────────────────────────────────────────
+
 
 @portfolio_bp.route("/api/portfolio/benchmark", methods=["GET"])
 @login_required
@@ -924,14 +1151,21 @@ def portfolio_benchmark():
         return jsonify(cached)
 
     days = TIMEFRAME_DAYS.get(range_param, 31)
-    from_date = (date.today() - timedelta(days=days)).strftime("%Y-%m-%d") if days < 9999 else None
-    rgbi = get_rgbi_history(from_date=from_date, to_date=date.today().strftime("%Y-%m-%d"))
+    from_date = (
+        (date.today() - timedelta(days=days)).strftime("%Y-%m-%d")
+        if days < 9999
+        else None
+    )
+    rgbi = get_rgbi_history(
+        from_date=from_date, to_date=date.today().strftime("%Y-%m-%d")
+    )
     result = {"range": range_param, "rgbi": rgbi}
     cache.set(cache_key, result, timeout=BENCHMARK_TTL)
     return jsonify(result)
 
 
 # ── Sharpe Ratio ─────────────────────────────────────────────────────────────
+
 
 @portfolio_bp.route("/api/portfolio/sharpe", methods=["GET"])
 @login_required
@@ -940,14 +1174,17 @@ def portfolio_sharpe():
     sold = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=True).all()
     result = calc_sharpe_ratio(sold)
     if result is None:
-        return jsonify({
-            "sharpe": None,
-            "reason": f"Недостаточно данных (закрытых позиций: {len(sold)}, нужно ≥ 3)",
-        })
+        return jsonify(
+            {
+                "sharpe": None,
+                "reason": f"Недостаточно данных (закрытых позиций: {len(sold)}, нужно ≥ 3)",
+            }
+        )
     return jsonify(result)
 
 
 # ── Сравнение двух облигаций ──────────────────────────────────────────────────
+
 
 def _bond_history_for_compare(isin: str, range_param: str) -> dict:
     """Вспомогательная функция: история цены одной облигации для вкладки Сравнение."""
@@ -983,7 +1220,11 @@ def _bond_history_for_compare(isin: str, range_param: str) -> dict:
 
     if combined:
         lbl_out, price_out = zip(*combined)
-        result = {"labels": list(lbl_out), "data": list(price_out), "name": moex_data.get("name", isin)}
+        result = {
+            "labels": list(lbl_out),
+            "data": list(price_out),
+            "name": moex_data.get("name", isin),
+        }
     else:
         result = {"labels": [], "data": [], "name": moex_data.get("name", isin)}
 
@@ -1033,6 +1274,7 @@ def compare_bonds():
 
 # ── Отчёт (print-to-PDF) ──────────────────────────────────────────────────────
 
+
 @portfolio_bp.route("/portfolio/report")
 @login_required
 def portfolio_report_page():
@@ -1042,7 +1284,9 @@ def portfolio_report_page():
     ytm = calc_portfolio_ytm(bonds, total_val)
 
     year = date.today().year
-    sold_all = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=True).all()
+    sold_all = BondPortfolio.query.filter_by(
+        user_id=current_user.id, is_sold=True
+    ).all()
     sold_year = [b for b in sold_all if b.sell_date and b.sell_date.year == year]
     tax = calc_tax_report(sold_year, active, year)
 
@@ -1064,6 +1308,7 @@ def portfolio_report_page():
 
 
 # ── Dashboard: P&L chart data ─────────────────────────────────────────────────
+
 
 @portfolio_bp.route("/api/dashboard/pnl_chart", methods=["GET"])
 @login_required
@@ -1130,20 +1375,30 @@ def dashboard_pnl_chart():
         for i, d in enumerate(date_range):
             running += daily_pnl.get(d, 0.0)
             # Показываем подпись не для каждой точки — chart.js разберётся
-            labels.append(d.strftime(label_fmt) if i % tick_every == 0 or i == len(date_range) - 1 else "")
+            labels.append(
+                d.strftime(label_fmt)
+                if i % tick_every == 0 or i == len(date_range) - 1
+                else ""
+            )
             data.append(round(running, 2))
 
     # Текущий нереализованный P&L (для отображения в тултипе / в заголовке)
     active = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False).all()
-    unrealized = round(sum(
-        (float(b.last_price or b.buy_price) - float(b.buy_price)) * b.amount
-        for b in active
-    ), 2)
+    unrealized = round(
+        sum(
+            (float(b.last_price or b.buy_price) - float(b.buy_price)) * b.amount
+            for b in active
+        ),
+        2,
+    )
 
-    return jsonify({"labels": labels, "data": data, "unrealized": unrealized, "period": period})
+    return jsonify(
+        {"labels": labels, "data": data, "unrealized": unrealized, "period": period}
+    )
 
 
 # ── Уведомления: ближайшие купоны ────────────────────────────────────────────
+
 
 @portfolio_bp.route("/api/notifications/upcoming", methods=["GET"])
 @login_required
@@ -1179,20 +1434,23 @@ def upcoming_notifications():
             except ValueError:
                 continue
             if today <= coupon_date <= horizon:
-                events.append({
-                    "isin": bond.isin,
-                    "name": bond.name or bond.isin,
-                    "coupon_date": coupon_date_str[:10],
-                    "coupon_value": c.get("value") or c.get("couponvalue"),
-                    "amount": bond.amount,
-                    "days_left": (coupon_date - today).days,
-                })
+                events.append(
+                    {
+                        "isin": bond.isin,
+                        "name": bond.name or bond.isin,
+                        "coupon_date": coupon_date_str[:10],
+                        "coupon_value": c.get("value") or c.get("couponvalue"),
+                        "amount": bond.amount,
+                        "days_left": (coupon_date - today).days,
+                    }
+                )
 
     events.sort(key=lambda x: x["coupon_date"])
     return jsonify({"count": len(events), "events": events})
 
 
 # ── Статистика (P&L по месяцам) ───────────────────────────────────────────────
+
 
 @portfolio_bp.route("/api/portfolio_stats", methods=["GET"])
 @login_required
@@ -1207,14 +1465,16 @@ def portfolio_stats():
     sorted_months = sorted(monthly.keys())
     result = {
         "labels": sorted_months,
-        "datasets": [{
-            "label": "Чистая зафиксированная прибыль (₽)",
-            "data": [monthly[m] for m in sorted_months],
-            "backgroundColor": "rgba(40, 167, 69, 0.2)",
-            "borderColor": "rgba(40, 167, 69, 1)",
-            "borderWidth": 2,
-            "fill": True,
-        }],
+        "datasets": [
+            {
+                "label": "Чистая зафиксированная прибыль (₽)",
+                "data": [monthly[m] for m in sorted_months],
+                "backgroundColor": "rgba(40, 167, 69, 0.2)",
+                "borderColor": "rgba(40, 167, 69, 1)",
+                "borderWidth": 2,
+                "fill": True,
+            }
+        ],
     }
     cache.set(cache_key, result, timeout=STATS_TTL)
     return jsonify(result)
@@ -1270,38 +1530,45 @@ def import_portfolio():
 
                 header_row_idx, hdrs = _find_header_row_from_list(all_rows)
                 if not hdrs:
-                    return jsonify({
-                        "status": "error",
-                        "message": (
-                            "Не найдена строка заголовков. "
-                            "Убедитесь, что отчёт содержит столбцы: "
-                            "«Код актива» (ISIN), «Количество», «Цена за единицу»."
-                        ),
-                    }), 400
+                    return jsonify(
+                        {
+                            "status": "error",
+                            "message": (
+                                "Не найдена строка заголовков. "
+                                "Убедитесь, что отчёт содержит столбцы: "
+                                "«Код актива» (ISIN), «Количество», «Цена за единицу»."
+                            ),
+                        }
+                    ), 400
 
-                isin_col       = _find_col(hdrs, _ISIN)
-                amt_col        = _find_col(hdrs, _AMT)
-                price_col      = _find_col(hdrs, _PRICE)
-                date_col       = _find_col(hdrs, _DATE)
-                type_col       = _find_col(hdrs, _TYPE)
-                name_col       = _find_col(hdrs, _NAME)
-                comm_col       = _find_col(hdrs, _COMM)
-                curr_col       = _find_col(hdrs, _CURR)
-                status_col     = _find_col(hdrs, _STATUS)
+                isin_col = _find_col(hdrs, _ISIN)
+                amt_col = _find_col(hdrs, _AMT)
+                price_col = _find_col(hdrs, _PRICE)
+                date_col = _find_col(hdrs, _DATE)
+                type_col = _find_col(hdrs, _TYPE)
+                name_col = _find_col(hdrs, _NAME)
+                comm_col = _find_col(hdrs, _COMM)
+                curr_col = _find_col(hdrs, _CURR)
+                status_col = _find_col(hdrs, _STATUS)
                 price_curr_col = _find_col(hdrs, _PRICE_CURR)
-                deal_no_col    = _find_col(hdrs, _DEAL_NO)
-                is_tinkoff     = broker in ("tinkoff", "tbank")
+                deal_no_col = _find_col(hdrs, _DEAL_NO)
+                is_tinkoff = broker in ("tinkoff", "tbank")
                 seen_deals: set = set()
 
                 if not isin_col or not amt_col or not price_col:
                     missing = []
-                    if not isin_col:  missing.append("ISIN / Код актива")
-                    if not amt_col:   missing.append("Количество")
-                    if not price_col: missing.append("Цена за единицу")
-                    return jsonify({
-                        "status": "error",
-                        "message": f"Не найдены обязательные столбцы: {', '.join(missing)}.",
-                    }), 400
+                    if not isin_col:
+                        missing.append("ISIN / Код актива")
+                    if not amt_col:
+                        missing.append("Количество")
+                    if not price_col:
+                        missing.append("Цена за единицу")
+                    return jsonify(
+                        {
+                            "status": "error",
+                            "message": f"Не найдены обязательные столбцы: {', '.join(missing)}.",
+                        }
+                    ), 400
 
                 # Вспомогательная: безопасно достать значение по 1-based col_idx из кортежа
                 def _gc(rv, col):
@@ -1309,7 +1576,7 @@ def import_portfolio():
                         return None
                     return rv[col - 1]
 
-                for row_values in all_rows[header_row_idx + 1:]:
+                for row_values in all_rows[header_row_idx + 1 :]:
                     isin_v = _gc(row_values, isin_col)
                     if isin_v is None:
                         continue
@@ -1318,15 +1585,19 @@ def import_portfolio():
                         continue  # пропускаем тикеры акций, РЕПО-тикеры и т.д.
 
                     # Т-Инвестиции: фильтр акций по валюте цены (% = облигация, RUB = акция)
-                    _pc_v = str(_gc(row_values, price_curr_col) or '').strip() if price_curr_col else ''
-                    if is_tinkoff and _pc_v.upper() == 'RUB':
+                    _pc_v = (
+                        str(_gc(row_values, price_curr_col) or "").strip()
+                        if price_curr_col
+                        else ""
+                    )
+                    if is_tinkoff and _pc_v.upper() == "RUB":
                         continue  # акция или инструмент с ценой в рублях — пропускаем
 
                     # Т-Инвестиции: дедупликация OTC-сделок (RFP + DFP = одна сделка)
                     if is_tinkoff:
                         _dc = deal_no_col or 1
                         _dn = _gc(row_values, _dc)
-                        _dk = str(_dn).strip() if _dn is not None else ''
+                        _dk = str(_dn).strip() if _dn is not None else ""
                         if _dk and _dk in seen_deals:
                             continue
                         if _dk:
@@ -1343,82 +1614,114 @@ def import_portfolio():
                         continue
 
                     raw_curr = str(_gc(row_values, curr_col) or "").strip().upper()
-                    currency = raw_curr if raw_curr.isalpha() and len(raw_curr) == 3 else "RUB"
+                    currency = (
+                        raw_curr if raw_curr.isalpha() and len(raw_curr) == 3 else "RUB"
+                    )
 
                     # Т-Инвестиции: цена в % от номинала (номинал = 1000 ₽) → рублей
                     _price_v = _gc(row_values, price_col)
-                    if is_tinkoff and _pc_v == '%' and _price_v is not None:
+                    if is_tinkoff and _pc_v == "%" and _price_v is not None:
                         try:
                             _price_v = float(_price_v) * 10
                         except (TypeError, ValueError):
                             pass
 
                     name_v = _gc(row_values, name_col)
-                    deals.append({
-                        "isin":       isin_s,
-                        "amount":     _gc(row_values, amt_col),
-                        "price":      _price_v,
-                        "date":       _gc(row_values, date_col),
-                        "tx_type":    _tx_type(type_v),
-                        "name":       str(name_v).strip() if name_v else None,
-                        "commission": _gc(row_values, comm_col),
-                        "currency":   currency,
-                        "notes":      "",
-                    })
+                    deals.append(
+                        {
+                            "isin": isin_s,
+                            "amount": _gc(row_values, amt_col),
+                            "price": _price_v,
+                            "date": _gc(row_values, date_col),
+                            "tx_type": _tx_type(type_v),
+                            "name": str(name_v).strip() if name_v else None,
+                            "commission": _gc(row_values, comm_col),
+                            "currency": currency,
+                            "notes": "",
+                        }
+                    )
 
                 # Т-Инвестиции: купонные выплаты из Раздела 2 отчёта
                 if is_tinkoff:
-                    _re_isin  = re.compile(r'ISIN:\s*([A-Z0-9]{12})', re.IGNORECASE)
-                    _re_qty   = re.compile(r'[Кк]оличество[^:]*:\s*(\d+)')
-                    _re_punit = re.compile(r'(?:купоны за 1 бумагу|за 1 ценную бумагу)[^:]*:\s*([\d,.]+)')
-                    _re_date  = re.compile(r'Дата операции:\s*(\d{2})-([A-Za-z]{3})-(\d{2,4})')
-                    _MON = {m: i for i, m in enumerate(
-                        ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'], 1
-                    )}
+                    _re_isin = re.compile(r"ISIN:\s*([A-Z0-9]{12})", re.IGNORECASE)
+                    _re_qty = re.compile(r"[Кк]оличество[^:]*:\s*(\d+)")
+                    _re_punit = re.compile(
+                        r"(?:купоны за 1 бумагу|за 1 ценную бумагу)[^:]*:\s*([\d,.]+)"
+                    )
+                    _re_date = re.compile(
+                        r"Дата операции:\s*(\d{2})-([A-Za-z]{3})-(\d{2,4})"
+                    )
+                    _MON = {
+                        m: i
+                        for i, m in enumerate(
+                            [
+                                "JAN",
+                                "FEB",
+                                "MAR",
+                                "APR",
+                                "MAY",
+                                "JUN",
+                                "JUL",
+                                "AUG",
+                                "SEP",
+                                "OCT",
+                                "NOV",
+                                "DEC",
+                            ],
+                            1,
+                        )
+                    }
                     # Сканируем все строки (all_rows уже в памяти — повторный проход бесплатен)
                     for row_values in all_rows:
                         desc = next(
-                            (str(v) for v in row_values
-                             if v
-                             and 'isin' in str(v).lower()
-                             and 'купон' in str(v).lower()),
+                            (
+                                str(v)
+                                for v in row_values
+                                if v
+                                and "isin" in str(v).lower()
+                                and "купон" in str(v).lower()
+                            ),
                             None,
                         )
                         if not desc:
                             continue
-                        m_isin  = _re_isin.search(desc)
-                        m_qty   = _re_qty.search(desc)
+                        m_isin = _re_isin.search(desc)
+                        m_qty = _re_qty.search(desc)
                         m_punit = _re_punit.search(desc)
                         if not (m_isin and m_qty and m_punit):
                             continue
-                        c_isin  = m_isin.group(1).upper()
-                        c_qty   = int(m_qty.group(1))
-                        c_punit = float(m_punit.group(1).replace(',', '.'))
-                        c_date  = date.today()
-                        m_date  = _re_date.search(desc)
+                        c_isin = m_isin.group(1).upper()
+                        c_qty = int(m_qty.group(1))
+                        c_punit = float(m_punit.group(1).replace(",", "."))
+                        c_date = date.today()
+                        m_date = _re_date.search(desc)
                         if m_date:
                             try:
                                 day = int(m_date.group(1))
                                 mon = _MON.get(m_date.group(2).upper(), 1)
-                                yr  = int(m_date.group(3))
+                                yr = int(m_date.group(3))
                                 c_date = date(2000 + yr if yr < 100 else yr, mon, day)
                             except (ValueError, KeyError):
                                 pass
-                        deals.append({
-                            "isin":       c_isin,
-                            "amount":     c_qty,
-                            "price":      c_punit,
-                            "date":       c_date,
-                            "tx_type":    "coupon",
-                            "name":       None,
-                            "commission": None,
-                            "currency":   "RUB",
-                            "notes":      "Купонный доход (Т-Инвестиции)",
-                        })
+                        deals.append(
+                            {
+                                "isin": c_isin,
+                                "amount": c_qty,
+                                "price": c_punit,
+                                "date": c_date,
+                                "tx_type": "coupon",
+                                "name": None,
+                                "commission": None,
+                                "currency": "RUB",
+                                "notes": "Купонный доход (Т-Инвестиции)",
+                            }
+                        )
 
             except Exception as exc:
                 logger.error("XLSX import parse error: %s", exc, exc_info=True)
-                return jsonify({"status": "error", "message": f"Ошибка обработки XLSX: {exc}"}), 400
+                return jsonify(
+                    {"status": "error", "message": f"Ошибка обработки XLSX: {exc}"}
+                ), 400
 
         # ── CSV ───────────────────────────────────────────────────────────────
         elif filename.endswith(".csv"):
@@ -1427,7 +1730,8 @@ def import_portfolio():
                 text = None
                 for enc in ("utf-8-sig", "cp1251", "utf-8"):
                     try:
-                        text = raw.decode(enc); break
+                        text = raw.decode(enc)
+                        break
                     except UnicodeDecodeError:
                         continue
                 if text is None:
@@ -1435,7 +1739,9 @@ def import_portfolio():
 
                 lines = text.splitlines()
                 first_line = lines[0] if lines else ""
-                delim = "\t" if "\t" in first_line else (";" if ";" in first_line else ",")
+                delim = (
+                    "\t" if "\t" in first_line else (";" if ";" in first_line else ",")
+                )
 
                 # Ищем строку с заголовками
                 header_idx = 0
@@ -1446,8 +1752,9 @@ def import_portfolio():
                         break
 
                 import csv as _csv
+
                 reader = _csv.DictReader(
-                    [lines[header_idx]] + lines[header_idx + 1:],
+                    [lines[header_idx]] + lines[header_idx + 1 :],
                     delimiter=delim,
                 )
 
@@ -1474,25 +1781,33 @@ def import_portfolio():
                         continue
 
                     raw_curr = str(_csv_get(rn, _CURR) or "").strip().upper()
-                    currency = raw_curr if raw_curr.isalpha() and len(raw_curr) == 3 else "RUB"
+                    currency = (
+                        raw_curr if raw_curr.isalpha() and len(raw_curr) == 3 else "RUB"
+                    )
 
-                    deals.append({
-                        "isin":       isin_s,
-                        "amount":     _csv_get(rn, _AMT),
-                        "price":      _csv_get(rn, _PRICE),
-                        "date":       _csv_get(rn, _DATE),
-                        "tx_type":    _tx_type(type_v),
-                        "name":       _csv_get(rn, _NAME),
-                        "commission": _csv_get(rn, _COMM),
-                        "currency":   currency,
-                        "notes":      "",
-                    })
+                    deals.append(
+                        {
+                            "isin": isin_s,
+                            "amount": _csv_get(rn, _AMT),
+                            "price": _csv_get(rn, _PRICE),
+                            "date": _csv_get(rn, _DATE),
+                            "tx_type": _tx_type(type_v),
+                            "name": _csv_get(rn, _NAME),
+                            "commission": _csv_get(rn, _COMM),
+                            "currency": currency,
+                            "notes": "",
+                        }
+                    )
             except Exception as exc:
                 logger.error("CSV import parse error: %s", exc, exc_info=True)
-                return jsonify({"status": "error", "message": f"Ошибка обработки CSV: {exc}"}), 400
+                return jsonify(
+                    {"status": "error", "message": f"Ошибка обработки CSV: {exc}"}
+                ), 400
 
         else:
-            return jsonify({"status": "error", "message": "Поддерживаются только .csv и .xlsx"}), 400
+            return jsonify(
+                {"status": "error", "message": "Поддерживаются только .csv и .xlsx"}
+            ), 400
 
     else:
         deals = (request.get_json() or {}).get("deals", [])
@@ -1501,85 +1816,97 @@ def import_portfolio():
         hint = ""
         if skipped_repo:
             hint = f" (отфильтровано РЕПО-сделок: {skipped_repo})"
-        return jsonify({
-            "status": "error",
-            "message": (
-                f"Сделки с облигациями не найдены{hint}. "
-                "Убедитесь, что файл содержит покупки/продажи облигаций."
-            ),
-        }), 400
+        return jsonify(
+            {
+                "status": "error",
+                "message": (
+                    f"Сделки с облигациями не найдены{hint}. "
+                    "Убедитесь, что файл содержит покупки/продажи облигаций."
+                ),
+            }
+        ), 400
 
     # ── обработка сделок — БЕЗ вызовов MOEX API (предотвращает таймаут) ───────
     # Цены/secid обновятся автоматически при следующей загрузке портфеля.
     imported_count = 0
-    coupon_count   = 0
-    errors: list   = []
+    coupon_count = 0
+    errors: list = []
 
     for deal in deals:
-        isin    = str(deal.get("isin", "")).strip().upper()
+        isin = str(deal.get("isin", "")).strip().upper()
         tx_type = deal.get("tx_type", "buy")
-        notes   = deal.get("notes") or ""
+        notes = deal.get("notes") or ""
 
         if not isin:
             continue
 
         raw_amt = _parse_num(deal.get("amount"))
         if raw_amt is None or raw_amt <= 0:
-            errors.append(f"Пропущено {isin}: некорректное количество ({deal.get('amount')!r})")
+            errors.append(
+                f"Пропущено {isin}: некорректное количество ({deal.get('amount')!r})"
+            )
             continue
         amount = int(raw_amt)
 
         price = _parse_num(deal.get("price"))
         if price is None or price <= 0:
-            errors.append(f"Пропущено {isin}: некорректная цена ({deal.get('price')!r})")
+            errors.append(
+                f"Пропущено {isin}: некорректная цена ({deal.get('price')!r})"
+            )
             continue
 
         trade_date = _parse_any_date(deal.get("date"))
         commission = _parse_num(deal.get("commission"))
-        currency   = deal.get("currency") or "RUB"
+        currency = deal.get("currency") or "RUB"
         bond_title = deal.get("name") or isin
 
         if tx_type == "buy":
-            db.session.add(BondPortfolio(
-                user_id=current_user.id,
-                isin=isin,
-                secid=isin,           # обновится при загрузке портфеля
-                name=bond_title,
-                amount=amount,
-                buy_price=price,
-                last_price=price,     # обновится при загрузке портфеля
-                purchase_date=trade_date,
-                is_sold=False,
-                currency=currency,
-                broker_commission=commission,
-                notes=notes or None,
-            ))
-            db.session.add(Transaction(
-                user_id=current_user.id,
-                isin=isin,
-                name=bond_title,
-                tx_type="buy",
-                amount=amount,
-                price=price,
-                commission=commission,
-                currency=currency,
-                tx_date=trade_date,
-            ))
+            db.session.add(
+                BondPortfolio(
+                    user_id=current_user.id,
+                    isin=isin,
+                    secid=isin,  # обновится при загрузке портфеля
+                    name=bond_title,
+                    amount=amount,
+                    buy_price=price,
+                    last_price=price,  # обновится при загрузке портфеля
+                    purchase_date=trade_date,
+                    is_sold=False,
+                    currency=currency,
+                    broker_commission=commission,
+                    notes=notes or None,
+                )
+            )
+            db.session.add(
+                Transaction(
+                    user_id=current_user.id,
+                    isin=isin,
+                    name=bond_title,
+                    tx_type="buy",
+                    amount=amount,
+                    price=price,
+                    commission=commission,
+                    currency=currency,
+                    tx_date=trade_date,
+                )
+            )
             imported_count += 1
 
         elif tx_type == "coupon":
-            db.session.add(Transaction(
-                user_id=current_user.id,
-                isin=isin,
-                name=bond_title,
-                tx_type="coupon",
-                amount=amount,
-                price=price,
-                commission=None,
-                currency=currency,
-                tx_date=trade_date,
-            ))
-            coupon_count   += 1
+            db.session.add(
+                Transaction(
+                    user_id=current_user.id,
+                    isin=isin,
+                    name=bond_title,
+                    tx_type="coupon",
+                    amount=amount,
+                    price=price,
+                    commission=None,
+                    currency=currency,
+                    tx_date=trade_date,
+                )
+            )
+            coupon_count += 1
             imported_count += 1
 
         else:  # sell
@@ -1587,38 +1914,42 @@ def import_portfolio():
                 user_id=current_user.id, isin=isin, is_sold=False
             ).first()
             if active:
-                active.is_sold    = True
+                active.is_sold = True
                 active.sell_price = price
-                active.sell_date  = trade_date
+                active.sell_date = trade_date
                 if commission:
                     active.broker_commission = commission
             else:
-                db.session.add(BondPortfolio(
+                db.session.add(
+                    BondPortfolio(
+                        user_id=current_user.id,
+                        isin=isin,
+                        secid=isin,
+                        name=bond_title,
+                        amount=amount,
+                        buy_price=price,
+                        last_price=price,
+                        purchase_date=trade_date,
+                        is_sold=True,
+                        sell_price=price,
+                        sell_date=trade_date,
+                        currency=currency,
+                        broker_commission=commission,
+                    )
+                )
+            db.session.add(
+                Transaction(
                     user_id=current_user.id,
                     isin=isin,
-                    secid=isin,
                     name=bond_title,
+                    tx_type="sell",
                     amount=amount,
-                    buy_price=price,
-                    last_price=price,
-                    purchase_date=trade_date,
-                    is_sold=True,
-                    sell_price=price,
-                    sell_date=trade_date,
+                    price=price,
+                    commission=commission,
                     currency=currency,
-                    broker_commission=commission,
-                ))
-            db.session.add(Transaction(
-                user_id=current_user.id,
-                isin=isin,
-                name=bond_title,
-                tx_type="sell",
-                amount=amount,
-                price=price,
-                commission=commission,
-                currency=currency,
-                tx_date=trade_date,
-            ))
+                    tx_date=trade_date,
+                )
+            )
             imported_count += 1
 
     db.session.commit()
@@ -1631,10 +1962,12 @@ def import_portfolio():
         msg += f" РЕПО-сделок пропущено: {skipped_repo}."
     if errors:
         msg += f" Ошибок: {len(errors)}."
-    return jsonify({
-        "status": "success",
-        "message": msg,
-        "imported_count": imported_count,
-        "coupon_count": coupon_count,
-        "errors": errors,
-    }), 200
+    return jsonify(
+        {
+            "status": "success",
+            "message": msg,
+            "imported_count": imported_count,
+            "coupon_count": coupon_count,
+            "errors": errors,
+        }
+    ), 200

@@ -42,13 +42,16 @@ def health_check():
 
     try:
         import requests as _req
+
         resp = _req.get("https://iss.moex.com/iss/index.json", timeout=5)
         resp.raise_for_status()
         status["moex"] = "ok"
     except Exception as e:
         status["moex"] = f"unreachable: {e}"
 
-    return jsonify({"status": "ok" if http_code == 200 else "degraded", **status}), http_code
+    return jsonify(
+        {"status": "ok" if http_code == 200 else "degraded", **status}
+    ), http_code
 
 
 @main_bp.route("/api/init", methods=["GET"])

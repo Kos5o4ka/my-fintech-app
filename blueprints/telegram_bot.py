@@ -1,4 +1,5 @@
 """Blueprint Telegram-бота — webhook для обработки команд от бота."""
+
 import logging
 
 from flask import Blueprint, request, jsonify, current_app, abort
@@ -92,7 +93,9 @@ def _refresh_username(chat_id: str, tg_username: str) -> None:
         db.session.commit()
         logger.info(
             "Telegram username updated: user_id=%s chat_id=%s username=%s",
-            user.id, chat_id, tg_username,
+            user.id,
+            chat_id,
+            tg_username,
         )
 
 
@@ -136,7 +139,12 @@ def _handle_link(chat_id: str, token: str, tg_username: str | None = None) -> No
         f"• Коды подтверждения при входе (2FA)\n\n"
         f"Управление уведомлениями — в профиле InvestTrack.",
     )
-    logger.info("Telegram linked: user_id=%s chat_id=%s username=%s", user_id, chat_id, tg_username)
+    logger.info(
+        "Telegram linked: user_id=%s chat_id=%s username=%s",
+        user_id,
+        chat_id,
+        tg_username,
+    )
 
 
 def _handle_unlink(chat_id: str) -> None:

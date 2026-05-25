@@ -34,13 +34,12 @@ class SellBondRequest(BaseModel):
     amount: Optional[int] = Field(None, gt=0)
 
 
-
 class ScreenerRequest(BaseModel):
     min_ytm: Optional[float] = None
     max_ytm: Optional[float] = None
     maturity_from: Optional[str] = None
     maturity_to: Optional[str] = None
     # Stage 4 enhancements
-    issuer_type: Optional[str] = None   # 'ofz' | 'muni' | 'corp'
+    issuer_type: Optional[str] = None  # 'ofz' | 'muni' | 'corp'
     min_duration: Optional[float] = None
     max_duration: Optional[float] = None

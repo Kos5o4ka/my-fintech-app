@@ -1,4 +1,5 @@
 """Сервис MOEX — кэшированный доступ к MOEX ISS API."""
+
 from typing import Optional
 
 from extensions import cache
@@ -56,6 +57,7 @@ def get_coupon_calendar_cached(secid: str) -> list[dict]:
     result = cache.get(key)
     if result is None:
         from moex import get_coupon_calendar
+
         result = get_coupon_calendar(secid)
         if result:
             try:

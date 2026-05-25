@@ -1,4 +1,5 @@
 """Сервис портфеля — P&L, доходность, купонный доход, налоги, Sharpe Ratio."""
+
 import logging
 import math
 from collections import defaultdict
@@ -16,22 +17,24 @@ logger = logging.getLogger(__name__)
 def build_portfolio_entry(bond: BondPortfolio) -> dict:
     """Строит словарь с данными одной активной позиции, включая P&L и MOEX-данные."""
     rates = get_currency_rates()
-    currency = bond.currency or 'RUB'
-    
-    last_p = float(bond.last_price) if bond.last_price is not None else float(bond.buy_price)
+    currency = bond.currency or "RUB"
+
+    last_p = (
+        float(bond.last_price) if bond.last_price is not None else float(bond.buy_price)
+    )
     buy_p = float(bond.buy_price)
-    
+
     current_value = bond.amount * last_p
     pnl = (last_p - buy_p) * bond.amount
     pnl_pct = ((last_p - buy_p) / buy_p * 100) if buy_p else 0.0
-    
+
     # Расчет рублевого эквивалента
-    rate = 1.0 if currency in ['RUB', 'GLD'] else rates.get(currency, 1.0)
+    rate = 1.0 if currency in ["RUB", "GLD"] else rates.get(currency, 1.0)
     current_value_rub = current_value * rate
     pnl_rub = pnl * rate
-    
+
     moex_data: dict = get_bond_cached(bond.isin) or {}
-    
+
     return {
         "id": bond.id,
         "isin": bond.isin,
@@ -72,8 +75,10 @@ def calc_portfolio_ytm(portfolio_list: list[dict], total_value: float) -> float:
     valid_bonds = [b for b in portfolio_list if b.get("ytm")]
     if not valid_bonds:
         return 0.0
+
     def _val(b: dict) -> float:
         return b.get("current_value_rub") or b.get("current_value") or 0.0
+
     ytm_weight_sum = sum(b["ytm"] * _val(b) for b in valid_bonds)
     total_valid_value = sum(_val(b) for b in valid_bonds)
     return round(ytm_weight_sum / total_valid_value, 2) if total_valid_value else 0.0
@@ -92,15 +97,17 @@ def build_trade_entry(bond) -> dict:
     return {
         "id": bond.id,
         "isin": bond.isin,
-        "name": getattr(bond, 'name', None) or "Облигация",
+        "name": getattr(bond, "name", None) or "Облигация",
         "amount": bond.amount,
         "buy_price": buy_p,
         "sell_price": round(sell_p, 2),
         "commission": round(commission, 2),
         "pnl": round(pnl, 2),
         "pnl_pct": round(pnl_pct, 2),
-        "currency": getattr(bond, 'currency', None) or 'RUB',
-        "purchase_date": bond.purchase_date.strftime("%Y-%m-%d") if bond.purchase_date else None,
+        "currency": getattr(bond, "currency", None) or "RUB",
+        "purchase_date": bond.purchase_date.strftime("%Y-%m-%d")
+        if bond.purchase_date
+        else None,
         "sell_date": bond.sell_date.strftime("%Y-%m-%d") if bond.sell_date else None,
     }
 
@@ -113,8 +120,8 @@ def calc_coupon_income(active_bonds: list[BondPortfolio]) -> dict[str, float]:
     totals: dict[str, float] = {k: 0.0 for k in windows}
     for bond in active_bonds:
         target = bond.secid or bond.isin
-        currency = bond.currency or 'RUB'
-        rate = 1.0 if currency in ['RUB', 'GLD'] else rates.get(currency, 1.0)
+        currency = bond.currency or "RUB"
+        rate = 1.0 if currency in ["RUB", "GLD"] else rates.get(currency, 1.0)
         for c in get_coupon_calendar_cached(target):
             if not c["date"] or not c["value"]:
                 continue
@@ -143,9 +150,11 @@ def calc_monthly_profit(closed_bonds: list[BondPortfolio]) -> dict[str, float]:
             else (float(bond.last_price) if bond.last_price else float(bond.buy_price))
         )
         group_date = bond.sell_date or bond.purchase_date
-        currency = bond.currency or 'RUB'
-        rate = 1.0 if currency in ['RUB', 'GLD'] else rates.get(currency, 1.0)
-        monthly[group_date.strftime("%Y-%m")] += (sell_p - float(bond.buy_price)) * bond.amount * rate
+        currency = bond.currency or "RUB"
+        rate = 1.0 if currency in ["RUB", "GLD"] else rates.get(currency, 1.0)
+        monthly[group_date.strftime("%Y-%m")] += (
+            (sell_p - float(bond.buy_price)) * bond.amount * rate
+        )
     return dict(monthly)
 
 
@@ -164,8 +173,8 @@ def calc_tax_report(
         sell_p = float(bond.sell_price) if bond.sell_price else buy_p
         comm = float(bond.broker_commission) if bond.broker_commission else 0.0
         pnl = (sell_p - buy_p) * bond.amount - comm
-        currency = bond.currency or 'RUB'
-        rate = 1.0 if currency in ['RUB', 'GLD'] else rates.get(currency, 1.0)
+        currency = bond.currency or "RUB"
+        rate = 1.0 if currency in ["RUB", "GLD"] else rates.get(currency, 1.0)
         pnl_rub = pnl * rate
         if pnl_rub > 0:
             sales_income += pnl_rub
@@ -174,8 +183,8 @@ def calc_tax_report(
     all_bonds = list(active_bonds) + list(sold_bonds)
     for bond in all_bonds:
         target = bond.secid or bond.isin
-        currency = bond.currency or 'RUB'
-        rate = 1.0 if currency in ['RUB', 'GLD'] else rates.get(currency, 1.0)
+        currency = bond.currency or "RUB"
+        rate = 1.0 if currency in ["RUB", "GLD"] else rates.get(currency, 1.0)
         for c in get_coupon_calendar_cached(target):
             if not c["date"] or not c["value"]:
                 continue
