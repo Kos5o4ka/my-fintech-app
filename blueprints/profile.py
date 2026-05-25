@@ -8,7 +8,7 @@ from flask_wtf.csrf import generate_csrf
 
 from extensions import db
 from models import AuditLog
-from services.user_service import save_avatar, update_telegram_settings
+from services.user_service import save_avatar, delete_avatar, update_telegram_settings
 
 logger = logging.getLogger(__name__)
 profile_bp = Blueprint("profile", __name__)
@@ -47,6 +47,17 @@ def profile_page():
         except ValueError as exc:
             return jsonify({"status": "error", "message": str(exc)}), 400
     return render_template("profile.html", csrf_token=generate_csrf())
+
+
+# ── Аватар — удаление ────────────────────────────────────────────────────────
+
+@profile_bp.route("/api/profile/avatar", methods=["DELETE"])
+@login_required
+def delete_avatar_route():
+    """Удаляет аватар пользователя с диска и сбрасывает avatar в None."""
+    delete_avatar(current_user)
+    return jsonify({"status": "success", "message": "Аватар успешно удалён."})
+
 
 # ── Telegram — привязка ───────────────────────────────────────────────────────
 

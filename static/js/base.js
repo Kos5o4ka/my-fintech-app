@@ -34,6 +34,15 @@
 /* ── Bell dropdown ──────────────────────────────────────────────── */
 (function () {
   var _bellLoaded = false;
+  var _currentBellCount = 0;
+
+  window.markBellRead = function () {
+    var badge = document.getElementById('bellBadge');
+    if (badge) badge.style.display = 'none';
+    localStorage.setItem('bellReadCount', String(_currentBellCount));
+    var dd = document.getElementById('bellDropdown');
+    if (dd) dd.style.display = 'none';
+  };
 
   function renderBellBody(data) {
     var body = document.getElementById('bellDropdownBody');
@@ -61,10 +70,12 @@
     fetch('/api/notifications/upcoming?days=7')
       .then(function (r) { return r.json(); })
       .then(function (data) {
+        _currentBellCount = data.count || 0;
+        var savedRead = parseInt(localStorage.getItem('bellReadCount') || '0', 10);
         var badge = document.getElementById('bellBadge');
         if (badge) {
-          if (data.count > 0) {
-            badge.textContent = data.count > 9 ? '9+' : data.count;
+          if (_currentBellCount > 0 && _currentBellCount > savedRead) {
+            badge.textContent = _currentBellCount > 9 ? '9+' : _currentBellCount;
             badge.style.display = 'inline-flex';
           } else {
             badge.style.display = 'none';
@@ -100,6 +111,10 @@
     if (!isOpen) {
       positionBellDropdown();
       if (!_bellLoaded) loadBellData();
+      // Авто-скрываем badge при открытии — пользователь видит уведомления
+      var badge = document.getElementById('bellBadge');
+      if (badge) badge.style.display = 'none';
+      localStorage.setItem('bellReadCount', String(_currentBellCount));
     }
   };
 
