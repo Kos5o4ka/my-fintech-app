@@ -9,6 +9,9 @@ VENV="$APP_DIR/.venv"
 
 cd "$APP_DIR"
 
+echo "==> Бэкап БД перед деплоем..."
+bash "$APP_DIR/scripts/backup_db.sh"
+
 echo "==> Подтягиваю изменения с GitHub..."
 git pull origin main
 

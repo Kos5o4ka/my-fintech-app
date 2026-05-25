@@ -28,6 +28,9 @@ class Config:
     # Сессии: постоянные (7 дней) + idle timeout (30 мин — проверяется в before_request)
     PERMANENT_SESSION_LIFETIME = timedelta(days=7)
     IDLE_TIMEOUT_SECONDS = int(os.environ.get("IDLE_TIMEOUT_SECONDS", 1800))
+    # CSRF: отключаем временной лимит токена — токен и так меняется при каждом ответе
+    # (after_request вызывает generate_csrf()), поэтому expiry по времени не нужен.
+    WTF_CSRF_TIME_LIMIT = None
     # Flask-Mail (optional — set MAIL_SERVER in .env to enable email notifications)
     MAIL_SERVER = os.environ.get("MAIL_SERVER")
     MAIL_PORT = int(os.environ.get("MAIL_PORT", 587))
