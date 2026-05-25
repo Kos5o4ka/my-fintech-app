@@ -972,6 +972,7 @@ async function addScreenerToWatchlist(isin) {
     // ── Broker chip toggle ──────────────────────────────────────────────────
     const brokerHints = {
         tinkoff: 'Отчёт по сделкам из личного кабинета Т‑Инвестиций (.xlsx)',
+        vtb:     'Брокерский отчёт ВТБ (.xlsx) — раздел «Заключённые сделки»',
         auto:    'Универсальный парсер — для других брокеров с похожим форматом',
     };
     document.querySelectorAll('.broker-chip').forEach(chip => {
