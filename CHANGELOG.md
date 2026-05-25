@@ -9,16 +9,28 @@
 
 ## [Unreleased]
 
+---
+
+## [1.3.4] — 2026-05-25
+
 ### Added
+- **Удаление аватара**: кнопка «Удалить аватар» на странице профиля + `DELETE /api/profile/avatar` + `delete_avatar()` в `user_service.py`; кнопка показывается только при наличии аватара
+- **Bell mark-as-read**: кнопка «✓ Прочитано» в дропдауне уведомлений; бадж скрывается через `localStorage.bellReadCount` и не появляется повторно до прихода новых событий
 - **Импорт отчётов Tinkoff/Т-Банк**: поддержка брокерских `.xlsx`-отчётов — сделки с облигациями, дедупликация OTC-операций, купонный доход
 
 ### Changed
+- **Bell dropdown**: `max-height` увеличен с 280px до 360px для лучшей читаемости длинных списков уведомлений
 - **Performance**: кэширование купонного календаря на 12 часов — ликвидация N+1 HTTP-запросов к MOEX ISS
 - **Performance**: перенос Circuit Breaker в Redis — предотвращение сплит-брейна в Gunicorn воркерах
 - **Architecture**: вынос фонового планировщика APScheduler из процесса Flask — исключение дублирования задач при multi-worker деплое
 - **Refactor**: устранение дублирования кода, вынос вспомогательных функций и именованных констант
 
 ### Fixed
+- **Logout**: кнопка «Выйти из аккаунта» на странице профиля — перенесена из inline `onclick` в `addEventListener` (DOMContentLoaded), устранён defer race-condition; `profile.min.js` пересобран
+- **Sidebar**: удалена дублирующая кнопка «Экспорт Excel» из сайдбара; кнопка остаётся на странице `/portfolio`
+- **ISIN modal**: `#bondChartModal` перемещён из `{% block content %}` в `{% block extra_modals %}` — вне `.app-main`, Bootstrap stacking context восстановлен (экран больше не затемняется без модала)
+- **Broker report CPU**: `openpyxl read_only=True` + `iter_rows(values_only=True)` — SAX streaming вместо DOM-дерева, памяти ×5–10 меньше, CPU ×3–5 быстрее при импорте годовых отчётов
+- **Admin**: `#changePwModal` перемещён из `{% block content %}` в `{% block extra_modals %}` для корректного Bootstrap stacking context
 - **Security**: строгий одноразовый сброс OTP в `verify_otp` при любой попытке верификации — исключение brute-force
 - **Security**: аутентификация вебхука Telegram секретным ключом в URL — защита от спуфинга
 - Коррекция расчёта налоговой базы (`calc_tax_report`) — учёт купонных доходов по проданным за год бумагам
