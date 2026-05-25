@@ -1510,10 +1510,11 @@ def import_portfolio():
         # ── XLSX ──────────────────────────────────────────────────────────────
         if filename.endswith((".xlsx", ".xls")):
             try:
-                # read_only=True включает SAX-streaming: экономия памяти ×5–10
-                # и CPU ×3–5 по сравнению с полной загрузкой DOM-модели.
+                # Т-Инвестиции генерирует файлы с <dimension ref="A1"/> вместо
+                # реального диапазона, поэтому read_only=True (SAX-streaming)
+                # останавливается после первой строки. Используем обычный режим.
                 file_bytes = io.BytesIO(f.read())
-                wb = openpyxl.load_workbook(file_bytes, read_only=True, data_only=True)
+                wb = openpyxl.load_workbook(file_bytes, data_only=True)
 
                 # Ищем нужный лист: первый, или с ключевым словом «сделки»/«trades»
                 sheet = wb.active
@@ -1526,7 +1527,7 @@ def import_portfolio():
                 # Один проход: собираем все строки как кортежи raw-значений.
                 # Tuple значительно легче Cell-объектов openpyxl (нет стилей, формул).
                 all_rows = list(sheet.iter_rows(values_only=True))
-                wb.close()  # освобождаем SAX-парсер
+                wb.close()
 
                 header_row_idx, hdrs = _find_header_row_from_list(all_rows)
                 if not hdrs:
