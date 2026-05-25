@@ -11,6 +11,8 @@ from datetime import date
 from unittest.mock import MagicMock, patch
 
 os.environ["FLASK_TESTING"] = "1"  # must be set before 'from app import app'
+os.environ["FLASK_ENV"] = "testing"  # force TestingConfig (sqlite:///:memory:)
+os.environ.pop("DATABASE_URL", None)  # prevent accidental PostgreSQL connection
 
 from sqlalchemy.pool import StaticPool  # noqa: E402
 
