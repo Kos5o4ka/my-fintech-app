@@ -84,6 +84,11 @@
   80%       { transform: translateX(4px); }
 }
 
+@keyframes themeIconSpin {
+  from { opacity: 0; transform: rotate(-120deg) scale(0.5); }
+  to   { opacity: 1; transform: rotate(0deg) scale(1); }
+}
+
 /* ── Utility classes ─────────────────────────────────────────────── */
 .animate-fade-in       { animation: fadeIn    var(--dur-base) var(--ease-out) both; }
 .animate-fade-in-up    { animation: fadeInUp  var(--dur-slow) var(--ease-base) both; }

@@ -287,6 +287,37 @@ def _parse_vtb_xlsx(all_rows: list) -> list:
     return deals
 
 
+def _detect_broker(all_rows: list) -> str:
+    """Определяет брокера по сигнатурам XLSX-отчёта.
+
+    Возвращает 'vtb', 'tinkoff' или 'generic'.
+    """
+    # ВТБ: строки данных с col[5] = Покупка/Продажа и col[1] = "Назв, РегКод, ISIN"
+    vtb_votes = 0
+    for row in all_rows[:100]:
+        if not row or len(row) < 6:
+            continue
+        if str(row[5] or "").strip().lower() in ("покупка", "продажа"):
+            if str(row[1] or "").count(",") >= 2:
+                vtb_votes += 1
+                if vtb_votes >= 2:
+                    return "vtb"
+
+    # Т-Инвестиции: ищем маркеры в первых строках метаданных
+    tinkoff_markers = ("т-инвестиции", "tinkoff", "tbank", "т инвестиции")
+    for row in all_rows[:40]:
+        if not row:
+            continue
+        for cell in row:
+            if not cell:
+                continue
+            s = str(cell).strip().lower()
+            if any(m in s for m in tinkoff_markers):
+                return "tinkoff"
+
+    return "generic"
+
+
 def _find_header_row_from_list(rows: list, max_scan: int = 50):
     """Возвращает (row_idx_0based, {norm_name: col_idx_1based}) или (None, {}).
     Работает с результатом iter_rows(values_only=True) — списком кортежей.
@@ -1632,8 +1663,16 @@ def import_portfolio():
                 all_rows = list(sheet.iter_rows(values_only=True))
                 wb.close()
 
+                # ── Авто-определение брокера ───────────────────────────────
+                effective_broker = broker
+                if broker == "auto":
+                    effective_broker = _detect_broker(all_rows)
+                    # Уточняем фильтр РЕПО под обнаруженного брокера
+                    if effective_broker == "tinkoff":
+                        filter_repo = True
+
                 # ── ВТБ: специализированный парсер ─────────────────────────
-                if broker == "vtb":
+                if effective_broker == "vtb":
                     deals.extend(_parse_vtb_xlsx(all_rows))
                     if not deals:
                         return jsonify(

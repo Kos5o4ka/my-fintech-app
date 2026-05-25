@@ -32,6 +32,8 @@ def build_portfolio_entry(bond: BondPortfolio) -> dict:
     rate = 1.0 if currency in ["RUB", "GLD"] else rates.get(currency, 1.0)
     current_value_rub = current_value * rate
     pnl_rub = pnl * rate
+    buy_price_rub = round(buy_p * rate, 2) if currency != "RUB" else None
+    last_price_rub = round(last_p * rate, 2) if currency != "RUB" else None
 
     moex_data: dict = get_bond_cached(bond.isin) or {}
 
@@ -51,6 +53,9 @@ def build_portfolio_entry(bond: BondPortfolio) -> dict:
         "pnl_rub": round(pnl_rub, 2),
         "pnl_pct": round(pnl_pct, 2),
         "currency": currency,
+        "rate_rub": round(rate, 4) if currency != "RUB" else None,
+        "buy_price_rub": buy_price_rub,
+        "last_price_rub": last_price_rub,
         "notes": bond.notes or "",
     }
 

@@ -12,8 +12,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap">
   <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" defer></script>
+  <link href="{{ url_for('static', filename='vendor/bootstrap.min.css') }}" rel="stylesheet">
+  <script src="{{ url_for('static', filename='vendor/bootstrap.bundle.min.js') }}" defer></script>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/variables.min.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/sidebar.min.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/animations.min.css') }}">
@@ -147,19 +147,7 @@
     {# Theme toggle #}
     <div style="padding:0 .55rem">
       <button class="sidebar-theme-btn" onclick="window.Common.toggleTheme()" aria-label="Переключить тему">
-        <span class="theme-icon" id="themeIconSidebar">
-          <svg id="iconSun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-            <circle cx="8" cy="8" r="2.5"/>
-            <line x1="8" y1="1" x2="8" y2="3"/>
-            <line x1="8" y1="13" x2="8" y2="15"/>
-            <line x1="1" y1="8" x2="3" y2="8"/>
-            <line x1="13" y1="8" x2="15" y2="8"/>
-            <line x1="3.05" y1="3.05" x2="4.46" y2="4.46"/>
-            <line x1="11.54" y1="11.54" x2="12.95" y2="12.95"/>
-            <line x1="3.05" y1="12.95" x2="4.46" y2="11.54"/>
-            <line x1="11.54" y1="4.46" x2="12.95" y2="3.05"/>
-          </svg>
-        </span>
+        <span class="theme-icon" id="themeIconSidebar"></span>
         <span class="theme-label">Тема</span>
       </button>
     </div>
