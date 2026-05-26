@@ -10,8 +10,29 @@ from models import BondPortfolio
 from services.moex_service import get_bond_cached, get_coupon_calendar_cached
 from constants import NDFL_RATE
 from moex import get_currency_rates
+from extensions import db
 
 logger = logging.getLogger(__name__)
+
+
+def normalize_bond_price(price: float, facevalue: float) -> float:
+    """Интеллектуальная функция автоопределения и конвертации процентных цен в рубли.
+
+    Сравнивает гипотезу процента (30-200%) с гипотезой рублей относительно номинала.
+    Исключает сбои на сверхдешевых бумагах.
+    """
+    if price <= 0 or facevalue <= 150.0:
+        return price
+    # Валидируем цену как проценты
+    is_valid_pct = (30.0 <= price <= 200.0)
+    # Валидируем цену как рубли
+    pct_if_rub = (price / facevalue) * 100.0
+    is_valid_rub = (30.0 <= pct_if_rub <= 200.0)
+    
+    # Если выглядит как процент, но нереалистично в рублях, пересчитываем в рубли
+    if is_valid_pct and not is_valid_rub:
+        return round((price / 100.0) * facevalue, 2)
+    return price
 
 
 def build_portfolio_entry(bond: BondPortfolio) -> dict:
@@ -23,6 +44,19 @@ def build_portfolio_entry(bond: BondPortfolio) -> dict:
     moex_data: dict = get_bond_cached(bond.isin) or {}
     moex_price = moex_data.get("price")
     facevalue = float(moex_data.get("facevalue") or 1000)
+
+    # Применяем интеллектуальное автоисправление цены покупки, если требуется
+    healed_buy_price = normalize_bond_price(buy_p, facevalue)
+    if healed_buy_price != buy_p:
+        buy_p = healed_buy_price
+        bond.buy_price = buy_p
+        
+        # Синхронизируем цену во всех связанных транзакциях покупки
+        from models import Transaction
+        txs = Transaction.query.filter_by(user_id=bond.user_id, isin=bond.isin, tx_type='buy').all()
+        for tx in txs:
+            tx.price = normalize_bond_price(float(tx.price), facevalue)
+        db.session.commit()
 
     if moex_price is not None:
         last_p = float(moex_price)

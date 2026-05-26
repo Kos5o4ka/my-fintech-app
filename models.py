@@ -52,6 +52,8 @@ class BondPortfolio(db.Model):
     )
     # Stage 4 — заметки к позиции
     notes = db.Column(db.Text, nullable=True)
+    buy_deal_no = db.Column(db.String(100), nullable=True)
+    sell_deal_no = db.Column(db.String(100), nullable=True)
 
 
 class Watchlist(db.Model):
@@ -81,6 +83,7 @@ class Transaction(db.Model):
     commission = db.Column(db.Numeric(10, 4), nullable=True)
     currency = db.Column(db.String(3), nullable=False, default="RUB")
     tx_date = db.Column(db.Date, nullable=False, default=date.today)
+    deal_no = db.Column(db.String(100), nullable=True, index=True)
 
 
 class AuditLog(db.Model):

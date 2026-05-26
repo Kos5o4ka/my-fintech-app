@@ -1,5 +1,8 @@
 import atexit
-import fcntl
+try:
+    import fcntl
+except ImportError:
+    fcntl = None
 import logging
 import os
 import subprocess
@@ -96,6 +99,8 @@ from blueprints.admin import admin_bp  # noqa: E402
 from blueprints.profile import profile_bp  # noqa: E402
 from blueprints.portfolio import portfolio_bp  # noqa: E402
 from blueprints.telegram_bot import telegram_bp  # noqa: E402
+from blueprints.analytics import analytics_bp  # noqa: E402
+from blueprints.imports import imports_bp  # noqa: E402
 
 app.register_blueprint(main_bp)
 app.register_blueprint(auth_bp)
@@ -103,6 +108,8 @@ app.register_blueprint(admin_bp)
 app.register_blueprint(profile_bp)
 app.register_blueprint(portfolio_bp)
 app.register_blueprint(telegram_bp)
+app.register_blueprint(analytics_bp)
+app.register_blueprint(imports_bp)
 
 # Освобождаем webhook от CSRF-защиты (Telegram Bot API не отправляет CSRF)
 csrf.exempt(telegram_bp)
@@ -339,8 +346,13 @@ _is_reload_parent = app.debug and os.environ.get("WERKZEUG_RUN_MAIN") is None
 
 def _try_acquire_scheduler_lock() -> bool:
     """Возвращает True если этот процесс стал владельцем файлового замка."""
+    if fcntl is None:
+        return True
     try:
-        _fd = open("/tmp/investtrack_scheduler.lock", "w")
+        lock_path = "/tmp/investtrack_scheduler.lock"
+        if os.name == 'nt':
+            lock_path = os.path.join(os.environ.get('TEMP', '.'), 'investtrack_scheduler.lock')
+        _fd = open(lock_path, "w")
         fcntl.flock(_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         atexit.register(lambda: _fd.close())
         return True

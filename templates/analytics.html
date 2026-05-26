@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+
+{% block title %}Аналитика портфеля | InvestTrack{% endblock %}
+{% block description %}Детальный анализ инвестиционного портфеля: доходность, Шарп, сравнение облигаций и налоги{% endblock %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/portfolio.min.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/portfolio-page.min.css') }}">
+<script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js" defer></script>
+{% endblock %}
+
+{% block content %}
+<div class="pf-wrap">
+
+  {# ── Page header ──────────────────────────────────────────────── #}
+  <div class="pf-header">
+    <div>
+      <h4 class="pf-title">
+        Аналитика портфеля
+        <small>Интеллектуальный анализ, риски, налоги и сравнение активов</small>
+      </h4>
+    </div>
+  </div>
+
+  {# ── Stats strip ──────────────────────────────────────────────── #}
+  <div class="pf-stats" style="grid-template-columns:repeat(2,1fr)">
+    <div class="pf-stat" id="sharpeStat" title="Коэффициент Шарпа по закрытым сделкам">
+      <div class="pf-stat-label">
+        Коэффициент Шарпа
+        <span id="sharpeSampleSize" style="font-size:.6rem;color:var(--text-tertiary)"></span>
+      </div>
+      <div class="pf-stat-value" id="sharpeValue" style="color:var(--text-secondary)">—</div>
+      <div class="pf-stat-sub" id="sharpeSub"></div>
+    </div>
+    
+    <div class="pf-stat">
+      <div class="pf-stat-label">Стоимость портфеля</div>
+      <div class="pf-stat-value text-success"><span id="total-portfolio-value">—</span> ₽</div>
+    </div>
+  </div>
+
+  {# ── Charts ───────────────────────────────────────────────────── #}
+  <div class="pf-charts">
+    <div class="pf-card">
+      <div style="padding:.75rem 1rem;border-bottom:1px solid var(--card-border);font-size:.78rem;font-weight:600;color:var(--text-secondary)">
+        Зафиксированная прибыль (₽)
+      </div>
+      <div style="position:relative;height:180px;padding:.5rem">
+        <canvas id="profitChart"></canvas>
+      </div>
+    </div>
+    <div class="pf-card">
+      <div style="padding:.75rem 1rem;border-bottom:1px solid var(--card-border);font-size:.78rem;font-weight:600;color:var(--text-secondary)">
+        Распределение портфеля
+      </div>
+      <div style="position:relative;height:180px;padding:.5rem">
+        <canvas id="allocationChart"></canvas>
+        <div id="allocationEmpty" class="position-absolute top-50 start-50 translate-middle text-center" style="display:none;width:90%">
+          <small style="color:var(--text-tertiary)">Добавьте облигации,<br>чтобы увидеть диаграмму</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ── Main card with tabs ───────────────────────────────────────── #}
+  <div class="pf-card">
+
+    {# Tab bar #}
+    <div class="pf-tab-bar" id="analyticsTabs" role="tablist">
+      <button class="pf-tab active" id="tax-tab"
+              data-bs-toggle="tab" data-bs-target="#tax-pane"
+              type="button" role="tab" aria-selected="true">
+        <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+          <rect x="2" y="1.5" width="10" height="11" rx="1.2"/>
+          <line x1="4.5" y1="5" x2="9.5" y2="5"/>
+          <line x1="4.5" y1="7.5" x2="9.5" y2="7.5"/>
+          <line x1="4.5" y1="10" x2="7" y2="10"/>
+        </svg>
+        Налоговый отчёт
+      </button>
+      <button class="pf-tab" id="compare-tab"
+              data-bs-toggle="tab" data-bs-target="#compare-pane"
+              type="button" role="tab">
+        <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+          <polyline points="1,10 4,5 7,8 10,3 13,5"/>
+          <polyline points="1,12 4,8 7,11 10,6 13,8" stroke-dasharray="2 1.5" opacity=".6"/>
+        </svg>
+        Сравнение облигаций
+      </button>
+      <button class="pf-tab" id="benchmark-tab"
+              data-bs-toggle="tab" data-bs-target="#benchmark-pane"
+              type="button" role="tab">
+        <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+          <polyline points="1,11 4,7 7,9 10,4 13,6"/>
+          <line x1="13" y1="2" x2="13" y2="6"/><line x1="10" y1="2" x2="13" y2="2"/>
+        </svg>
+        Бенчмарк RGBI
+      </button>
+    </div>
+
+    {# Tab content #}
+    <div class="tab-content">
+
+      {# ── Tax Report ────────────────────────────────────────────── #}
+      <div class="tab-pane fade show active" id="tax-pane" role="tabpanel">
+        <div class="pf-toolbar" style="flex-wrap:wrap;gap:.5rem">
+          <span class="small fw-semibold" style="color:var(--text-secondary)">Налоговый год:</span>
+          <select id="taxYearSelect" class="form-select form-select-sm" style="width:100px">
+            <option value="2027">2027</option>
+            <option value="2026" selected>2026</option>
+            <option value="2025">2025</option>
+            <option value="2024">2024</option>
+          </select>
+          <span class="ms-auto small" style="color:var(--text-tertiary)">
+            Ставка НДФЛ 13% (15% при доходе >5 млн ₽)
+          </span>
+        </div>
+
+        <div id="tax-loading" class="text-center py-4" style="display:none;color:var(--text-tertiary)">
+          <div class="spinner-border spinner-border-sm me-2" role="status"></div>Загрузка…
+        </div>
+
+        {# Summary cards #}
+        <div id="taxSummary" style="display:none;padding:.75rem 1rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.75rem;margin-bottom:.5rem">
+          <div class="pf-stat">
+            <div class="pf-stat-label">Реализованная прибыль</div>
+            <div class="pf-stat-value text-success" id="taxGrossProfit">—</div>
+          </div>
+          <div class="pf-stat">
+            <div class="pf-stat-label">Комиссии итого</div>
+            <div class="pf-stat-value" id="taxTotalComm">—</div>
+          </div>
+          <div class="pf-stat">
+            <div class="pf-stat-label">Налогооблагаемая база</div>
+            <div class="pf-stat-value" id="taxBase">—</div>
+          </div>
+          <div class="pf-stat">
+            <div class="pf-stat-label">НДФЛ к уплате</div>
+            <div class="pf-stat-value text-danger" id="taxAmount">—</div>
+          </div>
+        </div>
+
+        <div class="pf-table-wrap" id="taxTableWrap" style="display:none">
+          <table class="pf-table">
+            <thead>
+              <tr>
+                <th>Название</th><th>ISIN</th><th>Кол-во</th>
+                <th>Цена покупки</th><th>Цена продажи</th>
+                <th>Комиссия</th><th>P&amp;L ₽</th><th>Дата продажи</th>
+              </tr>
+            </thead>
+            <tbody id="tax-table-body">
+            </tbody>
+          </table>
+        </div>
+
+        <div id="taxEmpty" style="display:none" class="empty-state py-4">
+          <div class="empty-state-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/></svg></div>
+          <h6>Нет закрытых позиций</h6>
+          <p>За выбранный год не было продаж облигаций</p>
+        </div>
+      </div>
+
+      {# ── Compare two bonds ──────────────────────────────────── #}
+      <div class="tab-pane fade" id="compare-pane" role="tabpanel">
+        <div class="pf-toolbar" style="flex-wrap:wrap;gap:.5rem">
+          <div style="display:flex;gap:.5rem;flex-wrap:wrap;flex:1;align-items:flex-end">
+            <div>
+              <div class="small mb-1" style="color:var(--text-tertiary)">ISIN первой облигации</div>
+              <input type="text" id="compareIsin1" class="form-control form-control-sm"
+                     placeholder="RU000A1038V6" maxlength="12" style="width:160px;text-transform:uppercase">
+            </div>
+            <div>
+              <div class="small mb-1" style="color:var(--text-tertiary)">ISIN второй облигации</div>
+              <input type="text" id="compareIsin2" class="form-control form-control-sm"
+                     placeholder="RU000A0ZYG52" maxlength="12" style="width:160px;text-transform:uppercase">
+            </div>
+            <div>
+              <div class="small mb-1" style="color:var(--text-tertiary)">Период</div>
+              <select id="compareRange" class="form-select form-select-sm" style="width:110px">
+                <option value="month" selected>1 месяц</option>
+                <option value="week">1 неделя</option>
+                <option value="3m">3 месяца</option>
+                <option value="year">1 год</option>
+                <option value="all">Всё время</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:flex;gap:.4rem;align-items:flex-end;padding-bottom:.05rem">
+            <button class="btn btn-primary btn-sm" id="compareRunBtn">Сравнить</button>
+            <button class="btn btn-outline-secondary btn-sm" id="compareClearBtn">✕</button>
+          </div>
+        </div>
+        <div id="compare-loading" class="text-center py-4" style="display:none;color:var(--text-tertiary)">
+          <div class="spinner-border spinner-border-sm me-2" role="status"></div>Загрузка данных с MOEX…
+        </div>
+        <div id="compareLegend" style="display:none;padding:.5rem 1rem;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:.4rem">
+            <div style="width:22px;height:3px;background:#3b82f6;border-radius:2px"></div>
+            <span id="compareName1" style="font-size:.82rem;font-weight:600"></span>
+          </div>
+          <div style="display:flex;align-items:center;gap:.4rem">
+            <div style="width:22px;height:3px;background:#f59e0b;border-radius:2px"></div>
+            <span id="compareName2" style="font-size:.82rem;font-weight:600"></span>
+          </div>
+          <span style="font-size:.75rem;color:var(--text-tertiary);margin-left:auto">
+            * Нормировано к 100 на начало периода
+          </span>
+        </div>
+        <div style="position:relative;height:320px;padding:.75rem 1rem">
+          <canvas id="compareChart"></canvas>
+          <div id="compareEmpty" class="position-absolute top-50 start-50 translate-middle text-center" style="display:none">
+            <div style="font-size:2rem;margin-bottom:.5rem">📊</div>
+            <div style="color:var(--text-tertiary);font-size:.85rem">Введите два ISIN и нажмите «Сравнить»</div>
+          </div>
+        </div>
+      </div>
+
+      {# ── Benchmark vs RGBI ──────────────────────────────────── #}
+      <div class="tab-pane fade" id="benchmark-pane" role="tabpanel">
+        <div class="pf-toolbar" style="justify-content:space-between;flex-wrap:wrap;gap:.5rem">
+          <span class="small fw-semibold" style="color:var(--text-secondary)">
+            Индекс гособлигаций RGBI — динамика
+          </span>
+          <div class="btn-group btn-group-sm" id="benchmarkRangeBtns" role="group">
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-range="week">1 нед</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm active" data-range="month">1 мес</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-range="3m">3 мес</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-range="year">1 год</button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" data-range="all">Всё</button>
+          </div>
+        </div>
+        <div id="benchmark-loading" class="text-center py-4" style="display:none;color:var(--text-tertiary)">
+          <div class="spinner-border spinner-border-sm me-2" role="status"></div>Загрузка данных MOEX…
+        </div>
+        <div style="position:relative;height:320px;padding:.75rem 1rem">
+          <canvas id="benchmarkChart"></canvas>
+          <div id="benchmarkEmpty" class="position-absolute top-50 start-50 translate-middle text-center" style="display:none">
+            <div style="font-size:2rem;margin-bottom:.5rem">📉</div>
+            <div style="color:var(--text-tertiary);font-size:.85rem">Нет данных за выбранный период</div>
+          </div>
+        </div>
+        <div id="benchmarkStats" style="display:none;padding:.5rem 1rem 1rem;display:flex;gap:1.5rem;flex-wrap:wrap">
+          <div>
+            <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-tertiary)">Начало периода</div>
+            <div id="benchmarkFirst" style="font-size:.95rem;font-weight:700;font-variant-numeric:tabular-nums">—</div>
+          </div>
+          <div>
+            <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-tertiary)">Конец периода</div>
+            <div id="benchmarkLast" style="font-size:.95rem;font-weight:700;font-variant-numeric:tabular-nums">—</div>
+          </div>
+          <div>
+            <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-tertiary)">Изменение</div>
+            <div id="benchmarkChange" style="font-size:.95rem;font-weight:700;font-variant-numeric:tabular-nums">—</div>
+          </div>
+        </div>
+      </div>
+
+    </div>{# /tab-content #}
+  </div>{# /pf-card #}
+
+</div>{# /pf-wrap #}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/analytics.min.js') }}?v={{ static_ver }}" defer></script>
+{% endblock %}
