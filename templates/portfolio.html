@@ -212,10 +212,10 @@
                   Кол-во <span class="sort-icon" data-col="amount"></span>
                 </th>
                 <th class="sortable-col" onclick="sortTable('buy_price')">
-                  Цена покупки <span class="sort-icon" data-col="buy_price"></span>
+                  Цена покупки % <span class="sort-icon" data-col="buy_price"></span>
                 </th>
                 <th class="sortable-col" onclick="sortTable('last_price')">
-                  Текущая цена <span class="sort-icon" data-col="last_price"></span>
+                  Текущая цена % <span class="sort-icon" data-col="last_price"></span>
                 </th>
                 <th class="sortable-col" onclick="sortTable('nkd')">
                   НКД <span class="sort-icon" data-col="nkd"></span>
@@ -803,6 +803,6 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/portfolio-page.min.js') }}" defer></script>
-<script src="{{ url_for('static', filename='js/portfolio.min.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/portfolio-page.min.js') }}?v={{ static_ver }}" defer></script>
+<script src="{{ url_for('static', filename='js/portfolio.min.js') }}?v={{ static_ver }}" defer></script>
 {% endblock %}

@@ -18,11 +18,18 @@ def build_portfolio_entry(bond: BondPortfolio) -> dict:
     """Строит словарь с данными одной активной позиции, включая P&L и MOEX-данные."""
     rates = get_currency_rates()
     currency = bond.currency or "RUB"
-
-    last_p = (
-        float(bond.last_price) if bond.last_price is not None else float(bond.buy_price)
-    )
     buy_p = float(bond.buy_price)
+
+    moex_data: dict = get_bond_cached(bond.isin) or {}
+    moex_price = moex_data.get("price")
+    facevalue = float(moex_data.get("facevalue") or 1000)
+
+    if moex_price is not None:
+        last_p = float(moex_price)
+        if bond.last_price is None or abs(float(bond.last_price) - last_p) > 0.005:
+            bond.last_price = last_p
+    else:
+        last_p = float(bond.last_price) if bond.last_price is not None else buy_p
 
     current_value = bond.amount * last_p
     pnl = (last_p - buy_p) * bond.amount
@@ -35,15 +42,14 @@ def build_portfolio_entry(bond: BondPortfolio) -> dict:
     buy_price_rub = round(buy_p * rate, 2) if currency != "RUB" else None
     last_price_rub = round(last_p * rate, 2) if currency != "RUB" else None
 
-    moex_data: dict = get_bond_cached(bond.isin) or {}
-
     return {
         "id": bond.id,
         "isin": bond.isin,
         "name": bond.name or "Облигация",
         "amount": bond.amount,
         "buy_price": buy_p,
-        "last_price": last_p if bond.last_price is not None else None,
+        "last_price": last_p,
+        "facevalue": facevalue,
         "current_value": round(current_value, 2),
         "current_value_rub": round(current_value_rub, 2),
         "purchase_date": bond.purchase_date.strftime("%Y-%m-%d"),

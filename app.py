@@ -1,6 +1,8 @@
 import atexit
+import fcntl
 import logging
 import os
+import subprocess
 from datetime import datetime, timezone
 
 # ── Sentry (опционально) ──────────────────────────────────────────────────────
@@ -75,6 +77,17 @@ limiter.init_app(app)
 
 CORS(app, supports_credentials=True, origins=app.config["CORS_ORIGINS"])
 
+# ── Static asset versioning (cache-busting) ───────────────────────────────────
+try:
+    _git_hash = subprocess.check_output(
+        ["git", "rev-parse", "--short", "HEAD"],
+        cwd=os.path.dirname(__file__),
+        stderr=subprocess.DEVNULL,
+    ).decode().strip()
+except Exception:
+    _git_hash = "1"
+app.jinja_env.globals["static_ver"] = _git_hash
+
 
 # ── Blueprints ────────────────────────────────────────────────────────────────
 from blueprints.main import main_bp  # noqa: E402
@@ -128,7 +141,15 @@ def enforce_idle_timeout():
 def set_security_headers(response):
     try:
         token = generate_csrf()
-        response.set_cookie("XSRF-TOKEN", token, httponly=False, samesite="Lax")
+        _lifetime = app.config.get("PERMANENT_SESSION_LIFETIME")
+        _max_age = int(_lifetime.total_seconds()) if _lifetime else 7 * 24 * 3600
+        response.set_cookie(
+            "XSRF-TOKEN", token,
+            httponly=False,
+            samesite="Lax",
+            max_age=_max_age,
+            secure=app.config.get("SESSION_COOKIE_SECURE", False),
+        )
     except Exception:
         pass
 
@@ -308,12 +329,25 @@ def _send_coupon_reminders() -> None:
             logger.error("Coupon reminder job failed: %s", exc)
 
 
-# Start scheduler only outside tests and in the real server process
-# (WERKZEUG_RUN_MAIN == 'true' in the reload child, unset in the parent watchdog)
+# Start scheduler only outside tests and in the real server process.
+# Файловый замок гарантирует единственный экземпляр планировщика даже при
+# preload_app=True: мастер-процесс gunicorn захватывает замок первым,
+# форкнутые воркеры получают дескриптор как унаследованный, но LOCK_NB
+# даёт ошибку при повторной попытке — планировщик не дублируется.
 _in_test = os.environ.get("FLASK_TESTING") == "1"
 _is_reload_parent = app.debug and os.environ.get("WERKZEUG_RUN_MAIN") is None
 
-if not _in_test and not _is_reload_parent:
+def _try_acquire_scheduler_lock() -> bool:
+    """Возвращает True если этот процесс стал владельцем файлового замка."""
+    try:
+        _fd = open("/tmp/investtrack_scheduler.lock", "w")
+        fcntl.flock(_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        atexit.register(lambda: _fd.close())
+        return True
+    except OSError:
+        return False
+
+if not _in_test and not _is_reload_parent and _try_acquire_scheduler_lock():
     try:
         from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -337,7 +371,7 @@ if not _in_test and not _is_reload_parent:
         )
         _scheduler.start()
         atexit.register(lambda: _scheduler.shutdown(wait=False))
-        logger.info("APScheduler started: price_update every 15 min")
+        logger.info("APScheduler started (pid=%d): price_update every 15 min", os.getpid())
     except Exception as _sched_err:
         logger.warning("Could not start APScheduler: %s", _sched_err)
 

@@ -395,12 +395,30 @@ def get_portfolio():
         q.order_by(BondPortfolio.id).offset((page - 1) * per_page).limit(per_page).all()
     )
 
-    bonds, total_val = build_portfolio_list(active)
+    bonds, _ = build_portfolio_list(active)
+
+    # Сохраняем обновлённые last_price из MOEX в БД (build_portfolio_list пишет в ORM)
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    # Общая стоимость портфеля по всем активным позициям (не только текущая страница)
+    all_active_prices = (
+        BondPortfolio.query
+        .filter_by(user_id=current_user.id, is_sold=False)
+        .with_entities(BondPortfolio.last_price, BondPortfolio.amount)
+        .all()
+    )
+    total_val = sum(
+        float(r.last_price or 0) * r.amount for r in all_active_prices
+    )
+
     ytm = calc_portfolio_ytm(bonds, total_val)
 
     payload = {
         "status": "success",
-        "total_value": total_val,
+        "total_value": round(total_val, 2),
         "portfolio_ytm": ytm,
         "bonds": bonds,
         "pagination": {
@@ -471,6 +489,10 @@ def build_transaction_entry(t: Transaction) -> dict:
     else:
         purchase_date = t.tx_date.strftime("%Y-%m-%d")
 
+    # Номинал из MOEX (для отображения цены в % от номинала)
+    moex_data = get_bond_cached(t.isin) or {}
+    facevalue = float(moex_data.get("facevalue") or 1000)
+
     return {
         "id": t.id,
         "isin": t.isin,
@@ -486,6 +508,7 @@ def build_transaction_entry(t: Transaction) -> dict:
         "sell_date": sell_date,
         "date": t.tx_date.strftime("%Y-%m-%d"),
         "currency": t.currency or "RUB",
+        "facevalue": facevalue,
     }
 
 
@@ -1712,7 +1735,7 @@ def import_portfolio():
                     status_col = _find_col(hdrs, _STATUS)
                     price_curr_col = _find_col(hdrs, _PRICE_CURR)
                     deal_no_col = _find_col(hdrs, _DEAL_NO)
-                    is_tinkoff = broker in ("tinkoff", "tbank")
+                    is_tinkoff = effective_broker in ("tinkoff", "tbank")
                     seen_deals: set = set()
 
                     if not isin_col or not amt_col or not price_col:

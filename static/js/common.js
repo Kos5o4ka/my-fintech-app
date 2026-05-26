@@ -87,15 +87,15 @@ window.Common = (function(){
     }
 
     function getCookie(name) {
-        const value = `; ${document.cookie}`;
-        const parts = value.split(`; ${name}=`);
-        if (parts.length === 2) return parts.pop().split(';').shift();
-        return null;
+        const c = document.cookie.split(';').find(c => c.trim().startsWith(name + '='));
+        return c ? c.trim().slice(name.length + 1) : null;
     }
 
     function getCsrfToken() {
         const raw = getCookie('XSRF-TOKEN');
-        try { return raw ? decodeURIComponent(raw) : null; } catch { return raw; }
+        if (raw) { try { return decodeURIComponent(raw); } catch { return raw; } }
+        const meta = document.querySelector('meta[name="csrf-token"]');
+        return meta ? meta.content : null;
     }
 
     async function csrfFetch(url, options = {}) {

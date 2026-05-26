@@ -62,12 +62,15 @@ class TestingConfig(Config):
 
 class ProductionConfig(Config):
     DEBUG = False
-    SESSION_COOKIE_SECURE = True
+    # Включать только если сайт работает по HTTPS.
+    # При прямом HTTP-доступе (без nginx+SSL) Secure-кука не отправляется браузером,
+    # что ломает сессии и CSRF. Управляется через переменную окружения.
+    SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "false").lower() == "true"
 
     # Connection pooling — только для PostgreSQL, SQLite не поддерживает
     SQLALCHEMY_ENGINE_OPTIONS = {
-        "pool_size": int(os.environ.get("DB_POOL_SIZE", 5)),
-        "max_overflow": int(os.environ.get("DB_MAX_OVERFLOW", 10)),
+        "pool_size": int(os.environ.get("DB_POOL_SIZE", 2)),
+        "max_overflow": int(os.environ.get("DB_MAX_OVERFLOW", 3)),
         "pool_timeout": 30,
         "pool_recycle": 1800,  # переподключение каждые 30 мин (для NAT/firewall)
     }

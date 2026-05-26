@@ -200,5 +200,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/dashboard.min.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/dashboard.min.js') }}?v={{ static_ver }}" defer></script>
 {% endblock %}

@@ -340,7 +340,9 @@ class PortfolioTests(BaseTest):
         uid = self._make_user()
         self._set_logged_in(uid)
         self._make_bond(uid)
-        with patch("services.moex_service.get_bond_cached", return_value=MOCK_MOEX):
+        # Patch via the local reference in portfolio_service (from-import)
+        mock_moex_910 = {**MOCK_MOEX, "price": 910.0}
+        with patch("services.portfolio_service.get_bond_cached", return_value=mock_moex_910):
             r = self.client.get("/api/portfolio")
         self.assertEqual(r.status_code, 200)
         data = r.get_json()
@@ -348,7 +350,7 @@ class PortfolioTests(BaseTest):
         bond = data["bonds"][0]
         self.assertIn("pnl", bond)
         self.assertIn("pnl_pct", bond)
-        # last_price=910, buy_price=900, amount=10 → pnl = (910-900)*10 = 100
+        # moex price=910, buy_price=900, amount=10 → pnl = (910-900)*10 = 100
         self.assertAlmostEqual(bond["pnl"], 100.0, places=1)
 
     def test_add_bond_missing_fields(self):

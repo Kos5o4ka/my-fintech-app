@@ -22,7 +22,7 @@ echo "==> Применяю миграции БД..."
 FLASK_APP=app.py "$VENV/bin/flask" db upgrade
 
 echo "==> Перезапускаю воркеры gunicorn (graceful)..."
-systemctl reload "$SERVICE"
+systemctl restart "$SERVICE"
 
 echo ""
 echo "✓ Деплой завершён. Статус сервиса:"

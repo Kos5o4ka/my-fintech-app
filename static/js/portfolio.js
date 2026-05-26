@@ -214,6 +214,7 @@ function renderBondRows() {
                 isin: bond.isin,
                 name: bond.name,
                 currency: bond.currency || 'RUB',
+                facevalue: bond.facevalue || 1000,
                 lots: [],
                 total_amount: 0,
                 total_cost: 0,
@@ -269,6 +270,9 @@ function renderBondRows() {
 
     sorted.forEach(g => {
         const avgBuyPrice = g.total_amount ? (g.total_cost / g.total_amount) : 0;
+        const fv = g.facevalue || 1000;
+        const avgBuyPct = (avgBuyPrice / fv * 100).toFixed(2);
+        const lastPct   = (g.last_price / fv * 100).toFixed(2);
         const pnlPct = g.total_cost ? (g.total_pnl / g.total_cost * 100) : 0;
         const pnlClass = g.total_pnl >= 0 ? 'text-success' : 'text-danger';
         const sign = g.total_pnl >= 0 ? '+' : '';
@@ -282,12 +286,12 @@ function renderBondRows() {
                 </td>
                 <td data-label="Кол-во">${g.total_amount} шт.</td>
                 <td data-label="Цена покупки">
-                    ${avgBuyPrice.toFixed(2)} ${sym}
-                    ${g.currency !== 'RUB' && g.lots[0]?.buy_price_rub ? `<br><small style="color:var(--text-tertiary)">≈ ${(g.total_cost / g.total_amount * (g.lots[0].rate_rub || 1)).toFixed(0)} ₽</small>` : ''}
+                    ${avgBuyPct} %
+                    <br><small style="color:var(--text-tertiary)">${avgBuyPrice.toFixed(2)} ${sym}</small>
                 </td>
                 <td data-label="Текущая цена">
-                    ${g.last_price.toFixed(2)} ${sym}
-                    ${g.currency !== 'RUB' && g.lots[0]?.last_price_rub ? `<br><small style="color:var(--text-tertiary)">≈ ${g.lots[0].last_price_rub.toFixed(0)} ₽</small>` : ''}
+                    ${lastPct} %
+                    <br><small style="color:var(--text-tertiary)">${g.last_price.toFixed(2)} ${sym}</small>
                 </td>
                 <td data-label="НКД" class="text-primary"><b>${g.nkd.toFixed(2)} ${sym}</b></td>
                 <td data-label="YTM" class="text-info"><b>${g.ytm.toFixed(2)} %</b></td>
@@ -323,12 +327,21 @@ function renderBondRows() {
                                     const lotPnlClass = lotPnl >= 0 ? 'text-success' : 'text-danger';
                                     const lotSign = lotPnl >= 0 ? '+' : '';
                                     const lotSym = getCurrencySymbol(lot.currency || 'RUB');
+                                    const lotFv = lot.facevalue || fv;
+                                    const lotBuyPct  = (lot.buy_price / lotFv * 100).toFixed(2);
+                                    const lotLastPct = ((lot.last_price || lot.buy_price) / lotFv * 100).toFixed(2);
                                     return `
                                         <tr style="border-bottom: 1px solid rgba(var(--accent-rgb), 0.05);">
                                             <td>${esc(lot.purchase_date || '—')}</td>
                                             <td>${lot.amount} шт.</td>
-                                            <td>${lot.buy_price.toFixed(2)} ${lotSym}</td>
-                                            <td>${(lot.last_price || lot.buy_price).toFixed(2)} ${lotSym}</td>
+                                            <td>
+                                                ${lotBuyPct} %
+                                                <br><small style="color:var(--text-tertiary)">${lot.buy_price.toFixed(2)} ${lotSym}</small>
+                                            </td>
+                                            <td>
+                                                ${lotLastPct} %
+                                                <br><small style="color:var(--text-tertiary)">${(lot.last_price || lot.buy_price).toFixed(2)} ${lotSym}</small>
+                                            </td>
                                             <td class="${lotPnlClass}">
                                                 <b>${lotSign}${lotPnl.toFixed(2)} ₽</b> (${lotSign}${lotPnlPct.toFixed(2)}%)
                                             </td>
@@ -449,14 +462,25 @@ async function fetchTradeHistory(dateFrom = '', dateTo = '') {
         data.trades.forEach(t => {
             const pnlClass = t.tx_type === 'sell' ? (t.pnl >= 0 ? 'text-success' : 'text-danger') : 'text-secondary';
             const sign = t.pnl >= 0 ? '+' : '';
-            const typeBadge = t.tx_type === 'buy' 
+            const typeBadge = t.tx_type === 'buy'
                 ? '<span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size:0.7rem">Покупка</span>'
+                : t.tx_type === 'coupon'
+                ? '<span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size:0.7rem">Купон</span>'
                 : '<span class="badge bg-warning-subtle text-warning border border-warning-subtle" style="font-size:0.7rem">Продажа</span>';
-            
+
+            const fv = t.facevalue || 1000;
+            const buyPct  = (t.buy_price / fv * 100).toFixed(2);
+            const buyPriceStr = `${buyPct} %<br><small style="color:var(--text-tertiary)">${t.buy_price.toFixed(2)} ₽</small>`;
+
             const pnlStr = t.tx_type === 'sell' ? `<b>${sign}${t.pnl.toFixed(2)} ₽</b>` : '—';
             const pnlPctStr = t.tx_type === 'sell' ? `<b>${sign}${t.pnl_pct.toFixed(2)}%</b>` : '—';
             const dateStr = t.tx_type === 'sell' ? esc(t.sell_date || '—') : esc(t.purchase_date || '—');
-            const sellPriceStr = t.tx_type === 'sell' ? `${t.sell_price.toFixed(2)} ₽` : '—';
+
+            let sellPriceStr = '—';
+            if (t.tx_type === 'sell') {
+                const sellPct = (t.sell_price / fv * 100).toFixed(2);
+                sellPriceStr = `${sellPct} %<br><small style="color:var(--text-tertiary)">${t.sell_price.toFixed(2)} ₽</small>`;
+            }
 
             tbody.innerHTML += `
                 <tr>
@@ -464,7 +488,7 @@ async function fetchTradeHistory(dateFrom = '', dateTo = '') {
                     <td><small class="text-muted">${esc(t.isin)}</small></td>
                     <td>${typeBadge}</td>
                     <td>${t.amount} шт.</td>
-                    <td>${t.buy_price.toFixed(2)} ₽</td>
+                    <td>${buyPriceStr}</td>
                     <td>${sellPriceStr}</td>
                     <td class="${pnlClass}">${pnlStr}</td>
                     <td class="${pnlClass}">${pnlPctStr}</td>

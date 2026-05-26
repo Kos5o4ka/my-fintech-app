@@ -265,5 +265,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/landing.min.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/landing.min.js') }}?v={{ static_ver }}" defer></script>
 {% endblock %}
