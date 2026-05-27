@@ -4,8 +4,8 @@
 {% block description %}Загрузка брокерских отчётов для автоматического отслеживания облигаций{% endblock %}
 
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/portfolio.min.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/portfolio-page.min.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/portfolio.min.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/portfolio-page.min.css') }}">
 <style nonce="{{ g.csp_nonce }}">
   .import-zone {
     border: 2px dashed var(--card-border);
@@ -188,5 +188,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/import.min.js') }}?v={{ static_ver }}" defer></script>
+<script src="{{ url_for('static', filename='js/pages/import.min.js') }}?v={{ static_ver }}" defer></script>
 {% endblock %}

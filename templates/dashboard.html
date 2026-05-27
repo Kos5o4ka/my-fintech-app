@@ -4,8 +4,8 @@
 {% block description %}Обзор инвестиционного портфеля{% endblock %}
 
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/portfolio.min.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.min.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/portfolio.min.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/dashboard.min.css') }}">
 <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
 {% endblock %}
 
@@ -200,5 +200,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/dashboard.min.js') }}?v={{ static_ver }}" defer></script>
+<script src="{{ url_for('static', filename='js/pages/dashboard.min.js') }}?v={{ static_ver }}" defer></script>
 {% endblock %}

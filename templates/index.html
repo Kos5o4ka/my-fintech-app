@@ -4,7 +4,7 @@
 {% block description %}InvestTrack — персональный трекер облигационного портфеля с данными Московской Биржи.{% endblock %}
 
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/landing.min.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/landing.min.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -265,5 +265,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/landing.min.js') }}?v={{ static_ver }}" defer></script>
+<script src="{{ url_for('static', filename='js/pages/landing.min.js') }}?v={{ static_ver }}" defer></script>
 {% endblock %}

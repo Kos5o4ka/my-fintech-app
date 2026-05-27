@@ -4,7 +4,7 @@
 {% block description %}Личный профиль пользователя InvestTrack{% endblock %}
 
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/profile.min.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/profile.min.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -298,5 +298,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/profile.min.js') }}?v={{ static_ver }}" defer></script>
+<script src="{{ url_for('static', filename='js/pages/profile.min.js') }}?v={{ static_ver }}" defer></script>
 {% endblock %}
