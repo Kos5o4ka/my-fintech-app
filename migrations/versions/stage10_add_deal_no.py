@@ -8,7 +8,6 @@ Create Date: 2026-05-27 22:50:00.000000
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.engine import reflection
 
 
 # revision identifiers, used by Alembic.
@@ -20,21 +19,35 @@ depends_on = None
 
 def upgrade():
     conn = op.get_bind()
-    inspect_obj = reflection.Inspector.from_engine(conn)
+    inspector = sa.inspect(conn)
     
     # 1. Handle transactions table
-    existing_tx_cols = [c["name"] for c in inspect_obj.get_columns("transactions")]
+    existing_tx_cols = []
+    try:
+        existing_tx_cols = [c["name"] for c in inspector.get_columns("transactions")]
+    except Exception:
+        pass
+
     with op.batch_alter_table("transactions", schema=None) as batch_op:
         if "deal_no" not in existing_tx_cols:
             batch_op.add_column(sa.Column("deal_no", sa.String(length=100), nullable=True))
             
             # Check if index already exists
-            existing_indexes = [idx["name"] for idx in inspect_obj.get_indexes("transactions")]
+            existing_indexes = []
+            try:
+                existing_indexes = [idx["name"] for idx in inspector.get_indexes("transactions")]
+            except Exception:
+                pass
             if "ix_transactions_deal_no" not in existing_indexes:
                 batch_op.create_index("ix_transactions_deal_no", ["deal_no"], unique=False)
 
     # 2. Handle bond_portfolio table
-    existing_bp_cols = [c["name"] for c in inspect_obj.get_columns("bond_portfolio")]
+    existing_bp_cols = []
+    try:
+        existing_bp_cols = [c["name"] for c in inspector.get_columns("bond_portfolio")]
+    except Exception:
+        pass
+
     with op.batch_alter_table("bond_portfolio", schema=None) as batch_op:
         if "buy_deal_no" not in existing_bp_cols:
             batch_op.add_column(sa.Column("buy_deal_no", sa.String(length=100), nullable=True))
@@ -44,10 +57,15 @@ def upgrade():
 
 def downgrade():
     conn = op.get_bind()
-    inspect_obj = reflection.Inspector.from_engine(conn)
+    inspector = sa.inspect(conn)
     
     # 1. Handle bond_portfolio table
-    existing_bp_cols = [c["name"] for c in inspect_obj.get_columns("bond_portfolio")]
+    existing_bp_cols = []
+    try:
+        existing_bp_cols = [c["name"] for c in inspector.get_columns("bond_portfolio")]
+    except Exception:
+        pass
+
     with op.batch_alter_table("bond_portfolio", schema=None) as batch_op:
         if "sell_deal_no" in existing_bp_cols:
             batch_op.drop_column("sell_deal_no")
@@ -55,11 +73,20 @@ def downgrade():
             batch_op.drop_column("buy_deal_no")
 
     # 2. Handle transactions table
-    existing_tx_cols = [c["name"] for c in inspect_obj.get_columns("transactions")]
+    existing_tx_cols = []
+    try:
+        existing_tx_cols = [c["name"] for c in inspector.get_columns("transactions")]
+    except Exception:
+        pass
+
     with op.batch_alter_table("transactions", schema=None) as batch_op:
         if "deal_no" in existing_tx_cols:
             # Check if index exists
-            existing_indexes = [idx["name"] for idx in inspect_obj.get_indexes("transactions")]
+            existing_indexes = []
+            try:
+                existing_indexes = [idx["name"] for idx in inspector.get_indexes("transactions")]
+            except Exception:
+                pass
             if "ix_transactions_deal_no" in existing_indexes:
                 batch_op.drop_index("ix_transactions_deal_no")
             batch_op.drop_column("deal_no")
