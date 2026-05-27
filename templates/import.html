@@ -6,7 +6,7 @@
 {% block head_extra %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/portfolio.min.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/portfolio-page.min.css') }}">
-<style>
+<style nonce="{{ g.csp_nonce }}">
   .import-zone {
     border: 2px dashed var(--card-border);
     border-radius: var(--radius-lg);

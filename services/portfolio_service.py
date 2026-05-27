@@ -56,7 +56,7 @@ def build_portfolio_entry(bond: BondPortfolio, rates: Optional[dict] = None) -> 
         txs = Transaction.query.filter_by(user_id=bond.user_id, isin=bond.isin, tx_type='buy').all()
         for tx in txs:
             tx.price = normalize_bond_price(float(tx.price), facevalue)
-        db.session.commit()
+        # db.session.commit() убран из гетера для чистоты архитектуры (коммитится на уровне роута)
 
     if moex_price is not None:
         last_p = float(moex_price)
@@ -73,6 +73,9 @@ def build_portfolio_entry(bond: BondPortfolio, rates: Optional[dict] = None) -> 
     pnl_rub = pnl * rate
     buy_price_rub = round(buy_p * rate, 2) if currency != "RUB" else None
     last_price_rub = round(last_p * rate, 2) if currency != "RUB" else None
+
+    # Расчет дюрации
+    dur = calc_bond_duration(bond.isin, last_p, facevalue, moex_data.get("ytm", 0.0), bond.amount)
 
     return {
         "id": bond.id,
@@ -95,6 +98,8 @@ def build_portfolio_entry(bond: BondPortfolio, rates: Optional[dict] = None) -> 
         "buy_price_rub": buy_price_rub,
         "last_price_rub": last_price_rub,
         "notes": bond.notes or "",
+        "macaulay_duration": dur["macaulay_duration"],
+        "modified_duration": dur["modified_duration"],
     }
 
 
@@ -435,4 +440,154 @@ def calc_sharpe_ratio(
         "rf_annual_pct": round(rf_annual * 100, 2),
         "rf_source": "MOEX КБД",
         "rf_maturity_yrs": round(avg_years, 1),
+    }
+
+
+def calc_bond_duration(isin: str, last_price: float, facevalue: float, ytm_pct: float, amount: int) -> dict:
+    """Рассчитывает дюрацию Маколея и модифицированную дюрацию облигации (в годах)."""
+    import datetime
+    from services.moex_service import get_coupon_calendar_cached
+    
+    today = datetime.date.today()
+    coupons = get_coupon_calendar_cached(isin)
+    
+    # Если YTM не задана или некорректна, возвращаем заглушку по времени до погашения
+    ytm = ytm_pct / 100.0 if ytm_pct and ytm_pct > 0 else 0.15  # fallback YTM 15%
+    
+    if not coupons:
+        # Пытаемся получить дату погашения из деталей
+        from services.moex_service import get_bond_preview
+        details = get_bond_preview(isin) or {}
+        matdate_str = details.get("matdate")
+        if matdate_str:
+            try:
+                matdate = datetime.datetime.strptime(matdate_str[:10], "%Y-%m-%d").date()
+                years = max((matdate - today).days / 365.25, 0.1)
+                return {
+                    "macaulay_duration": round(years, 2),
+                    "modified_duration": round(years / (1 + ytm), 2),
+                }
+            except Exception:
+                pass
+        return {"macaulay_duration": 0.0, "modified_duration": 0.0}
+
+    pv_sum = 0.0
+    weighted_t_sum = 0.0
+    
+    # Сортируем купоны по дате
+    coupons_sorted = sorted(coupons, key=lambda x: x["date"])
+    
+    for i, c in enumerate(coupons_sorted):
+        c_date_str = c.get("date") or c.get("coupondate") or ""
+        if not c_date_str:
+            continue
+        try:
+            c_date = datetime.datetime.strptime(c_date_str[:10], "%Y-%m-%d").date()
+        except ValueError:
+            continue
+            
+        t = (c_date - today).days / 365.25
+        if t <= 0:
+            continue
+            
+        val = float(c.get("value") or 0.0)
+        # На последнем купоне выплачивается номинал (погашение)
+        if i == len(coupons_sorted) - 1:
+            val += facevalue
+            
+        pv_cf = val / ((1 + ytm) ** t)
+        pv_sum += pv_cf
+        weighted_t_sum += t * pv_cf
+
+    if pv_sum <= 0:
+        return {"macaulay_duration": 0.0, "modified_duration": 0.0}
+
+    macaulay_dur = weighted_t_sum / pv_sum
+    modified_dur = macaulay_dur / (1 + ytm)
+    
+    return {
+        "macaulay_duration": round(macaulay_dur, 2),
+        "modified_duration": round(modified_dur, 2),
+    }
+
+
+def calc_portfolio_diversification(active_bonds: list) -> dict:
+    """Рассчитывает диверсификацию по HHI индексу (Herfindahl-Hirschman Index)
+    в трех разрезах: по активам, по валютам и по эмитентам (ОФЗ vs Корпоративные).
+    """
+    from collections import defaultdict
+    if not active_bonds:
+        return {
+            "assets": {"hhi": 0.0, "status": "Нет данных", "weights": []},
+            "currencies": {"hhi": 0.0, "status": "Нет данных", "weights": []},
+            "issuers": {"hhi": 0.0, "status": "Нет данных", "weights": []},
+        }
+
+    rates = get_currency_rates()
+    total_val_rub = 0.0
+    asset_vals = {}
+    currency_vals = defaultdict(float)
+    issuer_vals = defaultdict(float)
+
+    for bond in active_bonds:
+        currency = bond.currency or "RUB"
+        rate = 1.0 if currency in ["RUB", "GLD"] else rates.get(currency, 1.0)
+        # Получаем актуальную цену (последняя известная или цена покупки)
+        price = float(bond.last_price) if bond.last_price is not None else float(bond.buy_price)
+        val_rub = price * bond.amount * rate
+        
+        total_val_rub += val_rub
+        key_name = bond.name or bond.isin
+        asset_vals[key_name] = asset_vals.get(key_name, 0.0) + val_rub
+        currency_vals[currency] += val_rub
+        
+        # Определяем тип эмитента по ISIN
+        # ОФЗ обычно начинаются с SU, государственные/муниципальные — RU000A0
+        isin = bond.isin.upper().strip()
+        if isin.startswith("SU") or isin.startswith("RU000A0J") or "ОФЗ" in (bond.name or "").upper():
+            issuer_type = "Гос. облигации (ОФЗ)"
+        else:
+            issuer_type = "Корпоративные облигации"
+        issuer_vals[issuer_type] += val_rub
+
+    if total_val_rub <= 0:
+        return {
+            "assets": {"hhi": 0.0, "status": "Нет данных", "weights": []},
+            "currencies": {"hhi": 0.0, "status": "Нет данных", "weights": []},
+            "issuers": {"hhi": 0.0, "status": "Нет данных", "weights": []},
+        }
+
+    # Вспомогательная функция для расчета HHI и статуса
+    def _calc_hhi_metrics(vals_dict: dict) -> dict:
+        weights = []
+        hhi = 0.0
+        for name, val in vals_dict.items():
+            w = (val / total_val_rub) * 100.0
+            weights.append({"name": name, "weight": round(w, 2), "value_rub": round(val, 2)})
+            hhi += w ** 2
+            
+        weights.sort(key=lambda x: x["weight"], reverse=True)
+        
+        # Статусы концентрации по классификации HHI
+        if hhi < 1500:
+            status = "Отличная диверсификация"
+            color = "success"
+        elif hhi <= 2500:
+            status = "Умеренная концентрация"
+            color = "warning"
+        else:
+            status = "Высокая концентрация (высокий риск)"
+            color = "danger"
+            
+        return {
+            "hhi": round(hhi, 2),
+            "status": status,
+            "color": color,
+            "weights": weights,
+        }
+
+    return {
+        "assets": _calc_hhi_metrics(asset_vals),
+        "currencies": _calc_hhi_metrics(currency_vals),
+        "issuers": _calc_hhi_metrics(issuer_vals),
     }

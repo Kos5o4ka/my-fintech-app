@@ -21,13 +21,13 @@
 
 | Функция | Описание |
 |---|---|
-| 📊 **Портфель** | Учёт активных/закрытых позиций, дюрация и текущие цены MOEX в реальном времени |
-| 📈 **Аналитика** | Нереализованный и реализованный P&L, Sharpe Ratio, бенчмарк RGBI |
+| 📊 **Портфель** | Учёт позиций, дюрация (Маколей и модифицированная), цены MOEX в реальном времени, SVG Sparklines, ценовые алерты |
+| 📈 **Аналитика** | P&L, Sharpe Ratio (безрисковая G-Curve), кэширование Sharpe/Tax, бенчмарк RGBI, диверсификация по индексу HHI |
 | 💸 **Купонный календарь** | Предстоящие выплаты на 60 дней вперёд, in-app уведомления |
 | 🔎 **Скринер MOEX** | Фильтрация по YTM, дюрации, типу эмитента (ОФЗ / корпоративные / муниципальные) |
 | ⚖️ **Сравнение облигаций** | Нормализованный price chart по двум бумагам за выбранный период |
-| 🧾 **Налоговый отчёт** | НДФЛ 13% по всем реализованным сделкам (с учётом купонов проданных бумаг) |
-| 📥 **Экспорт / Импорт** | Экспорт портфеля в Excel (XLSX) и CSV; импорт брокерских отчётов `.xlsx`/`.csv` с автоопределением столбцов |
+| 🧾 **Налоговый отчёт** | Прогрессивный НДФЛ 2025 (ставка 13%/15%) по реализованным сделкам с авто-кэшированием |
+| 📥 **Экспорт / Импорт** | Экспорт портфеля в Excel/CSV; импорт отчётов `.xlsx`/`.csv` через выделенный `import_service` |
 | ⭐ **Вотчлист** | Список наблюдения с актуальными ценами и YTM с MOEX |
 | 🔐 **2FA через Telegram** | Двухфакторная аутентификация — OTP-код в личный бот с мгновенным сгоранием при попытке |
 | 🔔 **Уведомления** | Telegram-уведомления за день до купонной выплаты |
@@ -42,8 +42,8 @@
 ## 🏗️ Стек технологий
 
 **Backend**
-- [Flask 3.1](https://flask.palletsprojects.com) + Blueprints + сервисный слой
-- [SQLAlchemy 2](https://sqlalchemy.org) + [Flask-Migrate](https://flask-migrate.readthedocs.io) — ORM и Alembic-миграции
+- [Flask 3.1](https://flask.palletsprojects.com) — паттерн Application Factory, безопасный фолбэк планировщика для Windows, CSP nonce
+- [SQLAlchemy 2](https://sqlalchemy.org) + [Flask-Migrate](https://flask-migrate.readthedocs.io) — ORM без побочных эффектов и Alembic-миграции
 - [Pydantic v2](https://docs.pydantic.dev) — валидация входящих данных
 - [Flask-Login](https://flask-login.readthedocs.io) — сессии и аутентификация
 - [Flask-WTF](https://flask-wtf.readthedocs.io) — CSRF-защита
@@ -160,7 +160,8 @@ my-fintech-app/
 │   ├── portfolio_service.py # P&L, YTM, Sharpe, Tax, купонный доход
 │   ├── moex_service.py      # Кэшированный доступ к MOEX
 │   ├── user_service.py      # Аватары (Pillow), telegram settings
-│   └── telegram_service.py  # Bot API, OTP, deep-link
+│   ├── telegram_service.py  # Bot API, OTP, deep-link
+│   └── import_service.py    # Разбор Excel и CSV отчётов брокеров
 │
 ├── schemas/
 │   ├── portfolio.py         # AddBondRequest, SellBondRequest, ScreenerRequest
@@ -174,7 +175,8 @@ my-fintech-app/
 ├── migrations/              # Alembic-миграции (8 ревизий)
 ├── tests/
 │   ├── test_app.py          # 36 интеграционных тестов
-│   └── test_properties.py   # 17 Hypothesis property-based тестов
+│   ├── test_properties.py   # 17 Hypothesis property-based тестов
+│   └── test_analytics_and_import.py # 48 тестов аналитики, импорта и новых фич
 │
 ├── bruno/                   # API коллекция Bruno (43 запроса)
 │   ├── auth/                # login, verify_2fa, logout, change_password
@@ -228,8 +230,8 @@ python -m pytest tests/ --cov=. --cov-report=term-missing
 python -m pytest tests/test_properties.py -v
 ```
 
-**53 теста:** 36 интеграционных + 17 Hypothesis property-based.
-MOEX API мокируется через `@patch` — тесты не требуют сети.
+**101 тест:** 36 интеграционных (core app), 48 тестов аналитики/импорта/новых фич и 17 Hypothesis property-based тестов.
+MOEX API мокируется через `@patch` — тесты не требуют сети, используется локальный кэш-заглушка для автомата Circuit Breaker.
 
 ---
 

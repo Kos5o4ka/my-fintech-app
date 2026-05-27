@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Отчёт InvestTrack — {{ username }} — {{ generated_at }}</title>
-  <style>
+  <style nonce="{{ g.csp_nonce }}">
     /* ── Reset & Base ─────────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html { font-size: 13px; }
@@ -330,7 +330,7 @@
     </div>
     <div class="sharpe-note">
       Рассчитан по {{ sharpe.sample_size }} закрытым позициям.
-      Безрисковая ставка: 16%/год (ставка ЦБ РФ, упрощённо).
+      Безрисковая ставка: {{ sharpe.rf_annual_pct }}%/год (динамическая ставка {{ sharpe.rf_source }}).
       Шарп &gt; 1 считается хорошим результатом.
     </div>
   </div>

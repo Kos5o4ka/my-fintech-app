@@ -110,3 +110,20 @@ class AuditLog(db.Model):
     user_agent = db.Column(db.String(255), nullable=True)
     details = db.Column(JSON, nullable=True)  # SQLite: text, PostgreSQL: native JSON
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class PriceAlert(db.Model):
+    """Ценовые алерты пользователя для отслеживания стоимости облигаций."""
+    __tablename__ = "price_alerts"
+    __table_args__ = (
+        db.Index("ix_alerts_user_id", "user_id"),
+        db.Index("ix_alerts_isin", "isin"),
+    )
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    isin = db.Column(db.String(12), nullable=False)
+    name = db.Column(db.String(100), nullable=True)
+    target_price = db.Column(db.Numeric(10, 2), nullable=False)
+    condition = db.Column(db.String(5), nullable=False)  # '>=' или '<='
+    is_triggered = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)

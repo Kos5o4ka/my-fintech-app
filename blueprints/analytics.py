@@ -15,6 +15,7 @@ from services.portfolio_service import (
     calc_tax_report,
     calc_sharpe_ratio,
     calc_monthly_profit,
+    calc_portfolio_diversification,
 )
 from constants import TIMEFRAME_DAYS, MAX_CHART_POINTS, CHART_RANGE_TTL, STATS_TTL, BENCHMARK_TTL
 from moex import get_moex_bond, get_rgbi_history, get_bond_history_all
@@ -38,6 +39,14 @@ def portfolio_tax():
         year = int(request.args.get("year", date.today().year))
     except (ValueError, TypeError):
         year = date.today().year
+
+    cache_key = f"portfolio_tax:{current_user.id}:{year}"
+    try:
+        cached = cache.get(cache_key)
+        if cached:
+            return jsonify(cached)
+    except Exception:
+        pass
 
     year_start = date(year, 1, 1)
     year_end = date(year, 12, 31)
@@ -80,16 +89,19 @@ def portfolio_tax():
     taxable_base = max(0.0, round(gross_profit, 2))
     tax_amount = round(taxable_base * 0.13, 2)
 
-    return jsonify(
-        {
-            **summary,
-            "gross_profit": round(gross_profit, 2),
-            "total_commission": round(total_commission, 2),
-            "taxable_base": taxable_base,
-            "tax_amount": tax_amount,
-            "trades": trades_list,
-        }
-    )
+    result = {
+        **summary,
+        "gross_profit": round(gross_profit, 2),
+        "total_commission": round(total_commission, 2),
+        "taxable_base": taxable_base,
+        "tax_amount": tax_amount,
+        "trades": trades_list,
+    }
+    try:
+        cache.set(cache_key, result, timeout=TAX_TTL)
+    except Exception:
+        pass
+    return jsonify(result)
 
 
 @analytics_bp.route("/api/portfolio/benchmark", methods=["GET"])
@@ -120,15 +132,27 @@ def portfolio_benchmark():
 @login_required
 def portfolio_sharpe():
     """Коэффициент Шарпа по закрытым позициям портфеля (Stage 4)."""
+    cache_key = f"portfolio_sharpe:{current_user.id}"
+    try:
+        cached = cache.get(cache_key)
+        if cached:
+            return jsonify(cached)
+    except Exception:
+        pass
+
     sold = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=True).all()
     result = calc_sharpe_ratio(sold)
     if result is None:
-        return jsonify(
-            {
-                "sharpe": None,
-                "reason": f"Недостаточно данных (закрытых позиций: {len(sold)}, нужно ≥ 3)",
-            }
-        )
+        response_data = {
+            "sharpe": None,
+            "reason": f"Недостаточно данных (закрытых позиций: {len(sold)}, нужно ≥ 3)",
+        }
+        return jsonify(response_data)
+        
+    try:
+        cache.set(cache_key, result, timeout=SHARPE_TTL)
+    except Exception:
+        pass
     return jsonify(result)
 
 
@@ -326,3 +350,12 @@ def dashboard_pnl_chart():
     return jsonify(
         {"labels": labels, "data": data, "unrealized": unrealized, "period": period}
     )
+
+
+@analytics_bp.route("/api/portfolio/diversification", methods=["GET"])
+@login_required
+def portfolio_diversification():
+    """Анализ диверсификации портфеля по индексу HHI."""
+    active = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False).all()
+    result = calc_portfolio_diversification(active)
+    return jsonify(result)
