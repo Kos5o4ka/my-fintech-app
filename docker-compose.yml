@@ -1,24 +1,4 @@
-version: '3.9'
-
-# ─────────────────────────────────────────────────────────────────────────────
-# InvestTrack — Production docker-compose
-#
-# Минимальный запуск:
-#   echo "SECRET_KEY=$(python -c 'import secrets; print(secrets.token_hex(32))')" > .env
-#   docker compose up -d
-#
-# Необходимые переменные (в .env или export):
-#   SECRET_KEY   — случайная строка 32+ символов (обязательно)
-#   DB_PASSWORD  — пароль PostgreSQL (по умолчанию: investtrack)
-#
-# Опциональные переменные:
-#   MAIL_SERVER, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD
-#   TELEGRAM_BOT_TOKEN, TELEGRAM_BOT_USERNAME
-#   SENTRY_DSN
-# ─────────────────────────────────────────────────────────────────────────────
-
 services:
-
   # ── Flask приложение (Gunicorn) ──────────────────────────────────────────────
   app:
     build:
@@ -28,22 +8,18 @@ services:
     restart: unless-stopped
     environment:
       FLASK_ENV: production
-      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set — run: echo SECRET_KEY=$(python -c 'import secrets; print(secrets.token_hex(32))') >> .env}
+      SECRET_KEY: "${SECRET_KEY}"
       DATABASE_URL: postgresql://investtrack:${DB_PASSWORD:-investtrack}@db:5432/investtrack
       REDIS_URL: redis://redis:6379/0
-      # ── Email (опционально) ──────────────────────────────────────────────────
       MAIL_SERVER: ${MAIL_SERVER:-}
       MAIL_PORT: ${MAIL_PORT:-587}
       MAIL_USE_TLS: ${MAIL_USE_TLS:-true}
       MAIL_USERNAME: ${MAIL_USERNAME:-}
       MAIL_PASSWORD: ${MAIL_PASSWORD:-}
       MAIL_DEFAULT_SENDER: ${MAIL_DEFAULT_SENDER:-noreply@investtrack.app}
-      # ── Telegram Bot (опционально) ───────────────────────────────────────────
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-InvestTrackBot}
-      # ── Sentry (опционально) ─────────────────────────────────────────────────
       SENTRY_DSN: ${SENTRY_DSN:-}
-      # ── Gunicorn ─────────────────────────────────────────────────────────────
       GUNICORN_WORKERS: ${GUNICORN_WORKERS:-4}
       GUNICORN_THREADS: ${GUNICORN_THREADS:-2}
     volumes:
@@ -57,7 +33,6 @@ services:
         condition: service_healthy
     networks:
       - internal
-    # Не открываем порт наружу — только через Nginx
     expose:
       - "5000"
     healthcheck:
@@ -132,36 +107,25 @@ services:
     image: nginx:1.27-alpine
     restart: unless-stopped
     ports:
-      - "${HTTP_PORT:-80}:80"
-      - "${HTTPS_PORT:-443}:443"
+      - "5000:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      - ./static:/app/static:ro          # статика отдаётся Nginx напрямую
-      - nginx_certs:/etc/nginx/certs:ro  # SSL-сертификаты (Let's Encrypt)
+      - ./static:/app/static:ro
     depends_on:
       app:
         condition: service_healthy
     networks:
       - internal
 
-# ── Volumes ──────────────────────────────────────────────────────────────────
 volumes:
   postgres_data:
-    driver: local
   redis_data:
-    driver: local
   app_avatars:
-    driver: local
   app_uploads:
-    driver: local
   app_cache:
-    driver: local
   nginx_certs:
-    driver: local
 
-# ── Networks ─────────────────────────────────────────────────────────────────
 networks:
   internal:
     driver: bridge
-    # Изолированная сеть: снаружи доступен только Nginx
