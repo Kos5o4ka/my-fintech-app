@@ -22,10 +22,18 @@ profile_bp = Blueprint("profile", __name__)
 def profile_stats():
     """Счётчики для hero-секции профиля: облигаций, стоимость, закрытые сделки."""
     from models import BondPortfolio
+    from services.portfolio_service import build_portfolio_list
 
     active = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False).all()
     sold = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=True).count()
-    total_value = sum((float(b.last_price or b.buy_price)) * b.amount for b in active)
+    
+    _, total_value = build_portfolio_list(active)
+    
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
     return jsonify(
         {
             "bond_count": len(active),

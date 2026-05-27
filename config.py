@@ -20,7 +20,7 @@ class Config:
         "CORS_ORIGINS", "http://127.0.0.1:5000,http://localhost:5000"
     ).split(",")
     ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
-    MAX_CONTENT_LENGTH = 5 * 1024 * 1024
+    MAX_CONTENT_LENGTH = 50 * 1024 * 1024
     UPLOAD_FOLDER = os.path.join(BASE_DIR, "static", "avatars")
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"

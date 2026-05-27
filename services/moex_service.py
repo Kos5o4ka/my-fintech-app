@@ -65,3 +65,20 @@ def get_coupon_calendar_cached(secid: str) -> list[dict]:
             except Exception:
                 pass
     return result or []
+
+
+def get_all_coupons_cached(secid: str) -> list[dict]:
+    """Возвращает купонный календарь (включая прошлые купоны) с 12-часовым кэшем."""
+    secid = secid.strip().upper()
+    key = f"moex_all_coupons:{secid}"
+    result = cache.get(key)
+    if result is None:
+        from moex import get_coupon_calendar
+
+        result = get_coupon_calendar(secid, include_past=True)
+        if result:
+            try:
+                cache.set(key, result, timeout=COUPON_CALENDAR_TTL)
+            except Exception:
+                pass
+    return result or []

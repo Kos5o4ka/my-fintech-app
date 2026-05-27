@@ -269,8 +269,8 @@ def get_bond_history_all(secid: str, facevalue: float = 1000) -> dict:
     return {"labels": labels, "data": prices, "nkd": nkd_history, "ytm": ytm_history}
 
 
-def get_coupon_calendar(secid: str) -> list[dict]:
-    """Возвращает ближайшие купонные выплаты для облигации."""
+def get_coupon_calendar(secid: str, include_past: bool = False) -> list[dict]:
+    """Возвращает купонные выплаты для облигации."""
     try:
         res = _fetch_json(
             f"https://iss.moex.com/iss/statistics/engines/stock/markets"
@@ -286,6 +286,8 @@ def get_coupon_calendar(secid: str) -> list[dict]:
                         "value": row[cols.index("value")],
                     }
                 )
+        if include_past:
+            return calendar
         today_str = date.today().isoformat()
         future = [c for c in calendar if c.get("date") and c["date"] >= today_str]
         return future[:12]

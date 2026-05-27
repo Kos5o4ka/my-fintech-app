@@ -104,7 +104,7 @@ services:
 
   # ── Nginx (reverse proxy + static files) ─────────────────────────────────────
   nginx:
-    image: nginx:1.27-alpine
+    image: nginx:1.25-alpine
     restart: unless-stopped
     ports:
       - "5000:80"

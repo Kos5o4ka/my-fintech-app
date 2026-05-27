@@ -24,6 +24,23 @@ document.addEventListener('DOMContentLoaded', () => {
     window.Common.handleLogout();
   });
 
+  // ── Reset Portfolio ──────────────────────────────────────────────────
+  document.getElementById('resetPortfolioBtn')?.addEventListener('click', async () => {
+    const word = prompt('Введите DELETE для подтверждения полного сброса портфеля:');
+    if (word !== 'DELETE') {
+      window.Common.showToast('Сброс отменен');
+      return;
+    }
+    const res = await window.Common.csrfFetch('/api/portfolio/reset', { method: 'DELETE' });
+    const data = await res.json();
+    if (res.ok) {
+      window.Common.showToast(data.message);
+      setTimeout(() => window.location.reload(), 1500);
+    } else {
+      window.Common.showSystemMessage(data.message, true);
+    }
+  });
+
   // ── Удаление аватара ─────────────────────────────────────────────────
   document.getElementById('deleteAvatarBtn')?.addEventListener('click', async () => {
     if (!confirm('Удалить аватар? Вместо него будут показаны ваши инициалы.')) return;

@@ -103,6 +103,17 @@ def delete_position(bond_id):
     return jsonify({"status": "success", "message": "Позиция успешно удалена"})
 
 
+@portfolio_bp.route("/api/portfolio/reset", methods=["DELETE"])
+@login_required
+def reset_portfolio():
+    """Полностью удаляет все позиции и транзакции пользователя."""
+    Transaction.query.filter_by(user_id=current_user.id).delete()
+    BondPortfolio.query.filter_by(user_id=current_user.id).delete()
+    db.session.commit()
+    _bust_user_cache(current_user.id)
+    return jsonify({"status": "success", "message": "Портфель успешно сброшен"})
+
+
 @portfolio_bp.route("/api/portfolio", methods=["GET"])
 @login_required
 def get_portfolio():
@@ -113,11 +124,9 @@ def get_portfolio():
 
     q = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False)
     total_count = q.count()
-    active = (
-        q.order_by(BondPortfolio.id).offset((page - 1) * per_page).limit(per_page).all()
-    )
+    all_active = q.order_by(BondPortfolio.id).all()
 
-    bonds, _ = build_portfolio_list(active)
+    all_bonds, total_val = build_portfolio_list(all_active)
 
     # Сохраняем обновлённые last_price из MOEX в БД (build_portfolio_list пишет в ORM)
     try:
@@ -125,21 +134,10 @@ def get_portfolio():
     except Exception:
         db.session.rollback()
 
-    # Общая стоимость портфеля по всем активным позициям
-    all_active_prices = (
-        BondPortfolio.query
-        .filter_by(user_id=current_user.id, is_sold=False)
-        .with_entities(BondPortfolio.last_price, BondPortfolio.amount)
-        .all()
-    )
-    total_val = sum(
-        float(r.last_price or 0) * r.amount for r in all_active_prices
-    )
-
-    ytm = calc_portfolio_ytm(bonds, total_val)
+    ytm = calc_portfolio_ytm(all_bonds, total_val)
 
     # Средневзвешенная дюрация портфеля (веса по рублевой стоимости)
-    valid_dur_bonds = [b for b in bonds if b.get("modified_duration") is not None and b["modified_duration"] > 0]
+    valid_dur_bonds = [b for b in all_bonds if b.get("modified_duration") is not None and b["modified_duration"] > 0]
     total_valid_dur_val = sum(b["current_value_rub"] for b in valid_dur_bonds)
     if total_valid_dur_val > 0:
         avg_dur = sum(b["modified_duration"] * b["current_value_rub"] for b in valid_dur_bonds) / total_valid_dur_val
@@ -147,12 +145,15 @@ def get_portfolio():
     else:
         portfolio_duration = 0.0
 
+    # Срезаем список облигаций для текущей страницы
+    paginated_bonds = all_bonds[(page - 1) * per_page : page * per_page]
+
     payload = {
         "status": "success",
         "total_value": round(total_val, 2),
         "portfolio_ytm": ytm,
         "portfolio_duration": portfolio_duration,
-        "bonds": bonds,
+        "bonds": paginated_bonds,
         "pagination": {
             "page": page,
             "per_page": per_page,
@@ -587,15 +588,25 @@ def get_bond_chart_data(isin: str):
 def get_portfolio_calendar():
     active = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False).all()
     events = []
+    
+    grouped = {}
     for bond in active:
-        target = bond.secid or bond.isin
+        key = bond.secid or bond.isin
+        if key not in grouped:
+            grouped[key] = {"name": bond.name or bond.isin, "isin": bond.isin, "amount": 0}
+        grouped[key]["amount"] += bond.amount
+        
+    for target, data in grouped.items():
         for c in get_coupon_calendar_cached(target):
+            val = c.get("value")
+            if val is None:
+                val = 0.0
             events.append(
                 {
-                    "name": bond.name or bond.isin,
-                    "isin": bond.isin,
+                    "name": data["name"],
+                    "isin": data["isin"],
                     "date": c["date"],
-                    "total_payout": round(c["value"] * bond.amount, 2),
+                    "total_payout": round(val * data["amount"], 2),
                 }
             )
     events.sort(key=lambda x: x["date"])

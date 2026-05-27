@@ -59,6 +59,23 @@ def portfolio_tax():
     active = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False).all()
     summary = calc_tax_report(sold, active, year)
 
+    from services.moex_service import get_all_coupons_cached
+    from datetime import datetime
+
+    def get_bond_coupon_income(bond, end_date):
+        if not bond.purchase_date:
+            return 0.0
+        cals = get_all_coupons_cached(bond.secid or bond.isin)
+        inc = 0.0
+        start_str = bond.purchase_date.isoformat()
+        end_str = end_date.isoformat()
+        for c in cals:
+            if c.get("date") and start_str <= c["date"] <= end_str:
+                val = c.get("value")
+                if val is not None:
+                    inc += val * bond.amount
+        return round(inc, 2)
+
     # Build enriched response for Stage 4 Tax UI
     trades_list = []
     gross_profit = 0.0
@@ -67,7 +84,8 @@ def portfolio_tax():
         buy_p = float(bond.buy_price)
         sell_p = float(bond.sell_price) if bond.sell_price else buy_p
         comm = float(bond.broker_commission) if bond.broker_commission else 0.0
-        pnl = (sell_p - buy_p) * bond.amount - comm
+        coupon_inc = get_bond_coupon_income(bond, bond.sell_date)
+        pnl = (sell_p - buy_p) * bond.amount - comm + coupon_inc
         gross_profit += pnl
         total_commission += comm
         trades_list.append(
@@ -79,12 +97,34 @@ def portfolio_tax():
                 "buy_price": round(buy_p, 2),
                 "sell_price": round(sell_p, 2),
                 "commission": round(comm, 2),
+                "coupons": coupon_inc,
                 "pnl": round(pnl, 2),
                 "sell_date": bond.sell_date.strftime("%Y-%m-%d")
                 if bond.sell_date
                 else None,
             }
         )
+
+    for bond in active:
+        # For active bonds, we calculate coupons up to the end of the selected year
+        coupon_inc = get_bond_coupon_income(bond, date(year, 12, 31))
+        if coupon_inc > 0:
+            buy_p = float(bond.buy_price)
+            gross_profit += coupon_inc
+            trades_list.append(
+                {
+                    "id": bond.id,
+                    "name": bond.name or bond.isin,
+                    "isin": bond.isin,
+                    "amount": bond.amount,
+                    "buy_price": round(buy_p, 2),
+                    "sell_price": None,
+                    "commission": 0.0,
+                    "coupons": coupon_inc,
+                    "pnl": round(coupon_inc, 2),
+                    "sell_date": None,
+                }
+            )
 
     taxable_base = max(0.0, round(gross_profit, 2))
     tax_amount = round(taxable_base * 0.13, 2)
@@ -339,11 +379,14 @@ def dashboard_pnl_chart():
             data.append(round(running, 2))
 
     active = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False).all()
+    all_bonds, _ = build_portfolio_list(active)
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
     unrealized = round(
-        sum(
-            (float(b.last_price or b.buy_price) - float(b.buy_price)) * b.amount
-            for b in active
-        ),
+        sum(b.get("pnl_rub", 0.0) for b in all_bonds),
         2,
     )
 

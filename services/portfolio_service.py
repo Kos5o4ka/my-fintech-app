@@ -60,8 +60,16 @@ def build_portfolio_entry(bond: BondPortfolio, rates: Optional[dict] = None) -> 
 
     if moex_price is not None:
         last_p = float(moex_price)
+        if bond.last_price is None or abs(float(bond.last_price) - last_p) > 0.01:
+            bond.last_price = last_p
     else:
         last_p = float(bond.last_price) if bond.last_price is not None else buy_p
+
+    # Применяем нормализацию к last_p на случай, если в БД лежит процент
+    healed_last_price = normalize_bond_price(last_p, facevalue)
+    if healed_last_price != last_p:
+        last_p = healed_last_price
+        bond.last_price = last_p
 
     current_value = bond.amount * last_p
     pnl = (last_p - buy_p) * bond.amount

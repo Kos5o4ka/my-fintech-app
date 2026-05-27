@@ -63,6 +63,8 @@ def create_app(config_class=None) -> Flask:
     # ── Инициализация расширений ──────────────────────────────────────────────
     db.init_app(app)
     login_manager.init_app(app)
+    login_manager.login_view = "main.index_page"
+    login_manager.login_message = "Пожалуйста, войдите для доступа к этой странице."
     migrate.init_app(app, db)
 
     # Кэш: Redis (если REDIS_URL задан) → FileSystemCache (по умолчанию)

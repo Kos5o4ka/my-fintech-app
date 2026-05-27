@@ -352,7 +352,8 @@ function renderBondRows() {
                                             </td>
                                             <td class="text-end">
                                                 <button onclick="sellTrigger(${lot.id}, '${esc(lot.name)}', ${lot.last_price || lot.buy_price}, ${lot.buy_price}, ${lot.amount})" class="btn btn-xs btn-outline-success py-0 px-2">Продать</button>
-                                                <button data-note-btn="${lot.id}" title="${esc(lot.notes || 'Добавить заметку')}" onclick="openNotesModal(${lot.id}, ${JSON.stringify(lot.notes || '')})" class="btn btn-xs btn-outline-secondary ms-1 py-0 px-2 ${lot.notes ? 'note-filled' : ''}">📝</button>
+                                                <button data-note-btn="${lot.id}" data-notes="${esc(lot.notes || '')}" title="${esc(lot.notes || 'Добавить заметку')}" onclick="openNotesModal(${lot.id}, this.dataset.notes)" class="btn btn-xs btn-outline-secondary ms-1 py-0 px-2 ${lot.notes ? 'note-filled' : ''}">📝</button>
+                                                <button onclick="deletePosition(${lot.id}, '${esc(lot.isin)}')" class="btn btn-xs btn-outline-danger ms-1 py-0 px-2" title="Удалить позицию">✕</button>
                                             </td>
                                         </tr>
                                     `;
@@ -714,6 +715,7 @@ async function fetchChartAnalytics() {
 })();
 
 // ── Allocation pie chart ──────────────────────────────────────────────────────
+let allocationChartExpanded = false;
 function renderAllocationChart() {
     const canvas = document.getElementById('allocationChart');
     const emptyEl = document.getElementById('allocationEmpty');
@@ -726,9 +728,21 @@ function renderAllocationChart() {
     }
     if (emptyEl) emptyEl.style.display = 'none';
 
-    const labels = bondsData.map(b => b.name);
-    const values = bondsData.map(b => b.current_value);
-    const colors = bondsData.map((_, i) => `hsl(${Math.round((i * 137.5) % 360)}, 60%, 55%)`);
+    let displayData = [...bondsData].sort((a, b) => b.current_value - a.current_value);
+    
+    if (!allocationChartExpanded && displayData.length > 10) {
+        const top10 = displayData.slice(0, 10);
+        const others = displayData.slice(10);
+        const otherValue = others.reduce((sum, b) => sum + b.current_value, 0);
+        displayData = [...top10, { name: 'Другое', current_value: otherValue, isOther: true }];
+    }
+
+    const labels = displayData.map(b => b.name);
+    const values = displayData.map(b => b.current_value);
+    const colors = displayData.map((_, i) => {
+        if (displayData[i].isOther) return '#94a3b8'; // gray color for other
+        return `hsl(${Math.round((i * 137.5) % 360)}, 60%, 55%)`;
+    });
 
     if (allocationChartInstance) allocationChartInstance.destroy();
     allocationChartInstance = new Chart(canvas.getContext('2d'), {
@@ -737,6 +751,14 @@ function renderAllocationChart() {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            onClick: (e, elements) => {
+                if (!elements.length) return;
+                const idx = elements[0].index;
+                if (!allocationChartExpanded && displayData[idx].isOther) {
+                    allocationChartExpanded = true;
+                    renderAllocationChart();
+                }
+            },
             plugins: {
                 legend: { position: 'right', labels: { font: { size: 10 }, boxWidth: 12 } },
                 tooltip: {
@@ -849,6 +871,37 @@ function sellTrigger(bondId, name, sellPrice, buyPrice, amount) {
 
     sellModal.show();
 }
+
+window.deletePosition = async function(bondId, isin) {
+    window.Common.askConfirmation(`Вы действительно хотите удалить позицию ${isin}? Это безвозвратно удалит все данные о покупке.`, async () => {
+        const res = await window.Common.csrfFetch(`/api/portfolio/${bondId}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (res.ok) {
+            window.Common.showToast('Позиция удалена');
+            historyLoaded = false;
+            await loadDashboard();
+        } else {
+            window.Common.showSystemMessage(data.message, true);
+        }
+    });
+};
+
+window.resetPortfolio = async function() {
+    const word = prompt('Введите DELETE для подтверждения полного сброса портфеля:');
+    if (word !== 'DELETE') {
+        window.Common.showToast('Сброс отменен');
+        return;
+    }
+    const res = await window.Common.csrfFetch('/api/portfolio/reset', { method: 'DELETE' });
+    const data = await res.json();
+    if (res.ok) {
+        window.Common.showToast(data.message);
+        historyLoaded = false;
+        await loadDashboard();
+    } else {
+        window.Common.showSystemMessage(data.message, true);
+    }
+};
 
 // ── Watchlist ─────────────────────────────────────────────────────────────────
 let watchlistLoaded = false;

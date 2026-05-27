@@ -29,6 +29,7 @@ async function fetchActivePortfolio() {
     renderAllocationChart();
 }
 
+let allocationChartExpanded = false;
 function renderAllocationChart() {
     const canvas = document.getElementById('allocationChart');
     const emptyEl = document.getElementById('allocationEmpty');
@@ -41,9 +42,21 @@ function renderAllocationChart() {
     }
     if (emptyEl) emptyEl.style.display = 'none';
 
-    const labels = bondsData.map(b => b.name);
-    const values = bondsData.map(b => b.current_value);
-    const colors = bondsData.map((_, i) => `hsl(${Math.round((i * 137.5) % 360)}, 60%, 55%)`);
+    let displayData = [...bondsData].sort((a, b) => b.current_value - a.current_value);
+    
+    if (!allocationChartExpanded && displayData.length > 10) {
+        const top10 = displayData.slice(0, 10);
+        const others = displayData.slice(10);
+        const otherValue = others.reduce((sum, b) => sum + b.current_value, 0);
+        displayData = [...top10, { name: 'Другое', current_value: otherValue, isOther: true }];
+    }
+
+    const labels = displayData.map(b => b.name);
+    const values = displayData.map(b => b.current_value);
+    const colors = displayData.map((_, i) => {
+        if (displayData[i].isOther) return '#94a3b8'; // gray color for other
+        return `hsl(${Math.round((i * 137.5) % 360)}, 60%, 55%)`;
+    });
 
     if (allocationChartInstance) allocationChartInstance.destroy();
     allocationChartInstance = new Chart(canvas.getContext('2d'), {
@@ -52,6 +65,14 @@ function renderAllocationChart() {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            onClick: (e, elements) => {
+                if (!elements.length) return;
+                const idx = elements[0].index;
+                if (!allocationChartExpanded && displayData[idx].isOther) {
+                    allocationChartExpanded = true;
+                    renderAllocationChart();
+                }
+            },
             plugins: {
                 legend: { position: 'right', labels: { font: { size: 10 }, boxWidth: 12 } },
                 tooltip: {
@@ -153,8 +174,9 @@ async function loadTax() {
                     <td data-label="ISIN"><code style="font-size:.78rem">${esc(t.isin)}</code></td>
                     <td data-label="Кол-во">${t.amount}</td>
                     <td data-label="Цена покупки">${(t.buy_price || 0).toFixed(2)}</td>
-                    <td data-label="Цена продажи">${(t.sell_price || 0).toFixed(2)}</td>
+                    <td data-label="Цена продажи">${t.sell_price != null ? t.sell_price.toFixed(2) : '—'}</td>
                     <td data-label="Комиссия">${(t.commission || 0).toFixed(2)}</td>
+                    <td data-label="Купоны">${(t.coupons || 0).toFixed(2)}</td>
                     <td data-label="P&L ₽" class="${pnlCls}">${t.pnl >= 0 ? '+' : ''}${(t.pnl || 0).toFixed(2)}</td>
                     <td data-label="Дата продажи">${esc(t.sell_date || '—')}</td>
                 </tr>`;
