@@ -1,7 +1,7 @@
 window._activityPage = 1;
 window._activityLoaded = false;
 
-function prfTab(idx) {
+window.prfTab = function(idx) {
   document.querySelectorAll('.prf-tab').forEach((t, i) => t.classList.toggle('active', i === idx));
   document.querySelectorAll('.prf-panel').forEach((p, i) => p.classList.toggle('active', i === idx));
 }
@@ -49,7 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }).catch(() => {});
 
-  document.getElementById('changePasswordForm').addEventListener('submit', async e => {
+  document.getElementById('changePasswordForm')?.addEventListener('submit', async e => {
     e.preventDefault();
     const btn = document.getElementById('changePwBtn');
     btn.disabled = true; btn.textContent = 'Сохранение…';
@@ -222,9 +222,9 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // Загружаем статус при открытии вкладок
-  const origPrfTab = window.prfTab || prfTab;
+  const origPrfTab = window.prfTab;
   window.prfTab = function (idx) {
-    origPrfTab(idx);
+    if (origPrfTab) origPrfTab(idx);
     if (idx === 2) loadTelegramStatus();
     if (idx === 3 && !window._activityLoaded) window.loadActivity(1);
   };

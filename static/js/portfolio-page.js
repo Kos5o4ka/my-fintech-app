@@ -6,7 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-function openDrawer() {
+window.openDrawer = function() {
   document.getElementById('bondDrawer').classList.add('open');
   document.getElementById('drawerOverlay').classList.add('open');
   document.body.style.overflow = 'hidden';
@@ -27,7 +27,7 @@ function openDrawer() {
   setTimeout(() => document.getElementById('bondIsin')?.focus(), 350);
 }
 
-function closeDrawer() {
+window.closeDrawer = function() {
   document.getElementById('bondDrawer').classList.remove('open');
   document.getElementById('drawerOverlay').classList.remove('open');
   document.body.style.overflow = '';

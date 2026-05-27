@@ -316,3 +316,57 @@ class AnalyticsAndImportTests(BaseTest):
             with self.assertRaises(RuntimeError) as ctx:
                 _fetch_json("https://example.com")
             self.assertIn("MOEX недоступен", str(ctx.exception))
+
+    def test_profile_api_stats(self):
+        """GET /api/profile/stats returns profile statistics (positions count, sold count, value)."""
+        uid = self._make_user()
+        self._set_logged_in(uid)
+        
+        self._make_bond(uid, isin="SU26238RMFS4", is_sold=False, buy_price=900.0, amount=10)
+        self._make_bond(uid, isin="RU000A105C94", is_sold=True, buy_price=100.0, sell_price=120.0, amount=5)
+        
+        r = self.client.get("/api/profile/stats")
+        self.assertEqual(r.status_code, 200)
+        data = r.get_json()
+        self.assertIn("bond_count", data)
+        self.assertIn("sold_count", data)
+        self.assertIn("total_value", data)
+        self.assertEqual(data["sold_count"], 1)
+
+    def test_profile_delete_avatar_api(self):
+        """DELETE /api/profile/avatar successfully removes avatar from user profile."""
+        uid = self._make_user()
+        self._set_logged_in(uid)
+        
+        with app.app_context():
+            from models import User
+            user = db.session.get(User, uid)
+            user.avatar = "some_cat_avatar.png"
+            db.session.commit()
+            
+        r = self.client.delete("/api/profile/avatar")
+        self.assertEqual(r.status_code, 200)
+        data = r.get_json()
+        self.assertEqual(data["status"], "success")
+        
+        with app.app_context():
+            from models import User
+            user = db.session.get(User, uid)
+            self.assertIsNone(user.avatar)
+
+    def test_telegram_link_endpoints(self):
+        """GET /api/profile/telegram/status and POST /api/profile/telegram/link return correct status."""
+        uid = self._make_user()
+        self._set_logged_in(uid)
+        
+        app.config["TELEGRAM_BOT_TOKEN"] = "dummy_token"
+        
+        r = self.client.get("/api/profile/telegram/status")
+        self.assertEqual(r.status_code, 200)
+        data = r.get_json()
+        self.assertFalse(data["linked"])
+        
+        r = self.client.post("/api/profile/telegram/link")
+        self.assertEqual(r.status_code, 200)
+        data = r.get_json()
+        self.assertIn("deep_link", data)

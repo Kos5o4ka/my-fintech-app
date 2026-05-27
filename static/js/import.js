@@ -108,8 +108,8 @@
 
   // Back button handler
   backToImportBtn.addEventListener('click', function () {
-    resultBlock.style.display = 'none';
-    form.parentNode.style.display = 'block';
+    resultBlock.classList.add('d-none');
+    form.parentNode.classList.remove('d-none');
     resetForm();
   });
 
@@ -121,9 +121,9 @@
     if (!file) return;
 
     // Show loading, hide form/result
-    form.parentNode.style.display = 'none';
-    resultBlock.style.display = 'none';
-    loadingBlock.style.display = 'block';
+    form.parentNode.classList.add('d-none');
+    resultBlock.classList.add('d-none');
+    loadingBlock.classList.remove('d-none');
 
     const formData = new FormData(form);
 
@@ -135,8 +135,8 @@
       });
 
       const resData = await response.json();
-      loadingBlock.style.display = 'none';
-      resultBlock.style.display = 'block';
+      loadingBlock.classList.add('d-none');
+      resultBlock.classList.remove('d-none');
 
       if (response.ok && resData.status === 'success') {
         // Render success state
@@ -151,7 +151,7 @@
 
         // Render errors/warnings if any
         if (resData.errors && resData.errors.length > 0) {
-          errorsWrap.style.display = 'block';
+          errorsWrap.classList.remove('d-none');
           errorsList.innerHTML = '';
           resData.errors.forEach(err => {
             const li = document.createElement('li');
@@ -160,7 +160,7 @@
             errorsList.appendChild(li);
           });
         } else {
-          errorsWrap.style.display = 'none';
+          errorsWrap.classList.add('d-none');
         }
 
         if (window.Common && window.Common.showToast) {
@@ -176,7 +176,7 @@
         resultTitle.innerText = 'Ошибка импорта';
         resultTitle.className = 'fw-bold mb-1 text-danger';
         resultMsg.innerText = resData.message || 'Не удалось импортировать данные. Проверьте правильность формата файла.';
-        errorsWrap.style.display = 'none';
+        errorsWrap.classList.add('d-none');
 
         if (window.Common && window.Common.showToast) {
           window.Common.showToast(resData.message || 'Ошибка импорта отчёта', true);
@@ -184,8 +184,8 @@
       }
     } catch (err) {
       console.error('Import error:', err);
-      loadingBlock.style.display = 'none';
-      resultBlock.style.display = 'block';
+      loadingBlock.classList.add('d-none');
+      resultBlock.classList.remove('d-none');
 
       resultIcon.innerHTML = `
         <div style="background: rgba(239, 68, 68, 0.1); color: #ef4444; width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: bold;">
@@ -195,7 +195,7 @@
       resultTitle.innerText = 'Ошибка сети или сервера';
       resultTitle.className = 'fw-bold mb-1 text-danger';
       resultMsg.innerText = 'Произошла непредвиденная ошибка при отправке запроса. Пожалуйста, попробуйте позже.';
-      errorsWrap.style.display = 'none';
+      errorsWrap.classList.add('d-none');
 
       if (window.Common && window.Common.showToast) {
         window.Common.showToast('Сетевая ошибка при загрузке', true);

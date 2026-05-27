@@ -88,16 +88,16 @@
 
       {# ── Broker Selection ───────────────────────────────────────── #}
       <div class="mb-4">
-        <label class="form-label fw-bold small text-uppercase tracking-wider mb-2" style="color: var(--text-secondary)">
+        <label class="form-label fw-bold small text-uppercase tracking-wider mb-2 import-title-secondary">
           Выберите брокера
         </label>
-        <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+        <div class="broker-cards-wrap">
           <label class="broker-card active" id="brokerCardAuto">
             <input type="radio" name="broker" value="auto" checked>
             <span class="broker-icon broker-a">A</span>
             <div>
-              <div class="fw-semibold small" style="color: var(--text-primary)">Автоопределение</div>
-              <div style="font-size: 0.68rem; color: var(--text-tertiary)">Система сама определит тип отчёта</div>
+              <div class="fw-semibold small broker-card-title">Автоопределение</div>
+              <div class="broker-card-sub">Система сама определит тип отчёта</div>
             </div>
           </label>
 
@@ -105,8 +105,8 @@
             <input type="radio" name="broker" value="tinkoff">
             <span class="broker-icon broker-t">Т</span>
             <div>
-              <div class="fw-semibold small" style="color: var(--text-primary)">Т-Инвестиции (Т-Банк)</div>
-              <div style="font-size: 0.68rem; color: var(--text-tertiary)">XLSX или CSV отчёты</div>
+              <div class="fw-semibold small broker-card-title">Т-Инвестиции (Т-Банк)</div>
+              <div class="broker-card-sub">XLSX или CSV отчёты</div>
             </div>
           </label>
 
@@ -114,8 +114,8 @@
             <input type="radio" name="broker" value="vtb">
             <span class="broker-icon broker-v">В</span>
             <div>
-              <div class="fw-semibold small" style="color: var(--text-primary)">ВТБ Брокер</div>
-              <div style="font-size: 0.68rem; color: var(--text-tertiary)">XLSX отчёты</div>
+              <div class="fw-semibold small broker-card-title">ВТБ Брокер</div>
+              <div class="broker-card-sub">XLSX отчёты</div>
             </div>
           </label>
         </div>
@@ -123,20 +123,20 @@
 
       {# ── File Upload Zone ───────────────────────────────────────── #}
       <div class="mb-4">
-        <label class="form-label fw-bold small text-uppercase tracking-wider mb-2" style="color: var(--text-secondary)">
+        <label class="form-label fw-bold small text-uppercase tracking-wider mb-2 import-title-secondary">
           Выберите файл отчёта
         </label>
         <label for="importFile" class="import-zone" id="dropZone">
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-tertiary);">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" class="import-zone-svg">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
             <polyline points="17 8 12 3 7 8"/>
             <line x1="12" y1="3" x2="12" y2="15"/>
           </svg>
           <div>
-            <div class="fw-semibold" style="color: var(--text-primary);" id="fileNamePlaceholder">
+            <div class="fw-semibold import-zone-placeholder" id="fileNamePlaceholder">
               Нажмите для выбора или перетащите файл сюда
             </div>
-            <div style="font-size: 0.75rem; color: var(--text-tertiary); margin-top: 0.25rem;">
+            <div class="import-zone-sub">
               Поддерживаются файлы отчётов в формате XLSX, XLS и CSV
             </div>
           </div>
@@ -145,7 +145,7 @@
       </div>
 
       {# ── Action Buttons ─────────────────────────────────────────── #}
-      <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+      <div class="import-actions-row">
         <button type="button" class="btn btn-outline-secondary btn-sm" id="clearFormBtn">Очистить</button>
         <button type="submit" class="btn btn-primary btn-sm" id="submitImportBtn" disabled>Импортировать</button>
       </div>
@@ -153,25 +153,25 @@
   </div>
 
   {# ── Loading State ──────────────────────────────────────────────── #}
-  <div class="pf-card p-5 text-center" id="loadingBlock" style="display: none;">
-    <div class="spinner-border text-primary mb-3" role="status" style="width: 2.5rem; height: 2.5rem;"></div>
-    <h6 style="color: var(--text-primary)">Импорт сделок в процессе…</h6>
-    <p class="small text-muted" style="max-width: 320px; margin: 0 auto;">
+  <div class="pf-card p-5 text-center d-none" id="loadingBlock">
+    <div class="spinner-border text-primary mb-3 import-loading-spinner" role="status"></div>
+    <h6 class="import-loading-title">Импорт сделок в процессе…</h6>
+    <p class="small text-muted import-loading-desc">
       Производится дедупликация транзакций, автоисправление цен облигаций и обновление вашего портфеля. Пожалуйста, подождите.
     </p>
   </div>
 
   {# ── Result State ───────────────────────────────────────────────── #}
-  <div class="pf-card p-4" id="resultBlock" style="display: none;">
+  <div class="pf-card p-4 d-none" id="resultBlock">
     <div class="d-flex align-items-start gap-3">
       <div class="alert-icon-wrap" id="resultIcon"></div>
-      <div style="flex: 1;">
+      <div class="flex-grow-1">
         <h6 class="fw-bold mb-1" id="resultTitle">Результат импорта</h6>
-        <p class="small mb-3" id="resultMsg" style="color: var(--text-secondary);"></p>
+        <p class="small mb-3 import-result-msg" id="resultMsg"></p>
         
-        <div id="errorsWrap" style="display: none;">
+        <div id="errorsWrap" class="import-errors-wrap d-none">
           <div class="small fw-semibold text-danger mb-2">Обнаруженные предупреждения:</div>
-          <div class="p-3 border rounded" style="background: rgba(239, 68, 68, 0.04); max-height: 200px; overflow-y: auto;">
+          <div class="p-3 border rounded import-errors-container">
             <ul class="mb-0 ps-3 small text-danger" id="errorsList"></ul>
           </div>
         </div>

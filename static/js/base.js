@@ -94,6 +94,8 @@
     var rect = btn.getBoundingClientRect();
     var top = rect.top;
     var left = rect.right + 8;
+    dd.style.bottom = 'auto';
+    dd.style.right = 'auto';
     var ddHeight = dd.offsetHeight || 360;
     if (top + ddHeight > window.innerHeight) {
       top = Math.max(8, window.innerHeight - ddHeight - 8);

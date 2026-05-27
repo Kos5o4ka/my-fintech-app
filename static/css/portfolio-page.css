@@ -351,3 +351,95 @@
 .lots-row td {
   padding: 0.5rem 1rem !important;
 }
+
+/* ── Utility class for hidden elements ────────────────────── */
+.d-none {
+  display: none !important;
+}
+
+/* ── Import Page Styles ───────────────────────────────────── */
+.import-title-secondary {
+  color: var(--text-secondary);
+}
+
+.broker-cards-wrap {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.broker-card-title {
+  color: var(--text-primary);
+}
+
+.broker-card-sub {
+  font-size: 0.68rem;
+  color: var(--text-tertiary);
+}
+
+.import-zone-svg {
+  color: var(--text-tertiary);
+}
+
+.import-zone-placeholder {
+  color: var(--text-primary);
+}
+
+.import-zone-sub {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  margin-top: 0.25rem;
+}
+
+.import-actions-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.import-loading-spinner {
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
+.import-loading-title {
+  color: var(--text-primary);
+}
+
+.import-loading-desc {
+  max-width: 320px;
+  margin: 0 auto;
+}
+
+.import-result-msg {
+  color: var(--text-secondary);
+}
+
+.import-errors-wrap {
+  margin-top: 1rem;
+}
+
+.import-errors-container {
+  background: rgba(239, 68, 68, 0.04);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* ── Analytics Page Styles ────────────────────────────────── */
+.pf-stats-2col {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+@media (max-width: 768px) {
+  .pf-stats-2col {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pf-actions-svg {
+  margin-right: 0.3rem;
+}
+

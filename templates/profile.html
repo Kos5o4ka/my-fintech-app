@@ -38,25 +38,25 @@
   </div>
 
   {# Quick stats row #}
-  <div style="display:flex;gap:1.25rem;margin-top:1.1rem;padding:0 .1rem;flex-wrap:wrap">
-    <div style="display:flex;align-items:center;gap:.4rem">
-      <span style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:rgba(255,255,255,.4)">Облигаций</span>
-      <span id="hsBondCount" style="font-size:.9rem;font-weight:800;color:#fff">—</span>
+  <div class="prf-quick-stats">
+    <div class="prf-quick-stat-item">
+      <span class="prf-quick-stat-label">Облигаций</span>
+      <span id="hsBondCount" class="prf-quick-stat-val">—</span>
     </div>
-    <div style="width:1px;background:rgba(255,255,255,.12)"></div>
-    <div style="display:flex;align-items:center;gap:.4rem">
-      <span style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:rgba(255,255,255,.4)">Стоимость</span>
-      <span id="hsTotalValue" style="font-size:.9rem;font-weight:800;color:#fff">—</span>
+    <div class="prf-quick-stat-sep"></div>
+    <div class="prf-quick-stat-item">
+      <span class="prf-quick-stat-label">Стоимость</span>
+      <span id="hsTotalValue" class="prf-quick-stat-val">—</span>
     </div>
-    <div style="width:1px;background:rgba(255,255,255,.12)"></div>
-    <div style="display:flex;align-items:center;gap:.4rem">
-      <span style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:rgba(255,255,255,.4)">Сделок закрыто</span>
-      <span id="hsSoldCount" style="font-size:.9rem;font-weight:800;color:#fff">—</span>
+    <div class="prf-quick-stat-sep"></div>
+    <div class="prf-quick-stat-item">
+      <span class="prf-quick-stat-label">Сделок закрыто</span>
+      <span id="hsSoldCount" class="prf-quick-stat-val">—</span>
     </div>
   </div>
 
   {# Tab bar #}
-  <div class="prf-tabs" role="tablist" style="overflow-x:auto;scrollbar-width:none">
+  <div class="prf-tabs" role="tablist">
     <button class="prf-tab active" onclick="prfTab(0)">
       <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="8" cy="5.5" r="2.8"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>
       Профиль
@@ -81,86 +81,96 @@
 
   {# ── Panel 0: Profile & Avatar ────────────────────────────────── #}
   <div class="prf-panel active" id="prf-panel-0">
-    <div style="max-width:500px">
-
-      <div class="prf-section-label">Аватар</div>
-      <form method="POST" action="/profile" enctype="multipart/form-data" class="mb-4">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <label class="upload-zone" for="avatarFileInput">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"
-               stroke-linecap="round" stroke-linejoin="round"
-               style="color:var(--text-tertiary);display:block;margin:0 auto .5rem">
-            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-            <polyline points="17 8 12 3 7 8"/>
-            <line x1="12" y1="3" x2="12" y2="15"/>
-          </svg>
-          <div style="font-size:.875rem;font-weight:600;color:var(--text-primary)" id="uploadZoneText">Нажмите для загрузки</div>
-          <div style="font-size:.75rem;color:var(--text-tertiary);margin-top:.2rem">PNG, JPG, GIF, WEBP — до 5 МБ</div>
-          <input id="avatarFileInput" type="file" name="avatar" accept="image/*" class="d-none" required>
-        </label>
-        <button type="submit" class="btn btn-primary w-100 mt-3" style="border-radius:var(--radius-sm)">
-          Загрузить аватар
-        </button>
-      </form>
-      {% if current_user.avatar %}
-      <button type="button" id="deleteAvatarBtn"
-              class="btn btn-outline-danger w-100 mt-2"
-              style="border-radius:var(--radius-sm);font-size:.83rem">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-             stroke-linecap="round" stroke-linejoin="round" style="margin-right:.35rem;vertical-align:-.1em">
-          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
-          <path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
-        </svg>
-        Удалить аватар
-      </button>
-      {% endif %}
-
-      <div class="prf-section-label">Учётная запись</div>
-      <div class="card" style="border-radius:var(--radius);overflow:hidden">
-        <div class="info-row">
-          <span class="info-label">Логин</span>
-          <span class="info-value">{{ current_user.username }}</span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">Роль</span>
-          <span class="info-value">{% if current_user.is_admin %}Администратор{% else %}Инвестор{% endif %}</span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">Telegram</span>
-          <span class="info-value" id="profileTgUsername">
-            {% if current_user.telegram_username %}
-              @{{ current_user.telegram_username }}
-            {% elif current_user.telegram_chat_id %}
-              <span style="color:var(--text-tertiary)">привязан</span>
-            {% else %}
-              <span style="color:var(--text-tertiary)">не привязан</span>
+    <div class="prf-panel-container">
+      <div class="prf-grid-2col">
+        
+        {# Left Side: Avatar Card #}
+        <div class="card p-4 d-flex flex-column justify-content-between">
+          <div>
+            <div class="prf-section-label mb-3">Управление аватаром</div>
+            <form method="POST" action="/profile" enctype="multipart/form-data" class="mb-0">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <label class="upload-zone" for="avatarFileInput">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"
+                     stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                  <polyline points="17 8 12 3 7 8"/>
+                  <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+                <div class="upload-zone-text" id="uploadZoneText">Нажмите для загрузки</div>
+                <div class="upload-zone-sub">PNG, JPG, GIF, WEBP — до 5 МБ</div>
+                <input id="avatarFileInput" type="file" name="avatar" accept="image/*" class="d-none" required>
+              </label>
+              <button type="submit" class="btn btn-primary w-100 mt-3">
+                Загрузить аватар
+              </button>
+            </form>
+            {% if current_user.avatar %}
+            <button type="button" id="deleteAvatarBtn"
+                    class="btn btn-outline-danger w-100 mt-2">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                   stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+                <path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
+              </svg>
+              Удалить аватар
+            </button>
             {% endif %}
-          </span>
+          </div>
         </div>
+
+        {# Right Side: Account Details & Session Card #}
+        <div class="d-flex flex-column justify-content-between gap-3">
+          <div class="card prf-info-card">
+            <div class="card-header bg-dark py-2 px-3 text-white prf-card-header">
+              Учётная запись
+            </div>
+            <div class="info-row">
+              <span class="info-label">Логин</span>
+              <span class="info-value">{{ current_user.username }}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Роль</span>
+              <span class="info-value">{% if current_user.is_admin %}Администратор{% else %}Инвестор{% endif %}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Telegram</span>
+              <span class="info-value" id="profileTgUsername">
+                {% if current_user.telegram_username %}
+                  @{{ current_user.telegram_username }}
+                {% elif current_user.telegram_chat_id %}
+                  <span class="text-muted">привязан</span>
+                {% else %}
+                  <span class="text-muted">не привязан</span>
+                {% endif %}
+              </span>
+            </div>
+          </div>
+
+          <div class="card p-3">
+            <div class="prf-section-label">Сессия</div>
+            <button id="logoutBtn" class="btn btn-outline-danger w-100 btn-logout">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                   stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/>
+                <polyline points="16 17 21 12 16 7"/>
+                <line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+              Выйти из аккаунта
+            </button>
+          </div>
+        </div>
+
       </div>
-
-      <div class="prf-section-label" style="margin-top:1.75rem">Сессия</div>
-      <button id="logoutBtn"
-              class="btn btn-outline-danger w-100"
-              style="border-radius:var(--radius-sm);font-weight:600;font-size:.875rem">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-             stroke-linecap="round" stroke-linejoin="round" style="margin-right:.45rem;vertical-align:-.1em">
-          <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/>
-          <polyline points="16 17 21 12 16 7"/>
-          <line x1="21" y1="12" x2="9" y2="12"/>
-        </svg>
-        Выйти из аккаунта
-      </button>
-
     </div>
   </div>
 
   {# ── Panel 1: Security ────────────────────────────────────────── #}
   <div class="prf-panel" id="prf-panel-1">
-    <div style="max-width:500px">
+    <div class="prf-panel-sec">
 
       <div class="prf-section-label">Смена пароля</div>
-      <div class="card" style="border-radius:var(--radius)">
+      <div class="card">
         <div class="card-body p-4">
           <form id="changePasswordForm">
             <div class="prf-field">
@@ -178,8 +188,7 @@
               <input type="password" id="confirmPassword" class="form-control"
                      placeholder="Повторите новый пароль" required autocomplete="new-password">
             </div>
-            <button type="submit" id="changePwBtn" class="btn btn-primary w-100 mt-2"
-                    style="border-radius:var(--radius-sm)">
+            <button type="submit" id="changePwBtn" class="btn btn-primary w-100 mt-2">
               Изменить пароль
             </button>
           </form>
@@ -191,12 +200,12 @@
 
   {# ── Panel 2: Notifications ───────────────────────────────────── #}
   <div class="prf-panel" id="prf-panel-2">
-    <div style="max-width:500px">
+    <div class="prf-panel-notif">
 
 
       {# ── Telegram-бот ──────────────────────────────────────────── #}
       <div class="prf-section-label mt-4">Telegram-бот</div>
-      <div class="card" style="border-radius:var(--radius)">
+      <div class="card">
         <div class="card-body p-4">
 
           {# Статус привязки #}
@@ -211,29 +220,27 @@
           </div>
 
           {# Не привязан: кнопка получить ссылку #}
-          <div id="tgUnlinkedBlock" style="display:none">
-            <p style="font-size:.8rem;color:var(--text-tertiary);margin:.75rem 0">
+          <div id="tgUnlinkedBlock" style="display: none;">
+            <p class="tg-unlinked-desc">
               Привяжите Telegram, чтобы получать уведомления о купонах
               и использовать двухфакторную аутентификацию.
             </p>
-            <button id="tgLinkBtn" class="btn btn-primary w-100"
-                    style="border-radius:var(--radius-sm)">
+            <button id="tgLinkBtn" class="btn btn-primary w-100">
               Привязать Telegram
             </button>
-            <div id="tgDeepLinkWrap" style="display:none;margin-top:.85rem">
-              <p style="font-size:.8rem;color:var(--text-tertiary);margin-bottom:.5rem">
+            <div id="tgDeepLinkWrap" style="display: none; margin-top: .85rem;">
+              <p class="tg-deeplink-desc">
                 Перейдите по ссылке и нажмите <b>Старт</b> в боте:
               </p>
               <a id="tgDeepLink" href="#" target="_blank" rel="noopener"
-                 class="btn btn-outline-secondary w-100"
-                 style="border-radius:var(--radius-sm);font-size:.85rem">
+                 class="btn btn-outline-secondary w-100 tg-deeplink-btn">
                 Открыть бот в Telegram →
               </a>
             </div>
           </div>
 
           {# Привязан: уведомления + отвязка #}
-          <div id="tgLinkedBlock" style="display:none">
+          <div id="tgLinkedBlock" style="display: none;">
             <div class="notif-row mt-2">
               <div class="notif-info">
                 <div class="notif-title">Купонные уведомления</div>
@@ -250,10 +257,9 @@
                 <div class="notif-title">Двухфакторная аутентификация</div>
                 <div class="notif-desc">Код в Telegram при каждом входе</div>
               </div>
-              <span style="font-size:.75rem;color:var(--emerald-400);font-weight:600">Включена</span>
+              <span class="tg-linked-status-text">Включена</span>
             </div>
-            <button id="tgUnlinkBtn" class="btn btn-outline-danger w-100 mt-3"
-                    style="border-radius:var(--radius-sm);font-size:.83rem">
+            <button id="tgUnlinkBtn" class="btn btn-outline-danger w-100 mt-3 btn-logout">
               Отвязать Telegram
             </button>
           </div>
@@ -266,22 +272,21 @@
 
   {# ── Panel 3: Activity Feed ───────────────────────────────────── #}
   <div class="prf-panel" id="prf-panel-3">
-    <div style="max-width:640px">
+    <div class="prf-panel-activity">
 
       <div class="prf-section-label">Журнал действий</div>
 
-      <div id="activityLoading" class="text-center py-4" style="color:var(--text-tertiary);display:none">
+      <div id="activityLoading" class="text-center py-4 prf-activity-loading" style="display: none;">
         <div class="spinner-border spinner-border-sm me-2" role="status"></div>Загрузка…
       </div>
 
-      <div id="activityList" class="card" style="border-radius:var(--radius);overflow:hidden"></div>
+      <div id="activityList" class="card"></div>
 
-      <div id="activityPagination" style="display:none;margin-top:1rem;text-align:center">
-        <div style="display:flex;justify-content:center;gap:.5rem">
+      <div id="activityPagination" class="prf-activity-pagination" style="display: none;">
+        <div class="prf-activity-pagination-flex">
           <button id="activityPrevBtn" class="btn btn-outline-secondary btn-sm"
                   onclick="loadActivity(window._activityPage - 1)">← Пред.</button>
-          <span id="activityPageInfo"
-                style="align-self:center;font-size:.82rem;color:var(--text-tertiary)"></span>
+          <span id="activityPageInfo" class="prf-activity-page-info"></span>
           <button id="activityNextBtn" class="btn btn-outline-secondary btn-sm"
                   onclick="loadActivity(window._activityPage + 1)">След. →</button>
         </div>
