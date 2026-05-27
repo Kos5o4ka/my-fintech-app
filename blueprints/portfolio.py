@@ -21,8 +21,8 @@ from models import BondPortfolio, Watchlist, Transaction
 from moex import (
     get_moex_bond,
     get_bond_history_all,
+    get_bond_date_info,
     search_bonds,
-    _fetch_json,
     get_rgbi_history,
     get_screener_bonds,
 )
@@ -48,6 +48,8 @@ from constants import (
     SCREENER_TTL,
     MAX_CHART_POINTS,
     STATS_TTL,
+    SHARPE_TTL,
+    TAX_TTL,
     DEFAULT_PAGE_SIZE,
     MAX_PAGE_SIZE,
     TIMEFRAME_DAYS,
@@ -660,29 +662,27 @@ def add_bond():
 
     # Проверка дат размещения и погашения
     try:
-        res = _fetch_json(f"https://iss.moex.com/iss/securities/{secid}.json")
-        if res.get("description") and res["description"].get("data"):
-            issue_date: Optional[date] = None
-            mat_date: Optional[date] = None
-            for row in res["description"]["data"]:
-                if row[0] == "ISSUEDATE" and row[2]:
-                    issue_date = datetime.strptime(row[2], "%Y-%m-%d").date()
-                if row[0] == "MATDATE" and row[2]:
-                    mat_date = datetime.strptime(row[2], "%Y-%m-%d").date()
-            if issue_date and purchase_date < issue_date:
-                return jsonify(
-                    {
-                        "status": "error",
-                        "message": f"Ошибка валидации: облигация выпущена {issue_date}. Нельзя купить бумагу до эмиссии.",
-                    }
-                ), 400
-            if mat_date and purchase_date > mat_date:
-                return jsonify(
-                    {
-                        "status": "error",
-                        "message": f"Ошибка валидации: облигация погашена {mat_date}. Торги закрыты.",
-                    }
-                ), 400
+        date_info = get_bond_date_info(secid)
+        issue_date: Optional[date] = None
+        mat_date: Optional[date] = None
+        if date_info.get("issue_date"):
+            issue_date = datetime.strptime(date_info["issue_date"], "%Y-%m-%d").date()
+        if date_info.get("mat_date"):
+            mat_date = datetime.strptime(date_info["mat_date"], "%Y-%m-%d").date()
+        if issue_date and purchase_date < issue_date:
+            return jsonify(
+                {
+                    "status": "error",
+                    "message": f"Ошибка валидации: облигация выпущена {issue_date}. Нельзя купить бумагу до эмиссии.",
+                }
+            ), 400
+        if mat_date and purchase_date > mat_date:
+            return jsonify(
+                {
+                    "status": "error",
+                    "message": f"Ошибка валидации: облигация погашена {mat_date}. Торги закрыты.",
+                }
+            ), 400
     except Exception as exc:
         logger.warning("Date spec validation error for %s: %s", secid, exc)
 
@@ -1236,11 +1236,16 @@ def screener():
 @portfolio_bp.route("/api/portfolio/tax", methods=["GET"])
 @login_required
 def portfolio_tax():
-    """Налоговый отчёт за год — сделки + купоны + НДФЛ (Stage 4 UI)."""
+    """Налоговый отчёт за год по ст. 214.1 НК РФ с кэшированием."""
     try:
         year = int(request.args.get("year", date.today().year))
     except (ValueError, TypeError):
         year = date.today().year
+
+    cache_key = f"tax:{current_user.id}:{year}"
+    cached = cache.get(cache_key)
+    if cached:
+        return jsonify(cached)
 
     year_start = date(year, 1, 1)
     year_end = date(year, 12, 31)
@@ -1253,46 +1258,20 @@ def portfolio_tax():
     active = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False).all()
     summary = calc_tax_report(sold, active, year)
 
-    # Build enriched response for Stage 4 Tax UI
-    trades_list = []
-    gross_profit = 0.0
-    total_commission = 0.0
-    for bond in sold:
-        buy_p = float(bond.buy_price)
-        sell_p = float(bond.sell_price) if bond.sell_price else buy_p
-        comm = float(bond.broker_commission) if bond.broker_commission else 0.0
-        pnl = (sell_p - buy_p) * bond.amount - comm
-        gross_profit += pnl
-        total_commission += comm
-        trades_list.append(
-            {
-                "id": bond.id,
-                "name": bond.name or bond.isin,
-                "isin": bond.isin,
-                "amount": bond.amount,
-                "buy_price": round(buy_p, 2),
-                "sell_price": round(sell_p, 2),
-                "commission": round(comm, 2),
-                "pnl": round(pnl, 2),
-                "sell_date": bond.sell_date.strftime("%Y-%m-%d")
-                if bond.sell_date
-                else None,
-            }
-        )
-
-    taxable_base = max(0.0, round(gross_profit, 2))
-    tax_amount = round(taxable_base * 0.13, 2)
-
-    return jsonify(
-        {
-            **summary,
-            "gross_profit": round(gross_profit, 2),
-            "total_commission": round(total_commission, 2),
-            "taxable_base": taxable_base,
-            "tax_amount": tax_amount,
-            "trades": trades_list,
-        }
+    # Обратная совместимость: добавляем поля для UI
+    gross_profit = summary.get("sales_income", 0.0)
+    total_commission = sum(
+        float(b.broker_commission) if b.broker_commission else 0.0 for b in sold
     )
+    result = {
+        **summary,
+        "gross_profit": gross_profit,
+        "total_commission": round(total_commission, 2),
+        "taxable_base": gross_profit,
+        "tax_amount": summary.get("tax_13pct", 0.0),
+    }
+    cache.set(cache_key, result, timeout=TAX_TTL)
+    return jsonify(result)
 
 
 # ── Бенчмарк RGBI ─────────────────────────────────────────────────────────────
@@ -1327,16 +1306,30 @@ def portfolio_benchmark():
 @portfolio_bp.route("/api/portfolio/sharpe", methods=["GET"])
 @login_required
 def portfolio_sharpe():
-    """Коэффициент Шарпа по закрытым позициям портфеля (Stage 4)."""
+    """Коэффициент Шарпа по закрытым позициям портфеля."""
+    cache_key = f"sharpe:{current_user.id}"
+    cached = cache.get(cache_key)
+    if cached:
+        return jsonify(cached)
+
     sold = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=True).all()
-    result = calc_sharpe_ratio(sold)
+    if len(sold) < 3:
+        payload = {
+            "sharpe": None,
+            "reason": f"Недостаточно данных (закрытых позиций: {len(sold)}, нужно ≥ 3)",
+        }
+        return jsonify(payload)
+
+    try:
+        from moex import get_gcurve_rate
+        rf_annual = get_gcurve_rate(maturity_years=1.0)
+    except Exception:
+        rf_annual = None  # calc_sharpe_ratio использует fallback
+
+    result = calc_sharpe_ratio(sold, rf_annual=rf_annual)
     if result is None:
-        return jsonify(
-            {
-                "sharpe": None,
-                "reason": f"Недостаточно данных (закрытых позиций: {len(sold)}, нужно ≥ 3)",
-            }
-        )
+        return jsonify({"sharpe": None, "reason": "Нулевая волатильность"})
+    cache.set(cache_key, result, timeout=SHARPE_TTL)
     return jsonify(result)
 
 

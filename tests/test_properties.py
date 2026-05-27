@@ -18,7 +18,9 @@ from services.portfolio_service import (  # noqa: E402
     build_trade_entry,
     calc_portfolio_ytm,
     calc_sharpe_ratio,
+    apply_ldv,
 )
+from constants import calc_ndfl, LDV_ANNUAL_DEDUCTION  # noqa: E402
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -59,7 +61,12 @@ _return_factor = st.floats(
 class TestTradeEntryProperties:
     @given(buy=_price, sell=_price, amount=_amount)
     def test_pnl_sign_matches_price_direction(self, buy, sell, amount):
-        """P&L sign must match the direction: sell > buy → profit, sell < buy → loss."""
+        """P&L sign must match the direction: sell > buy → profit, sell < buy → loss.
+
+        Uses assume() to skip cases where the difference is so small it rounds to 0
+        at 2 decimal places — those cases are correctly reported as 0.00 P&L.
+        """
+        assume(round(abs(sell - buy) * amount, 2) > 0)
         bond = _make_sold_bond(buy, sell, amount)
         entry = build_trade_entry(bond)
         if sell > buy:
@@ -257,3 +264,73 @@ class TestPortfolioYtmProperties:
         portfolio = [{"current_value": value, "ytm": ytm}]
         result = calc_portfolio_ytm(portfolio, value)
         assert abs(result - round(ytm, 2)) < 0.01
+
+
+# ── Tax calculation properties ────────────────────────────────────────────────
+
+
+class TestNdflProperties:
+    @given(income=st.floats(min_value=0, max_value=100_000_000))
+    def test_tax_never_exceeds_income(self, income):
+        """Налог не может превышать доход."""
+        assert calc_ndfl(income) <= income + 0.01
+
+    @given(income=st.floats(min_value=0, max_value=2_400_000))
+    def test_tax_13pct_below_threshold(self, income):
+        """До 2.4 млн ставка ровно 13%."""
+        assert abs(calc_ndfl(income) - round(income * 0.13, 2)) < 0.02
+
+    @given(income=st.floats(min_value=2_400_001, max_value=100_000_000))
+    def test_max_rate_15pct_for_securities(self, income):
+        """Для ЦБ максимальная ставка 15% — нет 18/20/22% как в общей шкале."""
+        tax = calc_ndfl(income)
+        max_possible = round(income * 0.15, 2)
+        assert tax <= max_possible + 0.01
+
+    def test_example_from_law_54m(self):
+        """Пример из закона: 5.4 млн → 312 000 (13%) + 450 000 (15%) = 762 000 ₽."""
+        assert abs(calc_ndfl(5_400_000) - 762_000.0) < 1.0
+
+    @given(income=st.floats(min_value=0, max_value=100_000_000))
+    def test_tax_non_negative(self, income):
+        """Налог всегда ≥ 0."""
+        assert calc_ndfl(income) >= 0.0
+
+    @given(
+        a=st.floats(min_value=0, max_value=50_000_000),
+        b=st.floats(min_value=0, max_value=50_000_000),
+    )
+    def test_tax_monotone(self, a, b):
+        """Больший доход → больший или равный налог."""
+        assume(a <= b)
+        assert calc_ndfl(a) <= calc_ndfl(b) + 0.01
+
+
+class TestApplyLdvProperties:
+    @given(
+        basis=st.floats(min_value=0, max_value=100_000_000),
+        days=st.integers(min_value=0, max_value=365 * 2),
+    )
+    def test_no_ldv_below_3_years(self, basis, days):
+        """До 3 лет вычет не применяется — база не меняется."""
+        assert apply_ldv(basis, days) == basis
+
+    @given(
+        basis=st.floats(min_value=0, max_value=100_000_000),
+        years=st.integers(min_value=3, max_value=30),
+    )
+    def test_ldv_scales_with_full_years(self, basis, years):
+        """Вычет = 3M × полных лет, не фиксировано 1 год."""
+        days = years * 365
+        result = apply_ldv(basis, days)
+        expected_deduction = LDV_ANNUAL_DEDUCTION * years
+        if basis >= expected_deduction:
+            assert abs(result - (basis - expected_deduction)) < 0.01
+        else:
+            assert result == 0.0
+
+    @given(basis=st.floats(min_value=0, max_value=100_000_000))
+    def test_ldv_result_non_negative(self, basis):
+        """После вычета ЛДВ налоговая база не может стать отрицательной."""
+        days = 5 * 365
+        assert apply_ldv(basis, days) >= 0.0

@@ -148,7 +148,7 @@ def admin_change_password(user_id):
         user_id=current_user.id,
         ip_address=get_client_ip(),
         user_agent=get_user_agent(),
-        details=f"target_user_id={target.id} target_username={target.username}",
+        details={"target_user_id": target.id, "target_username": target.username},
     )
     db.session.add(log)
     db.session.commit()

@@ -294,6 +294,23 @@ def get_coupon_calendar(secid: str) -> list[dict]:
         return []
 
 
+def get_bond_date_info(secid: str) -> dict:
+    """Публичная обёртка для получения дат размещения и погашения облигации."""
+    try:
+        res = _fetch_json(f"https://iss.moex.com/iss/securities/{secid}.json")
+        out: dict = {}
+        if res.get("description") and res["description"].get("data"):
+            for row in res["description"]["data"]:
+                if row[0] == "ISSUEDATE" and row[2]:
+                    out["issue_date"] = row[2]
+                elif row[0] == "MATDATE" and row[2]:
+                    out["mat_date"] = row[2]
+        return out
+    except Exception as e:
+        logger.warning("Bond date info fetch error for %s: %s", secid, e)
+        return {}
+
+
 def get_bond_details(secid: str) -> dict:
     """Fetch supplementary metadata: maturity date, coupon rate, coupon frequency."""
     try:
@@ -500,6 +517,75 @@ def get_currency_rates() -> dict[str, float]:
         pass
 
     return rates
+
+
+def get_gcurve_rate(maturity_years: float, trade_date: Optional[str] = None) -> float:
+    """Безрисковая ставка с кривой КБД (G-curve) MOEX на заданный срок.
+
+    Линейная интерполяция между соседними точками кривой.
+    Кэш 24 часа (кривая публикуется раз в день).
+    При сбое или отсутствии Flask-контекста возвращает fallback 0.155.
+    """
+    try:
+        from flask import current_app
+        current_app._get_current_object()  # бросает RuntimeError если нет контекста
+    except RuntimeError:
+        return 0.155
+
+    from extensions import cache
+
+    cache_key = f"gcurve:{trade_date or 'latest'}:{maturity_years:.2f}"
+    try:
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return float(cached)
+    except Exception:
+        pass
+
+    try:
+        url = "https://iss.moex.com/iss/engines/stock/markets/index/securities/GCURVE.json"
+        if trade_date:
+            url += f"?date={trade_date}"
+        res = _fetch_json(url)
+        cols = res["history"]["columns"]
+        curve: dict[float, float] = {}
+        for row in res["history"]["data"]:
+            period = row[cols.index("PERIOD")]
+            value = row[cols.index("VALUE")]
+            if period is not None and value is not None:
+                curve[float(period)] = float(value)
+
+        if not curve:
+            raise ValueError("G-curve data empty")
+
+        periods = sorted(curve.keys())
+        if maturity_years <= periods[0]:
+            rate_pct = curve[periods[0]]
+        elif maturity_years >= periods[-1]:
+            rate_pct = curve[periods[-1]]
+        else:
+            lo = max(p for p in periods if p <= maturity_years)
+            hi = min(p for p in periods if p >= maturity_years)
+            t = (maturity_years - lo) / (hi - lo) if hi != lo else 0
+            rate_pct = curve[lo] + t * (curve[hi] - curve[lo])
+
+        rate = round(rate_pct / 100, 6)
+        try:
+            cache.set(cache_key, rate, timeout=86400)
+            cache.set("gcurve:fallback", rate, timeout=86400 * 7)
+        except Exception:
+            pass
+        return rate
+
+    except Exception as e:
+        logger.warning("G-curve fetch failed: %s", e)
+        try:
+            fallback = cache.get("gcurve:fallback")
+            if fallback is not None:
+                return float(fallback)
+        except Exception:
+            pass
+        return 0.155
 
 
 def get_gold_price() -> float:

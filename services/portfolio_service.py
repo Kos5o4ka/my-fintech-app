@@ -3,20 +3,25 @@
 import logging
 import math
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, date
 from typing import Optional
 
 from models import BondPortfolio
 from services.moex_service import get_bond_cached, get_coupon_calendar_cached
-from constants import NDFL_RATE
-from moex import get_currency_rates
+from constants import calc_ndfl, LDV_YEARS_THRESHOLD, LDV_ANNUAL_DEDUCTION
+from moex import get_currency_rates, get_gcurve_rate
 
 logger = logging.getLogger(__name__)
 
 
-def build_portfolio_entry(bond: BondPortfolio) -> dict:
-    """Строит словарь с данными одной активной позиции, включая P&L и MOEX-данные."""
-    rates = get_currency_rates()
+def build_portfolio_entry(bond: BondPortfolio, rates: Optional[dict] = None) -> dict:
+    """Строит словарь с данными одной активной позиции, включая P&L и MOEX-данные.
+
+    rates — курсы валют, передаются снаружи чтобы избежать N+1 запросов.
+    """
+    if rates is None:
+        rates = get_currency_rates()
     currency = bond.currency or "RUB"
     buy_p = float(bond.buy_price)
 
@@ -26,8 +31,6 @@ def build_portfolio_entry(bond: BondPortfolio) -> dict:
 
     if moex_price is not None:
         last_p = float(moex_price)
-        if bond.last_price is None or abs(float(bond.last_price) - last_p) > 0.005:
-            bond.last_price = last_p
     else:
         last_p = float(bond.last_price) if bond.last_price is not None else buy_p
 
@@ -68,10 +71,11 @@ def build_portfolio_entry(bond: BondPortfolio) -> dict:
 
 def build_portfolio_list(active_bonds: list[BondPortfolio]) -> tuple[list[dict], float]:
     """Возвращает (список позиций, суммарная стоимость портфеля в RUB)."""
+    rates = get_currency_rates()  # один запрос на весь список
     portfolio_list: list[dict] = []
     total_value = 0.0
     for bond in active_bonds:
-        entry = build_portfolio_entry(bond)
+        entry = build_portfolio_entry(bond, rates=rates)
         total_value += entry["current_value_rub"]
         portfolio_list.append(entry)
     return portfolio_list, total_value
@@ -83,7 +87,7 @@ def calc_portfolio_ytm(portfolio_list: list[dict], total_value: float) -> float:
     Поддерживает как 'current_value_rub' (multi-currency), так и устаревший
     'current_value' ключ для обратной совместимости с unit/property-тестами.
     """
-    valid_bonds = [b for b in portfolio_list if b.get("ytm")]
+    valid_bonds = [b for b in portfolio_list if b.get("ytm") is not None and b["ytm"] != 0.0]
     if not valid_bonds:
         return 0.0
 
@@ -124,16 +128,28 @@ def build_trade_entry(bond) -> dict:
 
 
 def calc_coupon_income(active_bonds: list[BondPortfolio]) -> dict[str, float]:
-    """Прогноз купонного дохода в разрезах 30/90/365 дней в пересчете на RUB."""
+    """Прогноз купонного дохода в разрезах 30/90/365 дней в пересчете на RUB.
+
+    Купонные календари загружаются параллельно через ThreadPoolExecutor.
+    """
     rates = get_currency_rates()
     today = date.today()
     windows: dict[str, int] = {"30d": 30, "90d": 90, "365d": 365}
     totals: dict[str, float] = {k: 0.0 for k in windows}
+
+    # Уникальные targets для параллельной загрузки
+    targets = list({bond.secid or bond.isin for bond in active_bonds})
+    calendars: dict[str, list] = {}
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = {executor.submit(get_coupon_calendar_cached, t): t for t in targets}
+        for future in as_completed(futures):
+            calendars[futures[future]] = future.result() or []
+
     for bond in active_bonds:
         target = bond.secid or bond.isin
         currency = bond.currency or "RUB"
         rate = 1.0 if currency in ["RUB", "GLD"] else rates.get(currency, 1.0)
-        for c in get_coupon_calendar_cached(target):
+        for c in calendars.get(target, []):
             if not c["date"] or not c["value"]:
                 continue
             try:
@@ -169,80 +185,196 @@ def calc_monthly_profit(closed_bonds: list[BondPortfolio]) -> dict[str, float]:
     return dict(monthly)
 
 
+def calc_tax_basis_per_trade(bond: BondPortfolio, rates: dict) -> dict:
+    """Налоговая база одной сделки по ст. 214.1 НК РФ.
+
+    Доход = цена продажи + НКД при продаже.
+    Расходы = цена покупки + НКД при покупке + комиссия брокера.
+    """
+    buy_p = float(bond.buy_price)
+    sell_p = float(bond.sell_price) if bond.sell_price else buy_p
+    comm = float(bond.broker_commission) if bond.broker_commission else 0.0
+    nkd_buy = float(getattr(bond, "nkd_at_buy", 0) or 0)
+    nkd_sell = float(getattr(bond, "nkd_at_sell", 0) or 0)
+    currency = bond.currency or "RUB"
+    rate = 1.0 if currency in ["RUB", "GLD"] else rates.get(currency, 1.0)
+    n = bond.amount
+
+    gross_income = (sell_p + nkd_sell) * n * rate
+    expenses = (buy_p + nkd_buy) * n * rate + comm * rate
+    pnl = gross_income - expenses
+    days_held = (
+        (bond.sell_date - bond.purchase_date).days
+        if (bond.purchase_date and bond.sell_date)
+        else 0
+    )
+    return {
+        "gross_income": round(gross_income, 2),
+        "expenses": round(expenses, 2),
+        "pnl": round(pnl, 2),
+        "tax_basis": round(max(pnl, 0.0), 2),
+        "days_held": days_held,
+    }
+
+
+def apply_ldv(tax_basis: float, days_held: int) -> float:
+    """Льгота на долгосрочное владение (ст. 219.1 НК РФ): минимум 3 года.
+
+    Вычет = 3 000 000 ₽ × количество полных лет владения (не фиксировано 1 год).
+    """
+    if days_held < LDV_YEARS_THRESHOLD * 365:
+        return tax_basis
+    years_owned = days_held // 365
+    return max(tax_basis - LDV_ANNUAL_DEDUCTION * years_owned, 0.0)
+
+
+def calc_fifo_pnl(
+    isin: str,
+    user_id: int,
+    sell_amount: int,
+    sell_price: float,
+    sell_nkd: float,
+    sell_commission: float,
+    rates: dict,
+) -> dict:
+    """P&L одной продажи по методу FIFO (ст. 214.1 НК РФ).
+
+    Требует наличия записей в таблице Transaction с tx_type='buy'.
+    """
+    from models import Transaction
+
+    buys = (
+        Transaction.query
+        .filter_by(user_id=user_id, isin=isin, tx_type="buy")
+        .order_by(Transaction.tx_date.asc(), Transaction.id.asc())
+        .all()
+    )
+    remaining = sell_amount
+    total_cost = 0.0
+    for buy in buys:
+        if remaining <= 0:
+            break
+        used = min(buy.amount, remaining)
+        nkd = float(getattr(buy, "nkd", None) or 0)
+        buy_cost = (float(buy.price) + nkd) * used
+        buy_comm = float(buy.commission or 0) * (used / buy.amount)
+        total_cost += buy_cost + buy_comm
+        remaining -= used
+
+    # Определяем валюту из первой транзакции покупки (не хардкодим RUB)
+    buy_currency = buys[0].currency if buys else "RUB"
+    rate = 1.0 if buy_currency in ("RUB", "GLD") else rates.get(buy_currency, 1.0)
+    sell_income = (sell_price + sell_nkd) * sell_amount * rate
+    expenses = total_cost * rate + sell_commission * rate
+    pnl = sell_income - expenses
+    return {
+        "tax_basis": round(max(pnl, 0.0), 2),
+        "pnl": round(pnl, 2),
+    }
+
+
 def calc_tax_report(
     sold_bonds: list[BondPortfolio],
     active_bonds: list[BondPortfolio],
     year: int,
 ) -> dict:
-    """Расчёт НДФЛ 13% с дохода от сделок и купонных выплат за год в пересчете на RUB."""
+    """Расчёт НДФЛ по ст. 214.1 НК РФ с дохода от продаж ценных бумаг за год.
+
+    Купонный доход НЕ включается: с 2021 г. брокер удерживает налог
+    у источника в момент выплаты — двойной учёт недопустим.
+    """
     rates = get_currency_rates()
     year_start = date(year, 1, 1)
     year_end = date(year, 12, 31)
-    sales_income = 0.0
+
+    # Суммируем сырой P&L (может быть отрицательным — убыток зачитывается по ст. 214.1)
+    total_pnl = 0.0
+    total_ldv_deduction = 0.0
+    trades = []
     for bond in sold_bonds:
-        buy_p = float(bond.buy_price)
-        sell_p = float(bond.sell_price) if bond.sell_price else buy_p
-        comm = float(bond.broker_commission) if bond.broker_commission else 0.0
-        pnl = (sell_p - buy_p) * bond.amount - comm
-        currency = bond.currency or "RUB"
-        rate = 1.0 if currency in ["RUB", "GLD"] else rates.get(currency, 1.0)
-        pnl_rub = pnl * rate
-        if pnl_rub > 0:
-            sales_income += pnl_rub
+        if bond.sell_date and not (year_start <= bond.sell_date <= year_end):
+            continue
+        tb = calc_tax_basis_per_trade(bond, rates)
+        pnl = tb["pnl"]
+        days_held = tb["days_held"]
 
-    coupon_income = 0.0
-    all_bonds = list(active_bonds) + list(sold_bonds)
-    for bond in all_bonds:
-        target = bond.secid or bond.isin
-        currency = bond.currency or "RUB"
-        rate = 1.0 if currency in ["RUB", "GLD"] else rates.get(currency, 1.0)
-        for c in get_coupon_calendar_cached(target):
-            if not c["date"] or not c["value"]:
-                continue
-            try:
-                cd = datetime.strptime(c["date"], "%Y-%m-%d").date()
-            except ValueError:
-                continue
-            owned_from = bond.purchase_date
-            owned_to = bond.sell_date  # None for active positions
-            if (
-                year_start <= cd <= year_end
-                and cd >= owned_from
-                and (owned_to is None or cd <= owned_to)
-            ):
-                coupon_income += float(c["value"]) * bond.amount * rate
+        if pnl > 0:
+            # ЛДВ применяется только к прибыльным позициям
+            after_ldv = apply_ldv(pnl, days_held)
+            ldv_deduction = round(pnl - after_ldv, 2)
+            ldv_applied = ldv_deduction > 0
+            total_pnl += after_ldv
+            total_ldv_deduction += ldv_deduction
+        else:
+            # Убыток уменьшает налоговую базу в текущем году
+            after_ldv = pnl
+            ldv_deduction = 0.0
+            ldv_applied = False
+            total_pnl += pnl
 
-    total_income = round(sales_income + coupon_income, 2)
+        trades.append({
+            "isin": bond.isin,
+            "name": bond.name or bond.isin,
+            "pnl": pnl,
+            "tax_basis": tb["tax_basis"],
+            "ldv_applied": ldv_applied,
+            "ldv_deduction": ldv_deduction,
+            "days_held": days_held,
+        })
+
+    # Итоговая налоговая база не может быть отрицательной (убыток → перенос на будущее)
+    taxable_basis = max(total_pnl, 0.0)
+    tax = calc_ndfl(taxable_basis)
     return {
         "year": year,
-        "sales_income": round(sales_income, 2),
-        "coupon_income": round(coupon_income, 2),
-        "total_income": total_income,
-        "tax_13pct": round(total_income * NDFL_RATE, 2),
+        "sales_income": round(taxable_basis, 2),
+        "total_income": round(taxable_basis, 2),
+        "total_ldv_deduction": round(total_ldv_deduction, 2),
+        "tax": round(tax, 2),
+        "tax_13pct": round(tax, 2),  # обратная совместимость с фронтендом
+        "trades": trades,
+        "disclaimer": (
+            "Расчёт носит ознакомительный характер. Применяется к налоговым резидентам РФ. "
+            "Ставки НДФЛ для операций с ценными бумагами (ст. 214.1 НК РФ): "
+            "13% с суммы до 2 400 000 ₽, 15% с суммы превышения. "
+            "ЛДВ (пп. 1 п. 1 ст. 219.1 НК РФ) доступна только резидентам РФ. "
+            "Брокер является налоговым агентом и удерживает налог самостоятельно. "
+            "Купонный доход уже обложен у источника — не учитывается повторно."
+        ),
     }
 
 
-def calc_sharpe_ratio(sold_bonds: list) -> Optional[dict]:
-    """Коэффициент Шарпа на основе доходностей закрытых позиций (Stage 4).
+def calc_sharpe_ratio(
+    sold_bonds: list,
+    rf_annual: Optional[float] = None,
+) -> Optional[dict]:
+    """Коэффициент Шарпа на основе доходностей закрытых позиций.
 
-    Использует доходность каждой сделки как отдельное наблюдение.
-    Безрисковая ставка ≈ 16%/12 в месяц (ставка ЦБ РФ, упрощённо).
+    Дисперсия считается по формуле Бесселя (n-1) — выборка, не генеральная совокупность.
+    rf_annual — годовая безрисковая ставка. Если не передана, берётся с G-curve MOEX.
     Требует ≥ 3 закрытых позиций.
     """
     returns: list[float] = []
+    days_list: list[int] = []
     for bond in sold_bonds:
         buy_p = float(bond.buy_price)
         sell_p = float(bond.sell_price or bond.buy_price)
         if buy_p <= 0:
             continue
         returns.append(sell_p / buy_p - 1.0)
+        try:
+            if bond.sell_date and bond.purchase_date:
+                days_list.append((bond.sell_date - bond.purchase_date).days)
+        except (TypeError, AttributeError):
+            pass
 
     n = len(returns)
     if n < 3:
         return None
 
     mean_r = sum(returns) / n
-    variance = sum((r - mean_r) ** 2 for r in returns) / n
+    # sample variance (формула Бесселя: делим на n-1)
+    variance = sum((r - mean_r) ** 2 for r in returns) / (n - 1)
     std_r = math.sqrt(variance) if variance > 0 else 0.0
 
     if std_r == 0.0:
@@ -254,8 +386,16 @@ def calc_sharpe_ratio(sold_bonds: list) -> Optional[dict]:
             "note": "Нулевая волатильность — все сделки дали одинаковый результат",
         }
 
-    # Безрисковая ставка: 16% годовых ÷ 12 = 1.33% в месяц (приблизительно)
-    risk_free_per_trade = 0.16 / 12
+    avg_days = sum(days_list) / len(days_list) if days_list else 180
+    avg_years = max(avg_days / 365, 0.25)
+
+    if rf_annual is None:
+        try:
+            rf_annual = get_gcurve_rate(maturity_years=avg_years)
+        except Exception:
+            rf_annual = 0.155
+
+    risk_free_per_trade = rf_annual * (avg_days / 365)
     sharpe = (mean_r - risk_free_per_trade) / std_r
 
     return {
@@ -263,4 +403,7 @@ def calc_sharpe_ratio(sold_bonds: list) -> Optional[dict]:
         "mean_return_pct": round(mean_r * 100, 2),
         "volatility_pct": round(std_r * 100, 2),
         "sample_size": n,
+        "rf_annual_pct": round(rf_annual * 100, 2),
+        "rf_source": "MOEX КБД",
+        "rf_maturity_yrs": round(avg_years, 1),
     }

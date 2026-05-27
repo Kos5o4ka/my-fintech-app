@@ -21,7 +21,9 @@ auth_bp = Blueprint("auth", __name__)
 
 
 def _audit(
-    action: str, user_id: Optional[int] = None, details: Optional[str] = None
+    action: str,
+    user_id: Optional[int] = None,
+    details: Optional[dict] = None,
 ) -> None:
     """Записывает событие в журнал аудита (без commit — вызывать до commit сессии)."""
     try:
@@ -50,7 +52,7 @@ def api_login():
     user = User.query.filter_by(username=username).first()
 
     if not user or not check_password_hash(user.password_hash, password):
-        _audit("login_fail", details=f"username={username[:50]}")
+        _audit("login_fail", details={"username": username[:50]})
         db.session.commit()
         return jsonify(
             {"status": "error", "message": "Неверный логин или пароль."}
@@ -130,7 +132,7 @@ def verify_2fa():
 
     session.permanent = True
     login_user(user, remember=True)
-    _audit("login_ok", user_id=user.id, details="2fa=telegram")
+    _audit("login_ok", user_id=user.id, details={"method": "2fa_telegram"})
     from services.telegram_service import refresh_tg_username
 
     refresh_tg_username(user)

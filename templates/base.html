@@ -2,7 +2,7 @@
 <html lang="ru" data-bs-theme="light">
 <head>
   <meta charset="UTF-8">
-  <script>(function(){var t=localStorage.getItem('portfolioTheme');if(t==='dark')document.documentElement.setAttribute('data-bs-theme','dark');})()</script>
+  <script nonce="{{ g.csp_nonce }}">(function(){var t=localStorage.getItem('portfolioTheme');if(t==='dark')document.documentElement.setAttribute('data-bs-theme','dark');})()</script>
   <title>{% block title %}InvestTrack{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="{% block description %}InvestTrack — персональный трекер облигационного портфеля{% endblock %}">

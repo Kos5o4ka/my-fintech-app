@@ -1,9 +1,16 @@
 import atexit
-import fcntl
 import logging
 import os
+import secrets
 import subprocess
+import tempfile
 from datetime import datetime, timezone
+
+try:
+    import fcntl as _fcntl
+    _HAS_FCNTL = True
+except ImportError:
+    _HAS_FCNTL = False  # Windows
 
 # ── Sentry (опционально) ──────────────────────────────────────────────────────
 # Активируется только если задана переменная SENTRY_DSN.
@@ -29,7 +36,7 @@ if os.environ.get("SENTRY_DSN"):
     except ImportError:
         pass  # sentry-sdk не установлен — продолжаем без него
 
-from flask import Flask, request, jsonify, render_template, session
+from flask import Flask, g, request, jsonify, render_template, session
 from flask_cors import CORS
 from flask_login import current_user, logout_user
 from flask_wtf import CSRFProtect
@@ -108,6 +115,12 @@ app.register_blueprint(telegram_bp)
 csrf.exempt(telegram_bp)
 
 
+# ── CSP nonce: генерируется на каждый запрос ─────────────────────────────────
+@app.before_request
+def generate_csp_nonce():
+    g.csp_nonce = secrets.token_urlsafe(16)
+
+
 # ── Idle timeout: сбрасываем сессию после 30 мин бездействия ─────────────────
 @app.before_request
 def enforce_idle_timeout():
@@ -163,15 +176,16 @@ def set_security_headers(response):
         "Permissions-Policy",
         "geolocation=(), camera=(), microphone=(), payment=()",
     )
-    response.headers.setdefault(
-        "Content-Security-Policy",
-        "default-src 'self'; "
-        "script-src 'self' cdn.jsdelivr.net 'unsafe-inline'; "
-        "style-src 'self' cdn.jsdelivr.net 'unsafe-inline'; "
-        "img-src 'self' data: ui-avatars.com; "
-        "connect-src 'self'; "
-        "frame-ancestors 'none'; "
-        "form-action 'self'",
+    nonce = getattr(g, "csp_nonce", "")
+    response.headers["Content-Security-Policy"] = (
+        f"default-src 'self'; "
+        f"script-src 'self' 'nonce-{nonce}'; "
+        f"style-src 'self' 'unsafe-inline'; "
+        f"img-src 'self' data: ui-avatars.com fonts.gstatic.com; "
+        f"font-src 'self' fonts.gstatic.com fonts.googleapis.com; "
+        f"connect-src 'self'; "
+        f"frame-ancestors 'none'; "
+        f"form-action 'self'"
     )
 
     # HSTS — только для production (HTTPS-only)
@@ -338,10 +352,15 @@ _in_test = os.environ.get("FLASK_TESTING") == "1"
 _is_reload_parent = app.debug and os.environ.get("WERKZEUG_RUN_MAIN") is None
 
 def _try_acquire_scheduler_lock() -> bool:
-    """Возвращает True если этот процесс стал владельцем файлового замка."""
+    """Возвращает True если этот процесс стал владельцем файлового замка.
+    На Windows fcntl недоступен — возвращает True сразу (Gunicorn там не используется).
+    """
+    if not _HAS_FCNTL:
+        return True
     try:
-        _fd = open("/tmp/investtrack_scheduler.lock", "w")
-        fcntl.flock(_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        lock_path = os.path.join(tempfile.gettempdir(), "investtrack_scheduler.lock")
+        _fd = open(lock_path, "w")
+        _fcntl.flock(_fd, _fcntl.LOCK_EX | _fcntl.LOCK_NB)
         atexit.register(lambda: _fd.close())
         return True
     except OSError:

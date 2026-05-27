@@ -1,6 +1,7 @@
 from datetime import date, datetime
 from extensions import db
 from flask_login import UserMixin
+from sqlalchemy import JSON
 
 
 class Visit(db.Model):
@@ -81,6 +82,11 @@ class Transaction(db.Model):
     commission = db.Column(db.Numeric(10, 4), nullable=True)
     currency = db.Column(db.String(3), nullable=False, default="RUB")
     tx_date = db.Column(db.Date, nullable=False, default=date.today)
+    # FIFO / ст. 214.1 НК РФ
+    nkd = db.Column(db.Numeric(10, 4), nullable=True)       # НКД на дату сделки
+    portfolio_id = db.Column(
+        db.Integer, db.ForeignKey("bond_portfolio.id"), nullable=True
+    )
 
 
 class AuditLog(db.Model):
@@ -99,5 +105,5 @@ class AuditLog(db.Model):
     )  # login_ok | login_fail | logout | change_password | tg_link | tg_unlink
     ip_address = db.Column(db.String(45), nullable=True)
     user_agent = db.Column(db.String(255), nullable=True)
-    details = db.Column(db.Text, nullable=True)  # JSON или текстовое описание
+    details = db.Column(JSON, nullable=True)  # SQLite: text, PostgreSQL: native JSON
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
