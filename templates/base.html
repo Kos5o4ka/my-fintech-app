@@ -77,6 +77,29 @@
         <span class="sidebar-nav-label">Портфель</span>
       </a>
 
+      <a href="/analytics"
+         class="sidebar-nav-item {% if active_page == 'analytics' %}active{% endif %}"
+         data-tooltip="Аналитика">
+        <span class="sidebar-nav-icon">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="8" cy="8" r="7"/>
+            <path d="M8 8V1.5A6.5 6.5 0 0114.5 8z" fill="currentColor"/>
+          </svg>
+        </span>
+        <span class="sidebar-nav-label">Аналитика</span>
+      </a>
+
+      <a href="/import"
+         class="sidebar-nav-item {% if active_page == 'import' %}active{% endif %}"
+         data-tooltip="Импорт">
+        <span class="sidebar-nav-icon">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 9v4H4V9M8 1v8M5 4l3-3 3 3"/>
+          </svg>
+        </span>
+        <span class="sidebar-nav-label">Импорт</span>
+      </a>
+
       <a href="/profile"
          class="sidebar-nav-item {% if active_page == 'profile' %}active{% endif %}"
          data-tooltip="Профиль">

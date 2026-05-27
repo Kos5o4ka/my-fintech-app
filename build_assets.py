@@ -12,6 +12,8 @@ JS_FILES = [
     "static/js/landing.js",
     "static/js/portfolio-page.js",
     "static/js/admin.js",
+    "static/js/analytics.js",
+    "static/js/import.js",
 ]
 CSS_FILES = [
     "static/css/variables.css",

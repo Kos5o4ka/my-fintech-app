@@ -27,7 +27,7 @@ def upgrade():
         batch_op.add_column(sa.Column("last_price", sa.Float(), nullable=True))
         batch_op.add_column(sa.Column("last_updated", sa.DateTime(), nullable=True))
         batch_op.alter_column("purchase_date", existing_type=sa.DATE(), nullable=False)
-        batch_op.create_foreign_key(None, "users", ["user_id"], ["id"])
+        batch_op.create_foreign_key("fk_bond_portfolio_users", "users", ["user_id"], ["id"])
 
     with op.batch_alter_table("users", schema=None) as batch_op:
         batch_op.alter_column(
@@ -51,7 +51,7 @@ def downgrade():
         )
 
     with op.batch_alter_table("bond_portfolio", schema=None) as batch_op:
-        batch_op.drop_constraint(None, type_="foreignkey")
+        batch_op.drop_constraint("fk_bond_portfolio_users", type_="foreignkey")
         batch_op.alter_column("purchase_date", existing_type=sa.DATE(), nullable=True)
         batch_op.drop_column("last_updated")
         batch_op.drop_column("last_price")

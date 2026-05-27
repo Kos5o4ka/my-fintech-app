@@ -1,0 +1,206 @@
+(function () {
+  'use strict';
+
+  // DOM Elements
+  const form = document.getElementById('importBrokerForm');
+  const fileInput = document.getElementById('importFile');
+  const dropZone = document.getElementById('dropZone');
+  const fileNamePlaceholder = document.getElementById('fileNamePlaceholder');
+  const submitBtn = document.getElementById('submitImportBtn');
+  const clearBtn = document.getElementById('clearFormBtn');
+  
+  const loadingBlock = document.getElementById('loadingBlock');
+  const resultBlock = document.getElementById('resultBlock');
+  const resultIcon = document.getElementById('resultIcon');
+  const resultTitle = document.getElementById('resultTitle');
+  const resultMsg = document.getElementById('resultMsg');
+  const errorsWrap = document.getElementById('errorsWrap');
+  const errorsList = document.getElementById('errorsList');
+  const backToImportBtn = document.getElementById('backToImportBtn');
+
+  const brokerCards = document.querySelectorAll('.broker-card');
+
+  // Broker selection card activation
+  brokerCards.forEach(card => {
+    card.addEventListener('click', function () {
+      brokerCards.forEach(c => c.classList.remove('active'));
+      this.classList.add('active');
+      const radio = this.querySelector('input[type="radio"]');
+      if (radio) {
+        radio.checked = true;
+      }
+    });
+  });
+
+  // Enable/disable submit button and update placeholder text
+  function handleFileChange(file) {
+    if (!file) {
+      fileNamePlaceholder.innerText = 'Нажмите для выбора или перетащите файл сюда';
+      submitBtn.disabled = true;
+      return;
+    }
+
+    const name = file.name;
+    const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+    fileNamePlaceholder.innerHTML = `<span class="text-primary fw-bold">${window.Common.escapeHtml(name)}</span> (${sizeMB} МБ)`;
+    
+    // Simple validation of extension
+    const ext = name.slice(((name.lastIndexOf(".") - 1) >>> 0) + 2).toLowerCase();
+    if (['xlsx', 'xls', 'csv'].includes(ext)) {
+      submitBtn.disabled = false;
+    } else {
+      submitBtn.disabled = true;
+      if (window.Common && window.Common.showToast) {
+        window.Common.showToast('Недопустимый формат файла. Разрешены только .xlsx, .xls и .csv', true);
+      } else {
+        alert('Недопустимый формат файла. Разрешены только .xlsx, .xls и .csv');
+      }
+    }
+  }
+
+  fileInput.addEventListener('change', function () {
+    handleFileChange(this.files[0]);
+  });
+
+  // Drag and drop event listeners
+  ['dragenter', 'dragover'].forEach(eventName => {
+    dropZone.addEventListener(eventName, function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      this.classList.add('dragover');
+    }, false);
+  });
+
+  ['dragleave', 'drop'].forEach(eventName => {
+    dropZone.addEventListener(eventName, function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      this.classList.remove('dragover');
+    }, false);
+  });
+
+  dropZone.addEventListener('drop', function (e) {
+    const dt = e.dataTransfer;
+    const files = dt.files;
+    if (files.length) {
+      fileInput.files = files;
+      handleFileChange(files[0]);
+    }
+  }, false);
+
+  // Clear Form handler
+  function resetForm() {
+    form.reset();
+    fileNamePlaceholder.innerText = 'Нажмите для выбора или перетащите файл сюда';
+    submitBtn.disabled = true;
+    
+    // Reset broker cards to auto
+    brokerCards.forEach(c => c.classList.remove('active'));
+    const autoCard = document.getElementById('brokerCardAuto');
+    if (autoCard) {
+      autoCard.classList.add('active');
+      const radio = autoCard.querySelector('input[type="radio"]');
+      if (radio) radio.checked = true;
+    }
+  }
+
+  clearBtn.addEventListener('click', resetForm);
+
+  // Back button handler
+  backToImportBtn.addEventListener('click', function () {
+    resultBlock.style.display = 'none';
+    form.parentNode.style.display = 'block';
+    resetForm();
+  });
+
+  // Form submission via AJAX with CSRF
+  form.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    
+    const file = fileInput.files[0];
+    if (!file) return;
+
+    // Show loading, hide form/result
+    form.parentNode.style.display = 'none';
+    resultBlock.style.display = 'none';
+    loadingBlock.style.display = 'block';
+
+    const formData = new FormData(form);
+
+    try {
+      const response = await window.Common.csrfFetch('/api/portfolio/import', {
+        method: 'POST',
+        body: formData
+        // Note: For multipart/form-data with FormData, let fetch set the boundary and content-type header
+      });
+
+      const resData = await response.json();
+      loadingBlock.style.display = 'none';
+      resultBlock.style.display = 'block';
+
+      if (response.ok && resData.status === 'success') {
+        // Render success state
+        resultIcon.innerHTML = `
+          <div style="background: rgba(16, 185, 129, 0.1); color: #10b981; width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: bold;">
+            ✓
+          </div>
+        `;
+        resultTitle.innerText = 'Импорт завершен успешно';
+        resultTitle.className = 'fw-bold mb-1 text-success';
+        resultMsg.innerText = resData.message;
+
+        // Render errors/warnings if any
+        if (resData.errors && resData.errors.length > 0) {
+          errorsWrap.style.display = 'block';
+          errorsList.innerHTML = '';
+          resData.errors.forEach(err => {
+            const li = document.createElement('li');
+            li.className = 'mb-1';
+            li.innerText = err;
+            errorsList.appendChild(li);
+          });
+        } else {
+          errorsWrap.style.display = 'none';
+        }
+
+        if (window.Common && window.Common.showToast) {
+          window.Common.showToast('Импорт успешно завершен', false);
+        }
+      } else {
+        // Render error state
+        resultIcon.innerHTML = `
+          <div style="background: rgba(239, 68, 68, 0.1); color: #ef4444; width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: bold;">
+            ✕
+          </div>
+        `;
+        resultTitle.innerText = 'Ошибка импорта';
+        resultTitle.className = 'fw-bold mb-1 text-danger';
+        resultMsg.innerText = resData.message || 'Не удалось импортировать данные. Проверьте правильность формата файла.';
+        errorsWrap.style.display = 'none';
+
+        if (window.Common && window.Common.showToast) {
+          window.Common.showToast(resData.message || 'Ошибка импорта отчёта', true);
+        }
+      }
+    } catch (err) {
+      console.error('Import error:', err);
+      loadingBlock.style.display = 'none';
+      resultBlock.style.display = 'block';
+
+      resultIcon.innerHTML = `
+        <div style="background: rgba(239, 68, 68, 0.1); color: #ef4444; width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: bold;">
+          ✕
+        </div>
+      `;
+      resultTitle.innerText = 'Ошибка сети или сервера';
+      resultTitle.className = 'fw-bold mb-1 text-danger';
+      resultMsg.innerText = 'Произошла непредвиденная ошибка при отправке запроса. Пожалуйста, попробуйте позже.';
+      errorsWrap.style.display = 'none';
+
+      if (window.Common && window.Common.showToast) {
+        window.Common.showToast('Сетевая ошибка при загрузке', true);
+      }
+    }
+  });
+
+})();

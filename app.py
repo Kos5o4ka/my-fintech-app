@@ -103,6 +103,8 @@ from blueprints.admin import admin_bp  # noqa: E402
 from blueprints.profile import profile_bp  # noqa: E402
 from blueprints.portfolio import portfolio_bp  # noqa: E402
 from blueprints.telegram_bot import telegram_bp  # noqa: E402
+from blueprints.analytics import analytics_bp  # noqa: E402
+from blueprints.imports import imports_bp  # noqa: E402
 
 app.register_blueprint(main_bp)
 app.register_blueprint(auth_bp)
@@ -110,6 +112,8 @@ app.register_blueprint(admin_bp)
 app.register_blueprint(profile_bp)
 app.register_blueprint(portfolio_bp)
 app.register_blueprint(telegram_bp)
+app.register_blueprint(analytics_bp)
+app.register_blueprint(imports_bp)
 
 # Освобождаем webhook от CSRF-защиты (Telegram Bot API не отправляет CSRF)
 csrf.exempt(telegram_bp)
