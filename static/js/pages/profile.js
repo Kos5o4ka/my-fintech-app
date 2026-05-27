@@ -25,21 +25,50 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // ── Reset Portfolio ──────────────────────────────────────────────────
-  document.getElementById('resetPortfolioBtn')?.addEventListener('click', async () => {
-    const word = prompt('Введите DELETE для подтверждения полного сброса портфеля:');
-    if (word !== 'DELETE') {
-      window.Common.showToast('Сброс отменен');
-      return;
-    }
-    const res = await window.Common.csrfFetch('/api/portfolio/reset', { method: 'DELETE' });
-    const data = await res.json();
-    if (res.ok) {
-      window.Common.showToast(data.message);
-      setTimeout(() => window.location.reload(), 1500);
-    } else {
-      window.Common.showSystemMessage(data.message, true);
-    }
-  });
+  let resetModal;
+  const resetPortfolioBtn = document.getElementById('resetPortfolioBtn');
+  const confirmResetBtn = document.getElementById('confirmResetPortfolioBtn');
+  
+  if (resetPortfolioBtn && confirmResetBtn) {
+    resetPortfolioBtn.addEventListener('click', () => {
+      if (!resetModal) resetModal = new bootstrap.Modal(document.getElementById('resetPortfolioModal'));
+      document.getElementById('resetPortfolioPassword').value = '';
+      resetModal.show();
+    });
+
+    confirmResetBtn.addEventListener('click', async () => {
+      const password = document.getElementById('resetPortfolioPassword').value;
+      if (!password) {
+        window.Common.showToast('Введите пароль');
+        return;
+      }
+      
+      confirmResetBtn.disabled = true;
+      confirmResetBtn.textContent = 'Удаление...';
+      
+      try {
+        const res = await window.Common.csrfFetch('/api/portfolio/reset', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password })
+        });
+        const data = await res.json();
+        
+        if (res.ok) {
+          window.Common.showToast(data.message);
+          resetModal.hide();
+          setTimeout(() => window.location.reload(), 1500);
+        } else {
+          window.Common.showSystemMessage(data.message, true);
+        }
+      } catch (err) {
+        window.Common.showSystemMessage('Ошибка соединения', true);
+      } finally {
+        confirmResetBtn.disabled = false;
+        confirmResetBtn.textContent = 'Сбросить портфель';
+      }
+    });
+  }
 
   // ── Удаление аватара ─────────────────────────────────────────────────
   document.getElementById('deleteAvatarBtn')?.addEventListener('click', async () => {

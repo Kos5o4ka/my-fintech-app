@@ -107,6 +107,11 @@ def delete_position(bond_id):
 @login_required
 def reset_portfolio():
     """Полностью удаляет все позиции и транзакции пользователя."""
+    data = request.get_json() or {}
+    password = data.get("password")
+    if not password or not current_user.check_password(password):
+        return jsonify({"status": "error", "message": "Неверный пароль"}), 403
+
     Transaction.query.filter_by(user_id=current_user.id).delete()
     BondPortfolio.query.filter_by(user_id=current_user.id).delete()
     db.session.commit()

@@ -306,3 +306,27 @@
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/pages/profile.min.js') }}?v={{ static_ver }}" defer></script>
 {% endblock %}
+
+{% block extra_modals %}
+<div class="modal fade" id="resetPortfolioModal" tabindex="-1" aria-labelledby="resetPortfolioModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="resetPortfolioModalLabel">Сброс портфеля</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-danger">Вы собираетесь удалить все позиции и историю сделок из вашего портфеля. Это действие необратимо.</p>
+        <div class="mb-3">
+          <label for="resetPortfolioPassword" class="form-label">Введите ваш пароль для подтверждения</label>
+          <input type="password" class="form-control" id="resetPortfolioPassword" placeholder="••••••••" autocomplete="off" onpaste="return false;" ondrop="return false;">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+        <button type="button" class="btn btn-danger" id="confirmResetPortfolioBtn">Сбросить портфель</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
