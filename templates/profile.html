@@ -57,19 +57,19 @@
 
   {# Tab bar #}
   <div class="prf-tabs" role="tablist">
-    <button class="prf-tab active" onclick="prfTab(0)">
+    <button class="prf-tab active" data-tab="0">
       <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="8" cy="5.5" r="2.8"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>
       Профиль
     </button>
-    <button class="prf-tab" onclick="prfTab(1)">
+    <button class="prf-tab" data-tab="1">
       <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="3" y="7" width="10" height="8" rx="1.2"/><path d="M5 7V5a3 3 0 016 0v2"/></svg>
       Безопасность
     </button>
-    <button class="prf-tab" onclick="prfTab(2)">
+    <button class="prf-tab" data-tab="2">
       <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M8 2a1 1 0 00-1 1v1a5 5 0 00-4 4.9V11l-1 2h12l-1-2V8.9A5 5 0 009 4V3a1 1 0 00-1-1z"/><path d="M6 13a2 2 0 004 0"/></svg>
       Уведомления
     </button>
-    <button class="prf-tab" onclick="prfTab(3)">
+    <button class="prf-tab" data-tab="3">
       <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><polyline points="8,5 8,8 10,10"/></svg>
       Активность
     </button>
@@ -284,11 +284,9 @@
 
       <div id="activityPagination" class="prf-activity-pagination" style="display: none;">
         <div class="prf-activity-pagination-flex">
-          <button id="activityPrevBtn" class="btn btn-outline-secondary btn-sm"
-                  onclick="loadActivity(window._activityPage - 1)">← Пред.</button>
+          <button id="activityPrevBtn" class="btn btn-outline-secondary btn-sm">← Пред.</button>
           <span id="activityPageInfo" class="prf-activity-page-info"></span>
-          <button id="activityNextBtn" class="btn btn-outline-secondary btn-sm"
-                  onclick="loadActivity(window._activityPage + 1)">След. →</button>
+          <button id="activityNextBtn" class="btn btn-outline-secondary btn-sm">След. →</button>
         </div>
       </div>
 

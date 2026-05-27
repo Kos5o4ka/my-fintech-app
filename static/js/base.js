@@ -138,5 +138,46 @@
       dd.style.position = 'fixed';
     }
     loadBellData();
+
+    // Bell button — replaces CSP-blocked onclick="toggleBellDropdown(event)"
+    var bellBtn = document.getElementById('bellBtn');
+    if (bellBtn) {
+      bellBtn.addEventListener('click', function(e) {
+        window.toggleBellDropdown(e);
+      });
+    }
+
+    // Mark-read button — replaces CSP-blocked onclick="window.markBellRead()"
+    var bellMarkReadBtn = document.getElementById('bellMarkReadBtn');
+    if (bellMarkReadBtn) {
+      bellMarkReadBtn.addEventListener('click', function() {
+        window.markBellRead();
+      });
+    }
+
+    // Close bell dropdown — replaces CSP-blocked onclick
+    var bellCloseBtn = document.getElementById('bellCloseBtn');
+    if (bellCloseBtn) {
+      bellCloseBtn.addEventListener('click', function() {
+        var dropdown = document.getElementById('bellDropdown');
+        if (dropdown) dropdown.style.display = 'none';
+      });
+    }
+
+    // Theme toggle (sidebar) — replaces CSP-blocked onclick="window.Common.toggleTheme()"
+    var sidebarThemeBtn = document.getElementById('sidebarThemeBtn');
+    if (sidebarThemeBtn) {
+      sidebarThemeBtn.addEventListener('click', function() {
+        window.Common.toggleTheme();
+      });
+    }
+
+    // Theme toggle (mobile bottom bar)
+    var bottomBarThemeBtn = document.getElementById('bottomBarThemeBtn');
+    if (bottomBarThemeBtn) {
+      bottomBarThemeBtn.addEventListener('click', function() {
+        window.Common.toggleTheme();
+      });
+    }
   });
 })();

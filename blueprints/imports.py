@@ -63,7 +63,11 @@ def import_portfolio():
 
     from services.import_service import save_imported_deals
     imported_count, coupon_count, errors = save_imported_deals(deals, current_user.id)
-    
+
+    # If DB commit failed, errors contains a single critical error message
+    if imported_count == 0 and coupon_count == 0 and len(errors) == 1 and errors[0].startswith("Ошибка сохранения"):
+        return jsonify({"status": "error", "message": errors[0]}), 500
+
     msg = f"Импортировано {imported_count} записей."
     if coupon_count:
         msg += f" Купонных выплат: {coupon_count}."
@@ -71,7 +75,7 @@ def import_portfolio():
         msg += f" РЕПО-сделок пропущено: {skipped_repo}."
     if errors:
         msg += f" Ошибок: {len(errors)}."
-        
+
     return jsonify({
         "status": "success",
         "message": msg,

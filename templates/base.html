@@ -133,7 +133,6 @@
       {# Notification Bell #}
       <div style="position:relative" id="sidebarBellWrap">
         <button class="sidebar-nav-item" id="bellBtn"
-                onclick="toggleBellDropdown(event)"
                 data-tooltip="Уведомления"
                 aria-label="Уведомления">
           <span class="sidebar-nav-icon" style="position:relative">
@@ -153,10 +152,10 @@
           <div style="padding:.65rem 1rem;border-bottom:1px solid var(--border-subtle);display:flex;align-items:center;justify-content:space-between;gap:.5rem">
             <span style="font-size:.82rem;font-weight:700">Ближайшие купоны</span>
             <div style="display:flex;align-items:center;gap:.5rem">
-              <button onclick="window.markBellRead()"
+              <button id="bellMarkReadBtn"
                       style="border:none;background:none;cursor:pointer;color:var(--text-tertiary);font-size:.72rem;font-weight:600;padding:2px 6px;border-radius:var(--radius-xs);line-height:1.4"
                       title="Отметить как прочитанное">✓ Прочитано</button>
-              <button onclick="document.getElementById('bellDropdown').style.display='none'"
+              <button id="bellCloseBtn"
                       style="border:none;background:none;cursor:pointer;color:var(--text-tertiary);font-size:1rem;line-height:1;padding:0">×</button>
             </div>
           </div>
@@ -170,7 +169,7 @@
 
     {# Theme toggle #}
     <div style="padding:0 .55rem">
-      <button class="sidebar-theme-btn" onclick="window.Common.toggleTheme()" aria-label="Переключить тему">
+      <button class="sidebar-theme-btn" id="sidebarThemeBtn" aria-label="Переключить тему">
         <span class="theme-icon" id="themeIconSidebar"></span>
         <span class="theme-label">Тема</span>
       </button>
@@ -241,7 +240,7 @@
     </a>
     {% endif %}
 
-    <button class="bottom-bar-item" onclick="window.Common.toggleTheme()" aria-label="Тема">
+    <button class="bottom-bar-item" id="bottomBarThemeBtn" aria-label="Тема">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
         <circle cx="8" cy="8" r="2.5"/>
         <line x1="8" y1="1" x2="8" y2="3"/>

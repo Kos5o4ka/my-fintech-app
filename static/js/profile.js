@@ -4,7 +4,14 @@ window._activityLoaded = false;
 window.prfTab = function(idx) {
   document.querySelectorAll('.prf-tab').forEach((t, i) => t.classList.toggle('active', i === idx));
   document.querySelectorAll('.prf-panel').forEach((p, i) => p.classList.toggle('active', i === idx));
-}
+};
+
+// Tab click listeners (replaces CSP-blocked onclick="prfTab(N)")
+document.querySelectorAll('.prf-tab').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    window.prfTab(parseInt(this.dataset.tab, 10));
+  });
+});
 
 document.getElementById('avatarFileInput')?.addEventListener('change', function () {
   document.getElementById('uploadZoneText').textContent =
@@ -228,6 +235,22 @@ document.addEventListener('DOMContentLoaded', () => {
     if (idx === 2) loadTelegramStatus();
     if (idx === 3 && !window._activityLoaded) window.loadActivity(1);
   };
+  // Обновляем слушатели вкладок, чтобы использовать расширенную версию prfTab
+  document.querySelectorAll('.prf-tab').forEach(function(btn) {
+    btn.onclick = null;
+    btn.addEventListener('click', function() {
+      window.prfTab(parseInt(this.dataset.tab, 10));
+    });
+  });
+  // Пагинация активности
+  var prevBtn = document.getElementById('activityPrevBtn');
+  if (prevBtn) {
+    prevBtn.addEventListener('click', function() { window.loadActivity(window._activityPage - 1); });
+  }
+  var nextBtn = document.getElementById('activityNextBtn');
+  if (nextBtn) {
+    nextBtn.addEventListener('click', function() { window.loadActivity(window._activityPage + 1); });
+  }
   // Если уже открыта вкладка 2 — загружаем сразу
   if (document.getElementById('prf-panel-2').classList.contains('active')) {
     loadTelegramStatus();

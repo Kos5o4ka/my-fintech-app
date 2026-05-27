@@ -570,7 +570,7 @@ def save_imported_deals(deals: list, user_id: int) -> Tuple[int, int, List[str]]
         trade_date = _parse_any_date(deal.get("date"))
         commission = _parse_num(deal.get("commission"))
         currency = deal.get("currency") or "RUB"
-        bond_title = deal.get("name") or isin
+        bond_title = (deal.get("name") or isin)[:100]
 
         # ── Интеллектуальная дедупликация ──
         if deal_no:
@@ -687,6 +687,11 @@ def save_imported_deals(deals: list, user_id: int) -> Tuple[int, int, List[str]]
             )
             imported_count += 1
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        logger.error("DB commit failed during import: %s", exc, exc_info=True)
+        return 0, 0, [f"Ошибка сохранения в базу данных: {exc}"]
     bust_user_cache(user_id)
     return imported_count, coupon_count, errors
