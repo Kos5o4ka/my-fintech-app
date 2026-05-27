@@ -355,6 +355,30 @@
   color: var(--text-tertiary);
 }
 
+/* ── Activity log entries ───────────────────────────────────── */
+.activity-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: .75rem;
+  padding: .8rem 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.activity-entry:last-child { border-bottom: none; }
+.activity-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 1rem;
+}
+.activity-content { flex: 1; min-width: 0; }
+.activity-label { font-size: .875rem; font-weight: 600; color: var(--text-primary); }
+.activity-meta { font-size: .75rem; color: var(--text-tertiary); margin-top: .15rem; }
+.activity-detail { font-style: italic; }
 
 /* ── Panel Sizing & Grid Layouts ────────────────────────────── */
 .prf-panel-container {

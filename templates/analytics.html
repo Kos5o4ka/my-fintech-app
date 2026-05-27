@@ -4,8 +4,8 @@
 {% block description %}Детальный анализ инвестиционного портфеля: доходность, Шарп, сравнение облигаций и налоги{% endblock %}
 
 {% block head_extra %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/portfolio.min.css') }}">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/portfolio-page.min.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/portfolio.min.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages/portfolio-page.min.css') }}">
 <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js" defer></script>
@@ -155,8 +155,8 @@
           <div class="spinner-border spinner-border-sm me-2" role="status"></div>Загрузка…
         </div>
 
-        {# Summary cards #}
-        <div id="taxSummary" style="display:none;padding:.75rem 1rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.75rem;margin-bottom:.5rem">
+       {# Summary cards #}
+        <div id="taxSummary" style="display:none;padding:.75rem 1rem;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.75rem;margin-bottom:.5rem">
           <div class="pf-stat">
             <div class="pf-stat-label">Реализованная прибыль</div>
             <div class="pf-stat-value text-success" id="taxGrossProfit">—</div>
@@ -275,8 +275,7 @@
             <div style="color:var(--text-tertiary);font-size:.85rem">Нет данных за выбранный период</div>
           </div>
         </div>
-        <div id="benchmarkStats" style="display:none;padding:.5rem 1rem 1rem;display:flex;gap:1.5rem;flex-wrap:wrap">
-          <div>
+        <div id="benchmarkStats" style="display:none;padding:.5rem 1rem 1rem;gap:1.5rem;flex-wrap:wrap">          <div>
             <div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-tertiary)">Начало периода</div>
             <div id="benchmarkFirst" style="font-size:.95rem;font-weight:700;font-variant-numeric:tabular-nums">—</div>
           </div>
@@ -298,5 +297,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/analytics.min.js') }}?v={{ static_ver }}" defer></script>
+<script src="{{ url_for('static', filename='js/pages/analytics.min.js') }}?v={{ static_ver }}" defer></script>
 {% endblock %}

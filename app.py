@@ -147,9 +147,13 @@ def create_app(config_class=None) -> Flask:
 
         session["_last_active"] = now
 
-    # ── Security headers (после каждого ответа) ──────────────────────────────
+        # ── Security headers (после каждого ответа) ──────────────────────────────
     @app.after_request
     def set_security_headers(response):
+        # Игнорируем статику, чтобы не ломать кэш и не плодить пустые сессии
+        if request.path.startswith("/static/") or request.path == "/favicon.ico":
+            return response
+
         try:
             token = generate_csrf()
             _lifetime = app.config.get("PERMANENT_SESSION_LIFETIME")
@@ -172,18 +176,17 @@ def create_app(config_class=None) -> Flask:
             "Permissions-Policy",
             "geolocation=(), camera=(), microphone=(), payment=()",
         )
-        
-        # Nonce-based CSP для скриптов и стилей
-        nonce = getattr(g, "csp_nonce", "")
+
+        # CSP: 'unsafe-inline' needed for inline onclick handlers and style attributes
         response.headers["Content-Security-Policy"] = (
-            f"default-src 'self'; "
-            f"script-src 'self' 'nonce-{nonce}'; "
-            f"style-src 'self' 'nonce-{nonce}'; "
-            f"img-src 'self' data: ui-avatars.com fonts.gstatic.com; "
-            f"font-src 'self' fonts.gstatic.com fonts.googleapis.com; "
-            f"connect-src 'self'; "
-            f"frame-ancestors 'none'; "
-            f"form-action 'self'"
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "img-src 'self' data: ui-avatars.com fonts.gstatic.com; "
+            "font-src 'self' fonts.gstatic.com fonts.googleapis.com; "
+            "connect-src 'self'; "
+            "frame-ancestors 'none'; "
+            "form-action 'self'"
         )
 
         if not app.debug and not app.testing:
@@ -241,6 +244,11 @@ def create_app(config_class=None) -> Flask:
     @app.route("/metrics")
     def prometheus_metrics():
         """Экспорт системных и бизнес-метрик приложения в формате Prometheus."""
+        # Базовая защита: требуем токен (например, /metrics?token=MySecretToken123)
+        expected_token = app.config.get("METRICS_TOKEN")
+        if expected_token and request.args.get("token") != expected_token:
+            return "Unauthorized", 401
+
         try:
             from models import User, BondPortfolio, Transaction
             user_count = db.session.query(User).count()

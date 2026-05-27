@@ -83,7 +83,7 @@
   </div>
 
   <div class="pf-card p-4">
-    <form id="importBrokerForm" enctype="multipart/form-data">
+    <form id="importBrokerForm" action="/api/portfolio/import" method="post" enctype="multipart/form-data">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
       {# ── Broker Selection ───────────────────────────────────────── #}

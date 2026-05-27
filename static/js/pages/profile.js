@@ -197,13 +197,13 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const rows = data.entries.map(e => `
-        <div style="display:flex;align-items:flex-start;gap:.75rem;padding:.8rem 1rem;border-bottom:1px solid var(--border-subtle)">
-          <div style="width:34px;height:34px;border-radius:var(--radius-sm);background:var(--surface-2);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:1rem">${e.icon}</div>
-          <div style="flex:1;min-width:0">
-            <div style="font-size:.875rem;font-weight:600">${e.label}</div>
-            <div style="font-size:.75rem;color:var(--text-tertiary);margin-top:.15rem">
-              ${e.created_at}${e.ip_address && e.ip_address !== '—' ? ' · ' + e.ip_address : ''}
-              ${e.details ? ' · <span style="font-style:italic">' + e.details + '</span>' : ''}
+        <div class="activity-entry">
+          <div class="activity-icon">${e.icon}</div>
+          <div class="activity-content">
+            <div class="activity-label">${window.Common.escapeHtml(e.label)}</div>
+            <div class="activity-meta">
+              ${window.Common.escapeHtml(e.created_at)}${e.ip_address && e.ip_address !== '—' ? ' · ' + window.Common.escapeHtml(e.ip_address) : ''}
+              ${e.details ? ' · <span class="activity-detail">' + window.Common.escapeHtml(typeof e.details === 'string' ? e.details : JSON.stringify(e.details)) + '</span>' : ''}
             </div>
           </div>
         </div>

@@ -62,7 +62,11 @@ def import_portfolio():
         ), 400
 
     from services.import_service import save_imported_deals
-    imported_count, coupon_count, errors = save_imported_deals(deals, current_user.id)
+    try:
+        imported_count, coupon_count, errors = save_imported_deals(deals, current_user.id)
+    except Exception as exc:
+        logger.error("save_imported_deals failed: %s", exc, exc_info=True)
+        return jsonify({"status": "error", "message": f"Ошибка при сохранении сделок: {exc}"}), 500
 
     # If DB commit failed, errors contains a single critical error message
     if imported_count == 0 and coupon_count == 0 and len(errors) == 1 and errors[0].startswith("Ошибка сохранения"):

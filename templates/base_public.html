@@ -2,7 +2,7 @@
 <html lang="ru" data-bs-theme="light">
 <head>
   <meta charset="UTF-8">
-  <script>(function(){var t=localStorage.getItem('portfolioTheme');if(t==='dark')document.documentElement.setAttribute('data-bs-theme','dark');})()</script>
+  <script nonce="{{ g.csp_nonce }}">(function(){var t=localStorage.getItem('portfolioTheme');if(t==='dark')document.documentElement.setAttribute('data-bs-theme','dark');})()</script>
   <title>{% block title %}InvestTrack{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="{% block description %}InvestTrack — персональный трекер облигационного портфеля{% endblock %}">
@@ -13,9 +13,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet">
   <link href="{{ url_for('static', filename='vendor/bootstrap.min.css') }}" rel="stylesheet">
-  <script src="{{ url_for('static', filename='vendor/bootstrap.bundle.min.js') }}" defer></script>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/variables.min.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/animations.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/core/variables.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/core/animations.min.css') }}">
   {% block head_extra %}{% endblock %}
 </head>
 <body>
@@ -49,7 +48,8 @@
 
 <div id="toastContainer" class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index:1200;"></div>
 
-<script src="{{ url_for('static', filename='js/common.min.js') }}?v={{ static_ver }}" defer></script>
+<script src="{{ url_for('static', filename='vendor/bootstrap.bundle.min.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/core/common.min.js') }}?v={{ static_ver }}" defer></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>
