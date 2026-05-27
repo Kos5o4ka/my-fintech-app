@@ -16,25 +16,45 @@ depends_on = None
 
 
 def upgrade():
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+
+    existing_users_cols = []
+    try:
+        existing_users_cols = [c["name"] for c in inspector.get_columns("users")]
+    except Exception:
+        pass
+
     with op.batch_alter_table("users", schema=None) as batch_op:
-        batch_op.add_column(sa.Column("email", sa.String(length=254), nullable=True))
-        batch_op.add_column(
-            sa.Column(
-                "email_notifications",
-                sa.Boolean(),
-                nullable=True,
-                server_default="false",
+        if "email" not in existing_users_cols:
+            batch_op.add_column(sa.Column("email", sa.String(length=254), nullable=True))
+        if "email_notifications" not in existing_users_cols:
+            batch_op.add_column(
+                sa.Column(
+                    "email_notifications",
+                    sa.Boolean(),
+                    nullable=True,
+                    server_default="false",
+                )
             )
-        )
+
+    existing_bp_cols = []
+    try:
+        existing_bp_cols = [c["name"] for c in inspector.get_columns("bond_portfolio")]
+    except Exception:
+        pass
 
     with op.batch_alter_table("bond_portfolio", schema=None) as batch_op:
-        batch_op.add_column(sa.Column("secid", sa.String(length=50), nullable=True))
-        batch_op.add_column(sa.Column("name", sa.String(length=100), nullable=True))
-        batch_op.add_column(
-            sa.Column(
-                "broker_commission", sa.Numeric(precision=10, scale=4), nullable=True
+        if "secid" not in existing_bp_cols:
+            batch_op.add_column(sa.Column("secid", sa.String(length=50), nullable=True))
+        if "name" not in existing_bp_cols:
+            batch_op.add_column(sa.Column("name", sa.String(length=100), nullable=True))
+        if "broker_commission" not in existing_bp_cols:
+            batch_op.add_column(
+                sa.Column(
+                    "broker_commission", sa.Numeric(precision=10, scale=4), nullable=True
+                )
             )
-        )
 
 
 def downgrade():
