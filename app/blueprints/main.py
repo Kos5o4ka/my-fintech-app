@@ -1,8 +1,8 @@
 from flask import Blueprint, render_template, jsonify, redirect, url_for
 from flask_login import current_user, login_required
 from sqlalchemy import text
-from extensions import db, cache
-from models import Visit
+from app.extensions import db, cache
+from app.models import Visit
 
 main_bp = Blueprint("main", __name__)
 

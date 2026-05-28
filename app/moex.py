@@ -13,7 +13,7 @@ from tenacity import (
     after_log,
 )
 
-from constants import (
+from app.constants import (
     MOEX_REQUEST_TIMEOUT,
     MOEX_MAX_HISTORY_OFFSET,
     MOEX_CIRCUIT_FAIL_THRESHOLD,
@@ -34,7 +34,7 @@ _cb_open_until: float = 0.0
 
 def _circuit_check() -> None:
     """Бросает RuntimeError, если автомат открыт."""
-    from extensions import cache
+    from app.extensions import cache
 
     try:
         open_until = cache.get("moex_cb:open_until") or 0.0
@@ -50,7 +50,7 @@ def _circuit_check() -> None:
 
 
 def _circuit_success() -> None:
-    from extensions import cache
+    from app.extensions import cache
 
     global _cb_fail_count
     with _cb_lock:
@@ -62,7 +62,7 @@ def _circuit_success() -> None:
 
 
 def _circuit_failure() -> None:
-    from extensions import cache
+    from app.extensions import cache
 
     global _cb_fail_count, _cb_open_until
     with _cb_lock:
@@ -466,7 +466,7 @@ def get_currency_rates() -> dict[str, float]:
     Использует кэш на 1 час (3600 с). При ошибке/закрытии биржи возвращает
     резервные значения.
     """
-    from extensions import cache
+    from app.extensions import cache
 
     key = "moex_currency_rates"
     try:
@@ -478,7 +478,7 @@ def get_currency_rates() -> dict[str, float]:
 
     # Сначала пробуем CBR как базовый фолбэк (актуальнее хардкода)
     try:
-        from cbr import get_rates as _cbr_rates
+        from app.cbr import get_rates as _cbr_rates
         cbr = _cbr_rates({"USD", "EUR", "CNY"})
         rates = {"RUB": 1.0, **cbr}
     except Exception:
@@ -534,7 +534,7 @@ def get_gcurve_rate(maturity_years: float, trade_date: Optional[str] = None) -> 
     except RuntimeError:
         return 0.155
 
-    from extensions import cache
+    from app.extensions import cache
 
     cache_key = f"gcurve:{trade_date or 'latest'}:{maturity_years:.2f}"
     try:
@@ -594,7 +594,7 @@ def get_gold_price() -> float:
     """Возвращает текущую спотовую стоимость золота (GLDRUB_TOM) в рублях за грамм.
     Кэш на 1 час, резервное значение — 7000.0 рублей.
     """
-    from extensions import cache
+    from app.extensions import cache
 
     key = "moex_gold_price"
     try:

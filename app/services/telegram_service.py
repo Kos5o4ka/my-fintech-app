@@ -7,7 +7,7 @@ from typing import Optional
 import requests as http_requests
 from flask import current_app
 
-from extensions import cache
+from app.extensions import cache
 
 logger = logging.getLogger(__name__)
 

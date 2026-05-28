@@ -7,11 +7,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, date
 from typing import Optional
 
-from models import BondPortfolio
-from services.moex_service import get_bond_cached, get_coupon_calendar_cached
-from constants import calc_ndfl, LDV_YEARS_THRESHOLD, LDV_ANNUAL_DEDUCTION
-from moex import get_currency_rates, get_gcurve_rate
-from extensions import db
+from app.models import BondPortfolio
+from app.services.moex_service import get_bond_cached, get_coupon_calendar_cached
+from app.constants import calc_ndfl, LDV_YEARS_THRESHOLD, LDV_ANNUAL_DEDUCTION
+from app.moex import get_currency_rates, get_gcurve_rate
+from app.extensions import db
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ def build_portfolio_entry(bond: BondPortfolio, rates: Optional[dict] = None) -> 
         bond.buy_price = buy_p
         
         # Синхронизируем цену во всех связанных транзакциях покупки
-        from models import Transaction
+        from app.models import Transaction
         txs = Transaction.query.filter_by(user_id=bond.user_id, isin=bond.isin, tx_type='buy').all()
         for tx in txs:
             tx.price = normalize_bond_price(float(tx.price), facevalue)
@@ -283,7 +283,7 @@ def calc_fifo_pnl(
 
     Требует наличия записей в таблице Transaction с tx_type='buy'.
     """
-    from models import Transaction
+    from app.models import Transaction
 
     buys = (
         Transaction.query
@@ -454,7 +454,7 @@ def calc_sharpe_ratio(
 def calc_bond_duration(isin: str, last_price: float, facevalue: float, ytm_pct: float, amount: int) -> dict:
     """Рассчитывает дюрацию Маколея и модифицированную дюрацию облигации (в годах)."""
     import datetime
-    from services.moex_service import get_coupon_calendar_cached
+    from app.services.moex_service import get_coupon_calendar_cached
     
     today = datetime.date.today()
     coupons = get_coupon_calendar_cached(isin)
@@ -464,7 +464,7 @@ def calc_bond_duration(isin: str, last_price: float, facevalue: float, ytm_pct: 
     
     if not coupons:
         # Пытаемся получить дату погашения из деталей
-        from services.moex_service import get_bond_preview
+        from app.services.moex_service import get_bond_preview
         details = get_bond_preview(isin) or {}
         matdate_str = details.get("matdate")
         if matdate_str:

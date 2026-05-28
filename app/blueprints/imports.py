@@ -8,7 +8,7 @@ from flask import Blueprint, request, jsonify, render_template, make_response
 from flask_login import login_required, current_user
 from openpyxl.styles import Font, PatternFill, Alignment
 
-from models import BondPortfolio, Transaction
+from app.models import BondPortfolio, Transaction
 
 logger = logging.getLogger(__name__)
 imports_bp = Blueprint("imports", __name__)
@@ -37,7 +37,7 @@ def import_portfolio():
         
         try:
             file_content = f.read()
-            from services.import_service import parse_broker_file
+            from app.services.import_service import parse_broker_file
             
             deals, skipped_repo, err = parse_broker_file(file_content, filename, broker)
             if err:
@@ -61,7 +61,7 @@ def import_portfolio():
             }
         ), 400
 
-    from services.import_service import save_imported_deals
+    from app.services.import_service import save_imported_deals
     try:
         imported_count, coupon_count, errors = save_imported_deals(deals, current_user.id)
     except Exception as exc:

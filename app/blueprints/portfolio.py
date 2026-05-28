@@ -8,9 +8,9 @@ from flask import Blueprint, request, jsonify, render_template, abort, make_resp
 from flask_login import login_required, current_user
 from pydantic import ValidationError
 
-from extensions import db, cache
-from models import BondPortfolio, Watchlist, Transaction, PriceAlert
-from moex import (
+from app.extensions import db, cache
+from app.models import BondPortfolio, Watchlist, Transaction, PriceAlert
+from app.moex import (
     get_moex_bond,
     get_bond_history_all,
     get_bond_date_info,
@@ -18,18 +18,18 @@ from moex import (
     get_rgbi_history,
     get_screener_bonds,
 )
-from services.moex_service import (
+from app.services.moex_service import (
     get_bond_cached,
     get_bond_preview,
     get_coupon_calendar_cached,
 )
-from services.portfolio_service import (
+from app.services.portfolio_service import (
     build_portfolio_list,
     calc_portfolio_ytm,
     calc_coupon_income,
 )
-from schemas.portfolio import AddBondRequest, SellBondRequest, ScreenerRequest
-from constants import (
+from app.schemas.portfolio import AddBondRequest, SellBondRequest, ScreenerRequest
+from app.constants import (
     INCOME_TTL,
     CHART_RANGE_TTL,
     CHART_ALL_TTL,

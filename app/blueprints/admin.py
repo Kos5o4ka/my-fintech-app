@@ -5,10 +5,10 @@ from flask import Blueprint, request, jsonify, abort, render_template
 from flask_login import login_required, current_user
 from werkzeug.security import generate_password_hash
 
-from extensions import db, limiter
-from models import User, AuditLog
-from constants import MIN_PASSWORD_LEN
-from utils import get_client_ip, get_user_agent
+from app.extensions import db, limiter
+from app.models import User, AuditLog
+from app.constants import MIN_PASSWORD_LEN
+from app.utils import get_client_ip, get_user_agent
 
 logger = logging.getLogger(__name__)
 admin_bp = Blueprint("admin", __name__)

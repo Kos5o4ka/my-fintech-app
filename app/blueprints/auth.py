@@ -8,10 +8,10 @@ from flask import Blueprint, request, jsonify, session
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from extensions import db, limiter
-from models import User, AuditLog
-from schemas.auth import ChangePasswordRequest
-from utils import get_client_ip, get_user_agent
+from app.extensions import db, limiter
+from app.models import User, AuditLog
+from app.schemas.auth import ChangePasswordRequest
+from app.utils import get_client_ip, get_user_agent
 
 logger = logging.getLogger(__name__)
 auth_bp = Blueprint("auth", __name__)
@@ -60,7 +60,7 @@ def api_login():
 
     # Если у пользователя привязан Telegram — включаем 2FA
     if user.telegram_chat_id:
-        from services.telegram_service import generate_otp, create_pending_2fa
+        from app.services.telegram_service import generate_otp, create_pending_2fa
 
         token = create_pending_2fa(user.id, user.telegram_chat_id)
         generate_otp(user.telegram_chat_id)
@@ -78,7 +78,7 @@ def api_login():
     session.permanent = True
     login_user(user, remember=True)
     _audit("login_ok", user_id=user.id)
-    from services.telegram_service import refresh_tg_username
+    from app.services.telegram_service import refresh_tg_username
 
     refresh_tg_username(user)
     db.session.commit()
@@ -105,7 +105,7 @@ def verify_2fa():
     if not token or not code:
         return jsonify({"status": "error", "message": "Токен и код обязательны."}), 400
 
-    from services.telegram_service import resolve_pending_2fa, verify_otp
+    from app.services.telegram_service import resolve_pending_2fa, verify_otp
 
     pending = resolve_pending_2fa(token)
     if not pending:
@@ -133,7 +133,7 @@ def verify_2fa():
     session.permanent = True
     login_user(user, remember=True)
     _audit("login_ok", user_id=user.id, details={"method": "2fa_telegram"})
-    from services.telegram_service import refresh_tg_username
+    from app.services.telegram_service import refresh_tg_username
 
     refresh_tg_username(user)
     db.session.commit()

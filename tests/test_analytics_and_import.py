@@ -8,8 +8,8 @@ from unittest.mock import patch, MagicMock
 
 from tests.test_app import BaseTest, MOCK_MOEX
 from app import app
-from extensions import db
-from models import BondPortfolio, Transaction
+from app.extensions import db
+from app.models import BondPortfolio, Transaction
 
 
 class AnalyticsAndImportTests(BaseTest):
@@ -78,7 +78,7 @@ class AnalyticsAndImportTests(BaseTest):
         self.assertEqual(len(data["trades"]), 1)
         self.assertEqual(data["trades"][0]["isin"], "SU26238RMFS4")
 
-    @patch("blueprints.analytics.get_rgbi_history")
+    @patch("app.blueprints.analytics.get_rgbi_history")
     def test_portfolio_benchmark_success(self, mock_rgbi):
         """GET /api/portfolio/benchmark returns mocked RGBI data."""
         mock_rgbi.return_value = [
@@ -135,8 +135,8 @@ class AnalyticsAndImportTests(BaseTest):
         r = self.client.get("/api/portfolio/compare?isin1=SU26238RMFS4&isin2=SU26238RMFS4")
         self.assertEqual(r.status_code, 400)
 
-    @patch("blueprints.analytics.get_bond_history_all")
-    @patch("blueprints.analytics.get_moex_bond")
+    @patch("app.blueprints.analytics.get_bond_history_all")
+    @patch("app.blueprints.analytics.get_moex_bond")
     def test_compare_bonds_success(self, mock_get_bond, mock_history):
         """GET /api/portfolio/compare returns normalized historical comparison."""
         mock_get_bond.side_effect = lambda isin: {
@@ -211,7 +211,7 @@ class AnalyticsAndImportTests(BaseTest):
         self.assertIn("hhi", data["assets"])
         self.assertIn("weights", data["assets"])
 
-    @patch("services.portfolio_service.get_coupon_calendar_cached")
+    @patch("app.services.portfolio_service.get_coupon_calendar_cached")
     def test_modified_duration_calculation(self, mock_calendar):
         """GET /api/portfolio includes modified_duration and weighted average portfolio_duration."""
         mock_calendar.return_value = [
@@ -278,8 +278,8 @@ class AnalyticsAndImportTests(BaseTest):
 
     def test_circuit_breaker_failsafe(self):
         """MOEX circuit breaker locks requests after consecutive failures."""
-        from moex import _fetch_json
-        import moex
+        from app.moex import _fetch_json
+        from app import moex
         
         # Reset local count
         moex._cb_fail_count = 0
@@ -300,10 +300,10 @@ class AnalyticsAndImportTests(BaseTest):
             return True
             
         import requests
-        with patch("extensions.cache.get", side_effect=mock_get), \
-             patch("extensions.cache.set", side_effect=mock_set), \
-             patch("extensions.cache.delete", side_effect=mock_delete), \
-             patch("moex.requests.get", side_effect=requests.RequestException("Network failure")):
+        with patch("app.extensions.cache.get", side_effect=mock_get), \
+             patch("app.extensions.cache.set", side_effect=mock_set), \
+             patch("app.extensions.cache.delete", side_effect=mock_delete), \
+             patch("app.moex.requests.get", side_effect=requests.RequestException("Network failure")):
              
             # Делаем 5 неудачных попыток чтобы взвести предохранитель
             for _ in range(5):
@@ -339,7 +339,7 @@ class AnalyticsAndImportTests(BaseTest):
         self._set_logged_in(uid)
         
         with app.app_context():
-            from models import User
+            from app.models import User
             user = db.session.get(User, uid)
             user.avatar = "some_cat_avatar.png"
             db.session.commit()
@@ -350,7 +350,7 @@ class AnalyticsAndImportTests(BaseTest):
         self.assertEqual(data["status"], "success")
         
         with app.app_context():
-            from models import User
+            from app.models import User
             user = db.session.get(User, uid)
             self.assertIsNone(user.avatar)
 

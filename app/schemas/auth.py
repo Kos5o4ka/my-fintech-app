@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from constants import MIN_PASSWORD_LEN
+from app.constants import MIN_PASSWORD_LEN
 
 
 class LoginRequest(BaseModel):

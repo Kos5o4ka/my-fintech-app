@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from extensions import db
+from app.extensions import db
 from flask_login import UserMixin
 from sqlalchemy import JSON
 

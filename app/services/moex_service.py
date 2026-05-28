@@ -2,9 +2,9 @@
 
 from typing import Optional
 
-from extensions import cache
-from moex import get_moex_bond, get_bond_details
-from constants import MOEX_BOND_TTL, BOND_PREVIEW_TTL, COUPON_CALENDAR_TTL
+from app.extensions import cache
+from app.moex import get_moex_bond, get_bond_details
+from app.constants import MOEX_BOND_TTL, BOND_PREVIEW_TTL, COUPON_CALENDAR_TTL
 
 
 def get_bond_cached(isin: str) -> Optional[dict]:
@@ -56,7 +56,7 @@ def get_coupon_calendar_cached(secid: str) -> list[dict]:
     key = f"moex_coupons:{secid}"
     result = cache.get(key)
     if result is None:
-        from moex import get_coupon_calendar
+        from app.moex import get_coupon_calendar
 
         result = get_coupon_calendar(secid)
         if result:
@@ -73,7 +73,7 @@ def get_all_coupons_cached(secid: str) -> list[dict]:
     key = f"moex_all_coupons:{secid}"
     result = cache.get(key)
     if result is None:
-        from moex import get_coupon_calendar
+        from app.moex import get_coupon_calendar
 
         result = get_coupon_calendar(secid, include_past=True)
         if result:

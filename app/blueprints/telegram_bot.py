@@ -4,9 +4,9 @@ import logging
 
 from flask import Blueprint, request, jsonify, current_app, abort
 
-from extensions import db
-from models import User
-from services.telegram_service import verify_link_token, send_message
+from app.extensions import db
+from app.models import User
+from app.services.telegram_service import verify_link_token, send_message
 
 logger = logging.getLogger(__name__)
 

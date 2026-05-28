@@ -6,10 +6,10 @@ from typing import Optional
 from flask import Blueprint, request, jsonify, render_template
 from flask_login import login_required, current_user
 
-from extensions import db, cache
-from models import BondPortfolio
-from services.moex_service import get_bond_cached
-from services.portfolio_service import (
+from app.extensions import db, cache
+from app.models import BondPortfolio
+from app.services.moex_service import get_bond_cached
+from app.services.portfolio_service import (
     build_portfolio_list,
     calc_portfolio_ytm,
     calc_tax_report,
@@ -17,8 +17,8 @@ from services.portfolio_service import (
     calc_monthly_profit,
     calc_portfolio_diversification,
 )
-from constants import TIMEFRAME_DAYS, MAX_CHART_POINTS, CHART_RANGE_TTL, STATS_TTL, BENCHMARK_TTL
-from moex import get_moex_bond, get_rgbi_history, get_bond_history_all
+from app.constants import TIMEFRAME_DAYS, MAX_CHART_POINTS, CHART_RANGE_TTL, STATS_TTL, BENCHMARK_TTL
+from app.moex import get_moex_bond, get_rgbi_history, get_bond_history_all
 
 logger = logging.getLogger(__name__)
 analytics_bp = Blueprint("analytics", __name__)
@@ -59,7 +59,7 @@ def portfolio_tax():
     active = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False).all()
     summary = calc_tax_report(sold, active, year)
 
-    from services.moex_service import get_all_coupons_cached
+    from app.services.moex_service import get_all_coupons_cached
     from datetime import datetime
 
     def get_bond_coupon_income(bond, end_date):

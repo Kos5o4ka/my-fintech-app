@@ -17,7 +17,7 @@ os.environ.pop("DATABASE_URL", None)  # prevent accidental PostgreSQL connection
 from sqlalchemy.pool import StaticPool  # noqa: E402
 
 from app import app  # noqa: E402
-from extensions import db  # noqa: E402
+from app.extensions import db  # noqa: E402
 from werkzeug.exceptions import RequestEntityTooLarge  # noqa: E402
 
 
@@ -60,7 +60,7 @@ class BaseTest(unittest.TestCase):
 
     # ── Helpers ────────────────────────────────────────────────────────────
     def _make_user(self, username="testuser", password="testpass1", is_admin=False):
-        from models import User
+        from app.models import User
         from werkzeug.security import generate_password_hash
 
         with app.app_context():
@@ -98,7 +98,7 @@ class BaseTest(unittest.TestCase):
         buy_price=900.0,
         amount=10,
     ):
-        from models import BondPortfolio
+        from app.models import BondPortfolio
 
         with app.app_context():
             bond = BondPortfolio(
@@ -141,7 +141,7 @@ class SmokTests(BaseTest):
         self.assertIn("is_authenticated", data)
 
     def test_config_security_settings(self):
-        self.assertEqual(app.config["MAX_CONTENT_LENGTH"], 5 * 1024 * 1024)
+        self.assertEqual(app.config["MAX_CONTENT_LENGTH"], 50 * 1024 * 1024)
         self.assertIn("png", app.config["ALLOWED_EXTENSIONS"])
         self.assertTrue(app.config["SESSION_COOKIE_HTTPONLY"])
         self.assertEqual(app.config["SESSION_COOKIE_SAMESITE"], "Lax")
@@ -329,7 +329,7 @@ class PortfolioTests(BaseTest):
     def test_get_portfolio_empty(self):
         uid = self._make_user()
         self._set_logged_in(uid)
-        with patch("services.moex_service.get_bond_cached", return_value=None):
+        with patch("app.services.moex_service.get_bond_cached", return_value=None):
             r = self.client.get("/api/portfolio")
         self.assertEqual(r.status_code, 200)
         data = r.get_json()
@@ -342,7 +342,7 @@ class PortfolioTests(BaseTest):
         self._make_bond(uid)
         # Patch via the local reference in portfolio_service (from-import)
         mock_moex_910 = {**MOCK_MOEX, "price": 910.0}
-        with patch("services.portfolio_service.get_bond_cached", return_value=mock_moex_910):
+        with patch("app.services.portfolio_service.get_bond_cached", return_value=mock_moex_910):
             r = self.client.get("/api/portfolio")
         self.assertEqual(r.status_code, 200)
         data = r.get_json()
@@ -363,8 +363,8 @@ class PortfolioTests(BaseTest):
         )
         self.assertEqual(r.status_code, 400)
 
-    @patch("moex.requests.get")
-    @patch("blueprints.portfolio.get_moex_bond")
+    @patch("app.moex.requests.get")
+    @patch("app.blueprints.portfolio.get_moex_bond")
     def test_add_bond_success(self, mock_moex, mock_req):
         mock_moex.return_value = MOCK_MOEX
         mock_req.return_value = MOCK_REQUESTS_SPEC_EMPTY
@@ -383,8 +383,8 @@ class PortfolioTests(BaseTest):
         self.assertEqual(r.status_code, 201)
         self.assertEqual(r.get_json()["status"], "success")
 
-    @patch("moex.requests.get")
-    @patch("blueprints.portfolio.get_moex_bond")
+    @patch("app.moex.requests.get")
+    @patch("app.blueprints.portfolio.get_moex_bond")
     def test_add_bond_not_found(self, mock_moex, mock_req):
         mock_moex.return_value = None
         mock_req.return_value = MOCK_REQUESTS_SPEC_EMPTY
@@ -435,7 +435,7 @@ class PortfolioTests(BaseTest):
         self.assertEqual(r.get_json()["status"], "success")
 
         with app.app_context():
-            from models import BondPortfolio, Transaction
+            from app.models import BondPortfolio, Transaction
 
             orig_bond = db.session.get(BondPortfolio, bond_id)
             self.assertEqual(orig_bond.amount, 6)
@@ -481,7 +481,7 @@ class PortfolioTests(BaseTest):
         self.assertEqual(r.get_json()["notes"], "Great long term investment")
 
         with app.app_context():
-            from models import BondPortfolio
+            from app.models import BondPortfolio
 
             bond = db.session.get(BondPortfolio, bond_id)
             self.assertEqual(bond.notes, "Great long term investment")
@@ -546,7 +546,7 @@ class PortfolioTests(BaseTest):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.get_json(), [])
 
-    @patch("blueprints.portfolio.search_bonds")
+    @patch("app.blueprints.portfolio.search_bonds")
     def test_search_bond_results(self, mock_search):
         mock_search.return_value = [
             {"secid": "SU26238RMFS4", "isin": "SU26238RMFS4", "name": "ОФЗ 26238"}
@@ -577,9 +577,9 @@ class MoexCurrencyRatesTests(BaseTest):
 
     def test_currency_rates_fallback_on_error(self):
         """When MOEX is unreachable, fallback static rates are returned and valid."""
-        from moex import get_currency_rates
+        from app.moex import get_currency_rates
 
-        with patch("moex._fetch_json", side_effect=Exception("Network error")):
+        with patch("app.moex._fetch_json", side_effect=Exception("Network error")):
             rates = get_currency_rates()
         self.assertIsInstance(rates, dict)
         self.assertIn("USD", rates)
@@ -594,7 +594,7 @@ class MoexCurrencyRatesTests(BaseTest):
 
     def test_currency_rates_parses_moex_response(self):
         """When MOEX returns a price, it overrides the fallback."""
-        from moex import get_currency_rates
+        from app.moex import get_currency_rates
 
         fake_response = {
             "marketdata": {
@@ -604,12 +604,12 @@ class MoexCurrencyRatesTests(BaseTest):
             "securities": {"columns": [], "data": []},
         }
         # Cache miss → _fetch_json called for each currency
-        with patch("moex._fetch_json", return_value=fake_response), patch(
-            "moex.get_currency_rates.__wrapped__", create=True
+        with patch("app.moex._fetch_json", return_value=fake_response), patch(
+            "app.moex.get_currency_rates.__wrapped__", create=True
         ):
             # Clear cache before test
             try:
-                from extensions import cache
+                from app.extensions import cache
 
                 cache.delete("moex_currency_rates")
             except Exception:
@@ -621,23 +621,23 @@ class MoexCurrencyRatesTests(BaseTest):
 
     def test_gold_price_fallback_on_error(self):
         """When MOEX gold endpoint fails, the static fallback 7000.0 is returned."""
-        from moex import get_gold_price
+        from app.moex import get_gold_price
 
         # Clear cache so the cached value from a previous test doesn't leak in
         try:
-            from extensions import cache
+            from app.extensions import cache
 
             cache.delete("moex_gold_price")
         except Exception:
             pass
-        with patch("moex._fetch_json", side_effect=Exception("Timeout")):
+        with patch("app.moex._fetch_json", side_effect=Exception("Timeout")):
             price = get_gold_price()
         self.assertIsInstance(price, float)
         self.assertEqual(price, 7000.0)
 
     def test_gold_price_parses_moex_response(self):
         """When MOEX returns a valid gold spot price, it is returned correctly."""
-        from moex import get_gold_price
+        from app.moex import get_gold_price
 
         fake_response = {
             "marketdata": {
@@ -647,12 +647,12 @@ class MoexCurrencyRatesTests(BaseTest):
             "securities": {"columns": [], "data": []},
         }
         try:
-            from extensions import cache
+            from app.extensions import cache
 
             cache.delete("moex_gold_price")
         except Exception:
             pass
-        with patch("moex._fetch_json", return_value=fake_response):
+        with patch("app.moex._fetch_json", return_value=fake_response):
             price = get_gold_price()
         self.assertIsInstance(price, float)
         self.assertAlmostEqual(price, 8500.0, places=1)
@@ -664,7 +664,7 @@ class GoldBondValuationTests(BaseTest):
 
     def _make_gld_bond(self, user_id, buy_price=100.0, amount=5):
         """Helper: inserts a BondPortfolio entry with currency='GLD'."""
-        from models import BondPortfolio
+        from app.models import BondPortfolio
 
         with app.app_context():
             bond = BondPortfolio(
@@ -688,7 +688,7 @@ class GoldBondValuationTests(BaseTest):
         uid = self._make_user()
         bond_id = self._make_gld_bond(uid)
         with app.app_context():
-            from models import BondPortfolio
+            from app.models import BondPortfolio
 
             bond = db.session.get(BondPortfolio, bond_id)
             self.assertEqual(bond.currency, "GLD")
@@ -709,7 +709,7 @@ class GoldBondValuationTests(BaseTest):
             "ytm": 0.0,
             "currency": "GLD",
         }
-        with patch("services.moex_service.get_bond_cached", return_value=mock_gld_moex):
+        with patch("app.services.moex_service.get_bond_cached", return_value=mock_gld_moex):
             r = self.client.get("/api/portfolio")
         self.assertEqual(r.status_code, 200)
         data = r.get_json()
@@ -718,7 +718,7 @@ class GoldBondValuationTests(BaseTest):
         self.assertIsInstance(data["total_value"], float)
         self.assertGreaterEqual(data["total_value"], 0.0)
 
-    @patch("blueprints.portfolio.get_bond_preview")
+    @patch("app.blueprints.portfolio.get_bond_preview")
     def test_bond_preview_returns_gld_currency(self, mock_preview):
         """GET /api/bond_preview/<isin> returns currency='GLD' for gold bonds."""
         mock_preview.return_value = {
@@ -756,7 +756,7 @@ class BrokerImportTests(BaseTest):
         writer.writerows(rows)
         return buf.getvalue().encode("utf-8")
 
-    @patch("blueprints.portfolio.get_moex_bond")
+    @patch("app.blueprints.portfolio.get_moex_bond")
     def test_import_csv_single_deal_success(self, mock_moex):
         """Uploading a valid one-row CSV creates one BondPortfolio + Transaction."""
         mock_moex.return_value = {
@@ -793,7 +793,7 @@ class BrokerImportTests(BaseTest):
         self.assertEqual(data["errors"], [])
 
         with app.app_context():
-            from models import BondPortfolio, Transaction
+            from app.models import BondPortfolio, Transaction
 
             bonds = BondPortfolio.query.filter_by(user_id=uid, is_sold=False).all()
             self.assertEqual(len(bonds), 1)
@@ -805,7 +805,7 @@ class BrokerImportTests(BaseTest):
             self.assertEqual(len(txs), 1)
             self.assertEqual(txs[0].isin, "SU26238RMFS4")
 
-    @patch("blueprints.portfolio.get_moex_bond")
+    @patch("app.blueprints.portfolio.get_moex_bond")
     def test_import_json_deals_success(self, mock_moex):
         """Sending JSON deals array via POST body imports correctly."""
         mock_moex.return_value = {
@@ -915,7 +915,7 @@ class BrokerImportTests(BaseTest):
         self.assertEqual(r.get_json()["imported_count"], 0) # Skipped duplicate!
         
         with app.app_context():
-            from models import BondPortfolio, Transaction
+            from app.models import BondPortfolio, Transaction
             bonds = BondPortfolio.query.filter_by(user_id=uid).all()
             txs = Transaction.query.filter_by(user_id=uid).all()
             self.assertEqual(len(bonds), 1)
@@ -931,7 +931,7 @@ class BrokerImportTests(BaseTest):
         
         # Add corresponding transaction in database
         with app.app_context():
-            from models import Transaction
+            from app.models import Transaction
             db.session.add(Transaction(
                 user_id=uid,
                 isin="SU26238RMFS4",
@@ -953,13 +953,13 @@ class BrokerImportTests(BaseTest):
             "currency": "RUB",
         }
         
-        with patch("services.portfolio_service.get_bond_cached", return_value=mock_moex):
+        with patch("app.services.portfolio_service.get_bond_cached", return_value=mock_moex):
             # Fetch portfolio, which triggers build_portfolio_entry -> normalize_bond_price
             r = self.client.get("/api/portfolio")
             self.assertEqual(r.status_code, 200)
             
         with app.app_context():
-            from models import BondPortfolio, Transaction
+            from app.models import BondPortfolio, Transaction
             bond = db.session.get(BondPortfolio, bond_id)
             # The buy price should be healed: (98.50 / 100) * 1000 = 985.00
             self.assertAlmostEqual(float(bond.buy_price), 985.00, places=2)
@@ -976,7 +976,7 @@ class BrokerImportTests(BaseTest):
         # Create a bond and a corresponding transaction in database
         bond_id = self._make_bond(uid, isin="SU26238RMFS4", buy_price=900.0, amount=10)
         with app.app_context():
-            from models import Transaction, BondPortfolio
+            from app.models import Transaction, BondPortfolio
             bond = db.session.get(BondPortfolio, bond_id)
             db.session.add(Transaction(
                 user_id=uid,
@@ -996,7 +996,7 @@ class BrokerImportTests(BaseTest):
         
         # Verify that both are deleted
         with app.app_context():
-            from models import BondPortfolio, Transaction
+            from app.models import BondPortfolio, Transaction
             bond_after = db.session.get(BondPortfolio, bond_id)
             self.assertIsNone(bond_after)
             

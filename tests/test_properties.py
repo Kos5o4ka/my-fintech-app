@@ -14,13 +14,13 @@ from types import SimpleNamespace  # noqa: E402
 from hypothesis import assume, given  # noqa: E402
 from hypothesis import strategies as st  # noqa: E402
 
-from services.portfolio_service import (  # noqa: E402
+from app.services.portfolio_service import (  # noqa: E402
     build_trade_entry,
     calc_portfolio_ytm,
     calc_sharpe_ratio,
     apply_ldv,
 )
-from constants import calc_ndfl, LDV_ANNUAL_DEDUCTION  # noqa: E402
+from app.constants import calc_ndfl, LDV_ANNUAL_DEDUCTION  # noqa: E402
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

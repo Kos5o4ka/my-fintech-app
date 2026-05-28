@@ -1,7 +1,7 @@
 """Pydantic схемы валидации входящих JSON-запросов."""
 
-from schemas.portfolio import AddBondRequest, SellBondRequest, ScreenerRequest
-from schemas.auth import LoginRequest, ChangePasswordRequest
+from app.schemas.portfolio import AddBondRequest, SellBondRequest, ScreenerRequest
+from app.schemas.auth import LoginRequest, ChangePasswordRequest
 
 __all__ = [
     "AddBondRequest",

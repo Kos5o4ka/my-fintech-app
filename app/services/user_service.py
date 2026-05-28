@@ -9,9 +9,9 @@ from flask import current_app
 from PIL import Image, UnidentifiedImageError
 from werkzeug.datastructures import FileStorage
 
-from extensions import db
-from models import User
-from constants import ALLOWED_IMAGE_EXTS, MAX_AVATAR_BYTES
+from app.extensions import db
+from app.models import User
+from app.constants import ALLOWED_IMAGE_EXTS, MAX_AVATAR_BYTES
 
 logger = logging.getLogger(__name__)
 

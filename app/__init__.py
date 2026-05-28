@@ -19,8 +19,8 @@ from flask_wtf import CSRFProtect
 from flask_wtf.csrf import generate_csrf
 from werkzeug.exceptions import RequestEntityTooLarge
 
-from config import get_config
-from extensions import db, login_manager, migrate, cache, limiter, mail
+from app.config import get_config
+from app.extensions import db, login_manager, migrate, cache, limiter, mail
 
 logging.basicConfig(
     level=logging.INFO,
@@ -99,14 +99,14 @@ def create_app(config_class=None) -> Flask:
     app.jinja_env.globals["static_ver"] = _git_hash
 
     # ── Blueprints ────────────────────────────────────────────────────────────
-    from blueprints.main import main_bp
-    from blueprints.auth import auth_bp
-    from blueprints.admin import admin_bp
-    from blueprints.profile import profile_bp
-    from blueprints.portfolio import portfolio_bp
-    from blueprints.telegram_bot import telegram_bp
-    from blueprints.analytics import analytics_bp
-    from blueprints.imports import imports_bp
+    from app.blueprints.main import main_bp
+    from app.blueprints.auth import auth_bp
+    from app.blueprints.admin import admin_bp
+    from app.blueprints.profile import profile_bp
+    from app.blueprints.portfolio import portfolio_bp
+    from app.blueprints.telegram_bot import telegram_bp
+    from app.blueprints.analytics import analytics_bp
+    from app.blueprints.imports import imports_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp)
@@ -202,7 +202,7 @@ def create_app(config_class=None) -> Flask:
     # ── User loader ───────────────────────────────────────────────────────────
     @login_manager.user_loader
     def load_user(user_id):
-        from models import User
+        from app.models import User
         return db.session.get(User, int(user_id))
 
     # ── Error handlers ────────────────────────────────────────────────────────
@@ -252,7 +252,7 @@ def create_app(config_class=None) -> Flask:
             return "Unauthorized", 401
 
         try:
-            from models import User, BondPortfolio, Transaction
+            from app.models import User, BondPortfolio, Transaction
             user_count = db.session.query(User).count()
             portfolio_count = db.session.query(BondPortfolio).count()
             tx_count = db.session.query(Transaction).count()
@@ -322,9 +322,9 @@ def _update_bond_prices(app) -> None:
     from concurrent.futures import ThreadPoolExecutor, as_completed
     with app.app_context():
         try:
-            from models import BondPortfolio
-            from moex import get_moex_bond
-            from constants import MOEX_BOND_TTL
+            from app.models import BondPortfolio
+            from app.moex import get_moex_bond
+            from app.constants import MOEX_BOND_TTL
 
             active = BondPortfolio.query.filter_by(is_sold=False).all()
             if not active:
@@ -378,10 +378,10 @@ def _send_coupon_reminders(app) -> None:
         if not has_tg:
             return
         try:
-            from models import User, BondPortfolio
-            from moex import get_coupon_calendar
+            from app.models import User, BondPortfolio
+            from app.moex import get_coupon_calendar
             from datetime import date, timedelta
-            from services.telegram_service import send_message as tg_send
+            from app.services.telegram_service import send_message as tg_send
 
             tomorrow = date.today() + timedelta(days=1)
 
@@ -426,12 +426,12 @@ def _send_coupon_reminders(app) -> None:
 
 def _check_price_alerts(prices_map: dict) -> None:
     """Вспомогательный метод для проверки активных ценовых алертов."""
-    from models import User
-    from services.telegram_service import send_message as tg_send
+    from app.models import User
+    from app.services.telegram_service import send_message as tg_send
     
     # Импортируем локально, так как модель PriceAlert может быть создана динамически
     try:
-        from models import PriceAlert
+        from app.models import PriceAlert
     except ImportError:
         return
 

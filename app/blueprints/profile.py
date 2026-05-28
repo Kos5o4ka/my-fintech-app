@@ -6,9 +6,9 @@ from flask import Blueprint, request, jsonify, render_template
 from flask_login import login_required, current_user
 from flask_wtf.csrf import generate_csrf
 
-from extensions import db
-from models import AuditLog
-from services.user_service import save_avatar, delete_avatar, update_telegram_settings
+from app.extensions import db
+from app.models import AuditLog
+from app.services.user_service import save_avatar, delete_avatar, update_telegram_settings
 
 logger = logging.getLogger(__name__)
 profile_bp = Blueprint("profile", __name__)
@@ -21,8 +21,8 @@ profile_bp = Blueprint("profile", __name__)
 @login_required
 def profile_stats():
     """Счётчики для hero-секции профиля: облигаций, стоимость, закрытые сделки."""
-    from models import BondPortfolio
-    from services.portfolio_service import build_portfolio_list
+    from app.models import BondPortfolio
+    from app.services.portfolio_service import build_portfolio_list
 
     active = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False).all()
     sold = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=True).count()
@@ -99,7 +99,7 @@ def telegram_link():
     Если TELEGRAM_BOT_TOKEN не задан, возвращает ошибку конфигурации.
     """
     from flask import current_app
-    from services.telegram_service import generate_link_token, get_bot_deep_link
+    from app.services.telegram_service import generate_link_token, get_bot_deep_link
 
     if not current_app.config.get("TELEGRAM_BOT_TOKEN"):
         return jsonify(
