@@ -4,7 +4,6 @@ import logging
 import openpyxl
 import re
 from datetime import datetime, date
-from io import StringIO
 from typing import Optional, Tuple, List, Dict, Any
 
 from app.extensions import db, cache
@@ -58,13 +57,7 @@ def _parse_num(v) -> Optional[float]:
         return float(v)
     if v is None:
         return None
-    s = (
-        str(v)
-        .strip()
-        .replace("\xa0", "")
-        .replace(" ", "")
-        .replace(",", ".")
-    )
+    s = str(v).strip().replace("\xa0", "").replace(" ", "").replace(",", ".")
     try:
         return float(s) if s else None
     except ValueError:
@@ -113,7 +106,9 @@ def _is_cancelled(val) -> bool:
     return v in ("отменена", "отменено", "cancelled", "canceled", "rejected")
 
 
-def _find_header_row_from_list(rows: list, max_scan: int = 50) -> Tuple[Optional[int], Dict[str, int]]:
+def _find_header_row_from_list(
+    rows: list, max_scan: int = 50
+) -> Tuple[Optional[int], Dict[str, int]]:
     anchors = {_norm_hdr(a) for a in _ANCHORS}
     for ri, row_values in enumerate(rows[:max_scan]):
         hdrs = {}
@@ -170,11 +165,7 @@ def _parse_vtb_xlsx(all_rows: list) -> list:
         if not (reg_code.startswith("4B") or "RMFS" in reg_code):
             continue
 
-        deal_no = (
-            str(row[25]).strip()
-            if len(row) > 25 and row[25] is not None
-            else ""
-        )
+        deal_no = str(row[25]).strip() if len(row) > 25 and row[25] is not None else ""
         if deal_no and deal_no in seen_deals:
             continue
         if deal_no:
@@ -272,7 +263,9 @@ def bust_user_cache(user_id: int) -> None:
         pass
 
 
-def parse_broker_file(file_content: bytes, filename: str, broker: str) -> Tuple[List[Dict[str, Any]], int, Optional[str]]:
+def parse_broker_file(
+    file_content: bytes, filename: str, broker: str
+) -> Tuple[List[Dict[str, Any]], int, Optional[str]]:
     """Парсит брокерский отчёт и возвращает список найденных сделок (deals, skipped_repo, error_message)."""
     filename = filename.lower()
     filter_repo = broker in ("tinkoff", "tbank", "auto")
@@ -302,12 +295,22 @@ def parse_broker_file(file_content: bytes, filename: str, broker: str) -> Tuple[
             if effective_broker == "vtb":
                 deals.extend(_parse_vtb_xlsx(all_rows))
                 if not deals:
-                    return [], 0, ("ВТБ: сделки с облигациями не найдены. Убедитесь, что файл содержит "
-                                   "раздел «Заключённые/Завершённые сделки» с покупками или продажами.")
+                    return (
+                        [],
+                        0,
+                        (
+                            "ВТБ: сделки с облигациями не найдены. Убедитесь, что файл содержит "
+                            "раздел «Заключённые/Завершённые сделки» с покупками или продажами."
+                        ),
+                    )
             else:
                 header_row_idx, hdrs = _find_header_row_from_list(all_rows)
                 if not hdrs:
-                    return [], 0, "Не найдена строка заголовков. Убедитесь, что файл содержит ISIN, Количество и Цена."
+                    return (
+                        [],
+                        0,
+                        "Не найдена строка заголовков. Убедитесь, что файл содержит ISIN, Количество и Цена.",
+                    )
 
                 isin_col = _find_col(hdrs, _ISIN)
                 amt_col = _find_col(hdrs, _AMT)
@@ -331,14 +334,18 @@ def parse_broker_file(file_content: bytes, filename: str, broker: str) -> Tuple[
                         missing.append("Количество")
                     if not price_col:
                         missing.append("Цена за единицу")
-                    return [], 0, f"Не найдены обязательные столбцы: {', '.join(missing)}."
+                    return (
+                        [],
+                        0,
+                        f"Не найдены обязательные столбцы: {', '.join(missing)}.",
+                    )
 
                 def _gc(rv, col):
                     if not col or col > len(rv):
                         return None
                     return rv[col - 1]
 
-                for row_values in all_rows[header_row_idx + 1:]:
+                for row_values in all_rows[header_row_idx + 1 :]:
                     isin_v = _gc(row_values, isin_col)
                     if isin_v is None:
                         continue
@@ -414,8 +421,18 @@ def parse_broker_file(file_content: bytes, filename: str, broker: str) -> Tuple[
                         m: i
                         for i, m in enumerate(
                             [
-                                "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
-                                "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"
+                                "JAN",
+                                "FEB",
+                                "MAR",
+                                "APR",
+                                "MAY",
+                                "JUN",
+                                "JUL",
+                                "AUG",
+                                "SEP",
+                                "OCT",
+                                "NOV",
+                                "DEC",
                             ],
                             1,
                         )
@@ -486,7 +503,7 @@ def parse_broker_file(file_content: bytes, filename: str, broker: str) -> Tuple[
                     break
 
             reader = csv.DictReader(
-                [lines[header_idx]] + lines[header_idx + 1:],
+                [lines[header_idx]] + lines[header_idx + 1 :],
                 delimiter=delim,
             )
 
@@ -558,13 +575,17 @@ def save_imported_deals(deals: list, user_id: int) -> Tuple[int, int, List[str]]
 
         raw_amt = _parse_num(deal.get("amount"))
         if raw_amt is None or raw_amt <= 0:
-            errors.append(f"Пропущено {isin}: некорректное количество ({deal.get('amount')!r})")
+            errors.append(
+                f"Пропущено {isin}: некорректное количество ({deal.get('amount')!r})"
+            )
             continue
         amount = int(raw_amt)
 
         price = _parse_num(deal.get("price"))
         if price is None or price <= 0:
-            errors.append(f"Пропущено {isin}: некорректная цена ({deal.get('price')!r})")
+            errors.append(
+                f"Пропущено {isin}: некорректная цена ({deal.get('price')!r})"
+            )
             continue
 
         trade_date = _parse_any_date(deal.get("date"))
@@ -574,7 +595,9 @@ def save_imported_deals(deals: list, user_id: int) -> Tuple[int, int, List[str]]
 
         # ── Интеллектуальная дедупликация ──
         if deal_no:
-            exists = Transaction.query.filter_by(user_id=user_id, deal_no=deal_no).first()
+            exists = Transaction.query.filter_by(
+                user_id=user_id, deal_no=deal_no
+            ).first()
             if exists:
                 continue
         else:
@@ -643,7 +666,9 @@ def save_imported_deals(deals: list, user_id: int) -> Tuple[int, int, List[str]]
             imported_count += 1
 
         else:  # sell
-            active = BondPortfolio.query.filter_by(user_id=user_id, isin=isin, is_sold=False).first()
+            active = BondPortfolio.query.filter_by(
+                user_id=user_id, isin=isin, is_sold=False
+            ).first()
             if active:
                 active.is_sold = True
                 active.sell_price = price

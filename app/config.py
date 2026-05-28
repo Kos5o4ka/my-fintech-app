@@ -65,7 +65,9 @@ class ProductionConfig(Config):
     # Включать только если сайт работает по HTTPS.
     # При прямом HTTP-доступе (без nginx+SSL) Secure-кука не отправляется браузером,
     # что ломает сессии и CSRF. Управляется через переменную окружения.
-    SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "false").lower() == "true"
+    SESSION_COOKIE_SECURE = (
+        os.environ.get("SESSION_COOKIE_SECURE", "false").lower() == "true"
+    )
 
     # Connection pooling — только для PostgreSQL, SQLite не поддерживает
     SQLALCHEMY_ENGINE_OPTIONS = {

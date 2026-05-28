@@ -28,12 +28,14 @@ CSS_FILES = [
     "static/css/pages/portfolio-page.css",
 ]
 
+
 def minify_js(content: str) -> str:
     content = re.sub(r"/\*[\s\S]*?\*/", "", content)
     content = re.sub(r"(?m)//.*?$", "", content)
     content = re.sub(r"\s+", " ", content)
     content = re.sub(r"\s*([{}();,:+\-\[\]=<>])\s*", r"\1", content)
     return content.strip()
+
 
 def minify_css(content: str) -> str:
     content = re.sub(r"/\*[\s\S]*?\*/", "", content)
@@ -42,10 +44,12 @@ def minify_css(content: str) -> str:
     content = re.sub(r";\}", "}", content)
     return content.strip()
 
+
 def write_minified(path: Path, minified: str):
     out_path = path.with_name(path.stem + ".min" + path.suffix)
     out_path.write_text(minified, encoding="utf-8")
     print(f"Written {out_path}")
+
 
 def main():
     cwd = Path(__file__).resolve().parent
@@ -61,6 +65,7 @@ def main():
             print(f"Skipping missing {path}")
             continue
         write_minified(path, minify_css(path.read_text(encoding="utf-8")))
+
 
 if __name__ == "__main__":
     main()

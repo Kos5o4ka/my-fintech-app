@@ -342,7 +342,9 @@ class PortfolioTests(BaseTest):
         self._make_bond(uid)
         # Patch via the local reference in portfolio_service (from-import)
         mock_moex_910 = {**MOCK_MOEX, "price": 910.0}
-        with patch("app.services.portfolio_service.get_bond_cached", return_value=mock_moex_910):
+        with patch(
+            "app.services.portfolio_service.get_bond_cached", return_value=mock_moex_910
+        ):
             r = self.client.get("/api/portfolio")
         self.assertEqual(r.status_code, 200)
         data = r.get_json()
@@ -709,7 +711,9 @@ class GoldBondValuationTests(BaseTest):
             "ytm": 0.0,
             "currency": "GLD",
         }
-        with patch("app.services.moex_service.get_bond_cached", return_value=mock_gld_moex):
+        with patch(
+            "app.services.moex_service.get_bond_cached", return_value=mock_gld_moex
+        ):
             r = self.client.get("/api/portfolio")
         self.assertEqual(r.status_code, 200)
         data = r.get_json()
@@ -891,7 +895,7 @@ class BrokerImportTests(BaseTest):
         """Test that importing identical deal_no or identical fields does not duplicate transactions/lots."""
         uid = self._make_user()
         self._set_logged_in(uid)
-        
+
         deal_payload = {
             "deals": [
                 {
@@ -899,23 +903,28 @@ class BrokerImportTests(BaseTest):
                     "amount": 10,
                     "price": 900.0,
                     "date": "2025-01-15",
-                    "deal_no": "DEAL12345"
+                    "deal_no": "DEAL12345",
                 }
             ]
         }
-        
+
         # First import
-        r = self.client.post("/api/portfolio/import", json=deal_payload, content_type="application/json")
+        r = self.client.post(
+            "/api/portfolio/import", json=deal_payload, content_type="application/json"
+        )
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.get_json()["imported_count"], 1)
-        
+
         # Second import (same deal_no)
-        r = self.client.post("/api/portfolio/import", json=deal_payload, content_type="application/json")
+        r = self.client.post(
+            "/api/portfolio/import", json=deal_payload, content_type="application/json"
+        )
         self.assertEqual(r.status_code, 200)
-        self.assertEqual(r.get_json()["imported_count"], 0) # Skipped duplicate!
-        
+        self.assertEqual(r.get_json()["imported_count"], 0)  # Skipped duplicate!
+
         with app.app_context():
             from app.models import BondPortfolio, Transaction
+
             bonds = BondPortfolio.query.filter_by(user_id=uid).all()
             txs = Transaction.query.filter_by(user_id=uid).all()
             self.assertEqual(len(bonds), 1)
@@ -925,45 +934,51 @@ class BrokerImportTests(BaseTest):
         """Test that percentage prices <= 150 are healed to absolute currency based on MOEX face value."""
         uid = self._make_user()
         self._set_logged_in(uid)
-        
+
         # Make a bond entry in database with a buy price in percent (e.g. 98.50)
         bond_id = self._make_bond(uid, isin="SU26238RMFS4", buy_price=98.50, amount=10)
-        
+
         # Add corresponding transaction in database
         with app.app_context():
             from app.models import Transaction
-            db.session.add(Transaction(
-                user_id=uid,
-                isin="SU26238RMFS4",
-                name="ОФЗ 26238",
-                tx_type="buy",
-                amount=10,
-                price=98.50,
-                tx_date=date.today()
-            ))
+
+            db.session.add(
+                Transaction(
+                    user_id=uid,
+                    isin="SU26238RMFS4",
+                    name="ОФЗ 26238",
+                    tx_type="buy",
+                    amount=10,
+                    price=98.50,
+                    tx_date=date.today(),
+                )
+            )
             db.session.commit()
-            
+
         mock_moex = {
             "secid": "SU26238RMFS4",
             "name": "ОФЗ 26238",
             "price": 990.0,
-            "facevalue": 1000.0, # Nominal is 1000
+            "facevalue": 1000.0,  # Nominal is 1000
             "nkd": 5.5,
             "ytm": 8.5,
             "currency": "RUB",
         }
-        
-        with patch("app.services.portfolio_service.get_bond_cached", return_value=mock_moex):
+
+        with patch(
+            "app.services.portfolio_service.get_bond_cached", return_value=mock_moex
+        ):
             # Fetch portfolio, which triggers build_portfolio_entry -> normalize_bond_price
             r = self.client.get("/api/portfolio")
             self.assertEqual(r.status_code, 200)
-            
+
         with app.app_context():
             from app.models import BondPortfolio, Transaction
+
             bond = db.session.get(BondPortfolio, bond_id)
             # The buy price should be healed: (98.50 / 100) * 1000 = 985.00
             self.assertAlmostEqual(float(bond.buy_price), 985.00, places=2)
-            
+
             txs = Transaction.query.filter_by(user_id=uid, tx_type="buy").all()
             for tx in txs:
                 self.assertAlmostEqual(float(tx.price), 985.00, places=2)
@@ -972,35 +987,41 @@ class BrokerImportTests(BaseTest):
         """Test that physical deletion endpoint deletes active lot and its corresponding buy transaction."""
         uid = self._make_user()
         self._set_logged_in(uid)
-        
+
         # Create a bond and a corresponding transaction in database
         bond_id = self._make_bond(uid, isin="SU26238RMFS4", buy_price=900.0, amount=10)
         with app.app_context():
             from app.models import Transaction, BondPortfolio
+
             bond = db.session.get(BondPortfolio, bond_id)
-            db.session.add(Transaction(
-                user_id=uid,
-                isin="SU26238RMFS4",
-                name="ОФЗ 26238",
-                tx_type="buy",
-                amount=bond.amount,
-                price=bond.buy_price,
-                tx_date=bond.purchase_date
-            ))
+            db.session.add(
+                Transaction(
+                    user_id=uid,
+                    isin="SU26238RMFS4",
+                    name="ОФЗ 26238",
+                    tx_type="buy",
+                    amount=bond.amount,
+                    price=bond.buy_price,
+                    tx_date=bond.purchase_date,
+                )
+            )
             db.session.commit()
-            
+
         # Call physical delete API
         r = self.client.delete(f"/api/portfolio/{bond_id}")
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.get_json()["status"], "success")
-        
+
         # Verify that both are deleted
         with app.app_context():
             from app.models import BondPortfolio, Transaction
+
             bond_after = db.session.get(BondPortfolio, bond_id)
             self.assertIsNone(bond_after)
-            
-            tx_after = Transaction.query.filter_by(user_id=uid, isin="SU26238RMFS4", tx_type="buy").first()
+
+            tx_after = Transaction.query.filter_by(
+                user_id=uid, isin="SU26238RMFS4", tx_type="buy"
+            ).first()
             self.assertIsNone(tx_after)
 
 

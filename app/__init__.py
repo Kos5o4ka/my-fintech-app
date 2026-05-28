@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 
 try:
     import fcntl as _fcntl
+
     _HAS_FCNTL = True
 except ImportError:
     _HAS_FCNTL = False  # Windows
@@ -34,7 +35,7 @@ csrf = CSRFProtect()
 def create_app(config_class=None) -> Flask:
     """Создаёт и настраивает экземпляр Flask-приложения (Application Factory)."""
     app = Flask(__name__)
-    
+
     if config_class is None:
         app.config.from_object(get_config())
     else:
@@ -67,8 +68,10 @@ def create_app(config_class=None) -> Flask:
     login_manager.login_message = "Пожалуйста, войдите для доступа к этой странице."
     migrate.init_app(app, db)
 
-    # Кэш: Redis (если REDIS_URL задан) → FileSystemCache (по умолчанию)
-    if app.config.get("REDIS_URL"):
+    # Кэш: NullCache в тестах, иначе Redis (если REDIS_URL задан) → FileSystemCache
+    if app.config.get("TESTING") or os.environ.get("FLASK_TESTING") == "1":
+        _cache_config = {"CACHE_TYPE": "NullCache"}
+    elif app.config.get("REDIS_URL"):
         _cache_config = {
             "CACHE_TYPE": "RedisCache",
             "CACHE_REDIS_URL": app.config["REDIS_URL"],
@@ -89,11 +92,15 @@ def create_app(config_class=None) -> Flask:
 
     # ── Static asset versioning (cache-busting) ───────────────────────────────
     try:
-        _git_hash = subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"],
-            cwd=os.path.dirname(__file__),
-            stderr=subprocess.DEVNULL,
-        ).decode().strip()
+        _git_hash = (
+            subprocess.check_output(
+                ["git", "rev-parse", "--short", "HEAD"],
+                cwd=os.path.dirname(__file__),
+                stderr=subprocess.DEVNULL,
+            )
+            .decode()
+            .strip()
+        )
     except Exception:
         _git_hash = "1"
     app.jinja_env.globals["static_ver"] = _git_hash
@@ -150,6 +157,7 @@ def create_app(config_class=None) -> Flask:
         session["_last_active"] = now
 
         # ── Security headers (после каждого ответа) ──────────────────────────────
+
     @app.after_request
     def set_security_headers(response):
         # Игнорируем статику, чтобы не ломать кэш и не плодить пустые сессии
@@ -161,7 +169,8 @@ def create_app(config_class=None) -> Flask:
             _lifetime = app.config.get("PERMANENT_SESSION_LIFETIME")
             _max_age = int(_lifetime.total_seconds()) if _lifetime else 7 * 24 * 3600
             response.set_cookie(
-                "XSRF-TOKEN", token,
+                "XSRF-TOKEN",
+                token,
                 httponly=False,
                 samesite="Lax",
                 max_age=_max_age,
@@ -173,7 +182,9 @@ def create_app(config_class=None) -> Flask:
         response.headers.remove("Server")
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
-        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault(
+            "Referrer-Policy", "strict-origin-when-cross-origin"
+        )
         response.headers.setdefault(
             "Permissions-Policy",
             "geolocation=(), camera=(), microphone=(), payment=()",
@@ -203,6 +214,7 @@ def create_app(config_class=None) -> Flask:
     @login_manager.user_loader
     def load_user(user_id):
         from app.models import User
+
         return db.session.get(User, int(user_id))
 
     # ── Error handlers ────────────────────────────────────────────────────────
@@ -253,6 +265,7 @@ def create_app(config_class=None) -> Flask:
 
         try:
             from app.models import User, BondPortfolio, Transaction
+
             user_count = db.session.query(User).count()
             portfolio_count = db.session.query(BondPortfolio).count()
             tx_count = db.session.query(Transaction).count()
@@ -260,7 +273,7 @@ def create_app(config_class=None) -> Flask:
         except Exception:
             user_count = portfolio_count = tx_count = 0
             status = 0
-        
+
         lines = [
             "# HELP investtrack_active_positions_total Total active bond positions in database",
             "# TYPE investtrack_active_positions_total gauge",
@@ -275,7 +288,11 @@ def create_app(config_class=None) -> Flask:
             "# TYPE investtrack_system_status gauge",
             f"investtrack_system_status {status}",
         ]
-        return "\n".join(lines) + "\n", 200, {"Content-Type": "text/plain; charset=utf-8"}
+        return (
+            "\n".join(lines) + "\n",
+            200,
+            {"Content-Type": "text/plain; charset=utf-8"},
+        )
 
     # ── Инициализация планировщика задач ──────────────────────────────────────
     _in_test = app.config.get("TESTING") or os.environ.get("FLASK_TESTING") == "1"
@@ -307,7 +324,9 @@ def create_app(config_class=None) -> Flask:
             )
             scheduler.start()
             atexit.register(lambda: scheduler.shutdown(wait=False))
-            logger.info("APScheduler started (pid=%d): price_update every 15 min", os.getpid())
+            logger.info(
+                "APScheduler started (pid=%d): price_update every 15 min", os.getpid()
+            )
         except Exception as _sched_err:
             logger.warning("Could not start APScheduler: %s", _sched_err)
 
@@ -320,6 +339,7 @@ def _update_bond_prices(app) -> None:
     Параллелизирует запросы к MOEX через ThreadPoolExecutor для максимальной скорости.
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
+
     with app.app_context():
         try:
             from app.models import BondPortfolio
@@ -333,9 +353,11 @@ def _update_bond_prices(app) -> None:
             # 1) Собираем уникальные ISINы и запрашиваем MOEX параллельно
             isin_targets = list({bond.isin for bond in active})
             seen: dict[str, dict | None] = {}
-            
+
             with ThreadPoolExecutor(max_workers=5) as executor:
-                futures = {executor.submit(get_moex_bond, isin): isin for isin in isin_targets}
+                futures = {
+                    executor.submit(get_moex_bond, isin): isin for isin in isin_targets
+                }
                 for future in as_completed(futures):
                     isin = futures[future]
                     try:
@@ -344,7 +366,9 @@ def _update_bond_prices(app) -> None:
                         if res:
                             cache.set(f"moex_bond:{isin}", res, timeout=MOEX_BOND_TTL)
                     except Exception as e:
-                        logger.warning("Error fetching %s in background price update: %s", isin, e)
+                        logger.warning(
+                            "Error fetching %s in background price update: %s", isin, e
+                        )
 
             # 2) Bulk UPDATE — один SQL вместо N отдельных UPDATE
             mappings = [
@@ -428,7 +452,7 @@ def _check_price_alerts(prices_map: dict) -> None:
     """Вспомогательный метод для проверки активных ценовых алертов."""
     from app.models import User
     from app.services.telegram_service import send_message as tg_send
-    
+
     # Импортируем локально, так как модель PriceAlert может быть создана динамически
     try:
         from app.models import PriceAlert
@@ -443,11 +467,11 @@ def _check_price_alerts(prices_map: dict) -> None:
         bond_data = prices_map.get(alert.isin)
         if not bond_data or bond_data.get("price") is None:
             continue
-        
+
         current_price = float(bond_data["price"])
         target_price = float(alert.target_price)
         triggered = False
-        
+
         if alert.condition == ">=" and current_price >= target_price:
             triggered = True
         elif alert.condition == "<=" and current_price <= target_price:
@@ -456,7 +480,7 @@ def _check_price_alerts(prices_map: dict) -> None:
         if triggered:
             alert.is_triggered = True
             db.session.commit()
-            
+
             user = db.session.get(User, alert.user_id)
             if user and user.telegram_chat_id and user.telegram_notifications:
                 msg = (
@@ -468,7 +492,11 @@ def _check_price_alerts(prices_map: dict) -> None:
                 try:
                     tg_send(user.telegram_chat_id, msg)
                 except Exception as e:
-                    logger.warning("Failed to send alert notification to Telegram chat %s: %s", user.telegram_chat_id, e)
+                    logger.warning(
+                        "Failed to send alert notification to Telegram chat %s: %s",
+                        user.telegram_chat_id,
+                        e,
+                    )
 
 
 def _try_acquire_scheduler_lock() -> bool:

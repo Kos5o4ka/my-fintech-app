@@ -2,7 +2,11 @@
 
 import logging
 import time
-import xml.etree.ElementTree as ET
+
+try:
+    from defusedxml import ElementTree as ET
+except ImportError:
+    import xml.etree.ElementTree as ET  # noqa: S405 fallback if defusedxml not installed
 
 import requests
 
@@ -11,9 +15,9 @@ logger = logging.getLogger(__name__)
 # Коды валют, которые поддерживаем
 _SUPPORTED = {"USD", "EUR", "GBP", "CNY", "CHF"}
 
-_cache: dict[str, float] = {}   # {"USD": 90.25, ...}
+_cache: dict[str, float] = {}  # {"USD": 90.25, ...}
 _cache_ts: float = 0.0
-_CACHE_TTL = 4 * 3600           # 4 часа
+_CACHE_TTL = 4 * 3600  # 4 часа
 
 _CBR_URL = "https://www.cbr.ru/scripts/XML_daily.asp"
 

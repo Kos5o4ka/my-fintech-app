@@ -479,6 +479,7 @@ def get_currency_rates() -> dict[str, float]:
     # Сначала пробуем CBR как базовый фолбэк (актуальнее хардкода)
     try:
         from app.cbr import get_rates as _cbr_rates
+
         cbr = _cbr_rates({"USD", "EUR", "CNY"})
         rates = {"RUB": 1.0, **cbr}
     except Exception:
@@ -530,6 +531,7 @@ def get_gcurve_rate(maturity_years: float, trade_date: Optional[str] = None) -> 
     """
     try:
         from flask import current_app
+
         current_app._get_current_object()  # бросает RuntimeError если нет контекста
     except RuntimeError:
         return 0.155

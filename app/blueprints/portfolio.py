@@ -15,7 +15,6 @@ from app.moex import (
     get_bond_history_all,
     get_bond_date_info,
     search_bonds,
-    get_rgbi_history,
     get_screener_bonds,
 )
 from app.services.moex_service import (
@@ -35,9 +34,6 @@ from app.constants import (
     CHART_ALL_TTL,
     SCREENER_TTL,
     MAX_CHART_POINTS,
-    STATS_TTL,
-    SHARPE_TTL,
-    TAX_TTL,
     DEFAULT_PAGE_SIZE,
     MAX_PAGE_SIZE,
     TIMEFRAME_DAYS,
@@ -50,8 +46,9 @@ portfolio_bp = Blueprint("portfolio", __name__)
 def _etag(payload: dict) -> str:
     """Быстрый ETag из MD5 тела ответа (первые 16 символов)."""
     import json
+
     raw = json.dumps(payload, ensure_ascii=False, sort_keys=True)
-    return hashlib.md5(raw.encode()).hexdigest()[:16]
+    return hashlib.md5(raw.encode(), usedforsecurity=False).hexdigest()[:16]
 
 
 def _bust_user_cache(user_id: int) -> None:
@@ -142,10 +139,19 @@ def get_portfolio():
     ytm = calc_portfolio_ytm(all_bonds, total_val)
 
     # Средневзвешенная дюрация портфеля (веса по рублевой стоимости)
-    valid_dur_bonds = [b for b in all_bonds if b.get("modified_duration") is not None and b["modified_duration"] > 0]
+    valid_dur_bonds = [
+        b
+        for b in all_bonds
+        if b.get("modified_duration") is not None and b["modified_duration"] > 0
+    ]
     total_valid_dur_val = sum(b["current_value_rub"] for b in valid_dur_bonds)
     if total_valid_dur_val > 0:
-        avg_dur = sum(b["modified_duration"] * b["current_value_rub"] for b in valid_dur_bonds) / total_valid_dur_val
+        avg_dur = (
+            sum(
+                b["modified_duration"] * b["current_value_rub"] for b in valid_dur_bonds
+            )
+            / total_valid_dur_val
+        )
         portfolio_duration = round(avg_dur, 2)
     else:
         portfolio_duration = 0.0
@@ -593,14 +599,18 @@ def get_bond_chart_data(isin: str):
 def get_portfolio_calendar():
     active = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False).all()
     events = []
-    
+
     grouped = {}
     for bond in active:
         key = bond.secid or bond.isin
         if key not in grouped:
-            grouped[key] = {"name": bond.name or bond.isin, "isin": bond.isin, "amount": 0}
+            grouped[key] = {
+                "name": bond.name or bond.isin,
+                "isin": bond.isin,
+                "amount": 0,
+            }
         grouped[key]["amount"] += bond.amount
-        
+
     for target, data in grouped.items():
         for c in get_coupon_calendar_cached(target):
             val = c.get("value")
@@ -682,11 +692,15 @@ def add_to_watchlist():
     if not isin:
         return jsonify({"status": "error", "message": "ISIN обязателен."}), 400
     if Watchlist.query.filter_by(user_id=current_user.id, isin=isin).first():
-        return jsonify({"status": "error", "message": "Облигация уже в списке наблюдения."}), 400
+        return jsonify(
+            {"status": "error", "message": "Облигация уже в списке наблюдения."}
+        ), 400
 
     moex_data = get_moex_bond(isin)
     if not moex_data:
-        return jsonify({"status": "error", "message": "Облигация не найдена на Московской Бирже."}), 404
+        return jsonify(
+            {"status": "error", "message": "Облигация не найдена на Московской Бирже."}
+        ), 404
 
     item = Watchlist(
         user_id=current_user.id,
@@ -696,7 +710,9 @@ def add_to_watchlist():
     )
     db.session.add(item)
     db.session.commit()
-    return jsonify({"status": "success", "message": "Облигация добавлена в список наблюдения."}), 201
+    return jsonify(
+        {"status": "success", "message": "Облигация добавлена в список наблюдения."}
+    ), 201
 
 
 @portfolio_bp.route("/api/watchlist/<isin>", methods=["DELETE"])
@@ -705,7 +721,9 @@ def remove_from_watchlist(isin):
     isin = isin.upper().strip()
     item = Watchlist.query.filter_by(user_id=current_user.id, isin=isin).first()
     if not item:
-        return jsonify({"status": "error", "message": "Элемент не найден в списке наблюдения."}), 404
+        return jsonify(
+            {"status": "error", "message": "Элемент не найден в списке наблюдения."}
+        ), 404
     db.session.delete(item)
     db.session.commit()
     return jsonify({"status": "success", "message": "Удалено из списка наблюдения."})
@@ -720,7 +738,9 @@ def screener():
         first_error = e.errors()[0]["msg"].replace("Value error, ", "")
         return jsonify({"status": "error", "message": first_error}), 400
 
-    cache_key = f"screener:{hashlib.md5(request.data).hexdigest()}"
+    cache_key = (
+        f"screener:{hashlib.md5(request.data, usedforsecurity=False).hexdigest()}"
+    )
     cached = cache.get(cache_key)
     if cached:
         return jsonify(cached)
@@ -754,6 +774,7 @@ def screener():
 
     cache.set(cache_key, results, timeout=SCREENER_TTL)
     return jsonify(results)
+
 
 @portfolio_bp.route("/api/notifications/upcoming", methods=["GET"])
 @login_required
@@ -807,7 +828,7 @@ def get_portfolio_sparkline(isin: str):
     """Возвращает динамический SVG-микрографик цены облигации за 30 дней."""
     isin = isin.upper().strip()
     cache_key = f"sparkline:{isin}"
-    
+
     try:
         cached_svg = cache.get(cache_key)
         if cached_svg:
@@ -817,14 +838,16 @@ def get_portfolio_sparkline(isin: str):
             return resp
     except Exception:
         pass
-        
+
     moex_data = get_moex_bond(isin)
     if not moex_data:
         svg = '<svg width="80" height="20" xmlns="http://www.w3.org/2000/svg"><line x1="0" y1="10" x2="80" y2="10" stroke="#94a3b8" stroke-width="1.5"/></svg>'
     else:
-        full = get_bond_history_all(moex_data["secid"], moex_data.get("facevalue", 1000))
+        full = get_bond_history_all(
+            moex_data["secid"], moex_data.get("facevalue", 1000)
+        )
         prices = full.get("data", [])[-30:]  # последние 30 точек
-        
+
         if not prices or len(prices) < 2:
             svg = '<svg width="80" height="20" xmlns="http://www.w3.org/2000/svg"><line x1="0" y1="10" x2="80" y2="10" stroke="#94a3b8" stroke-width="1.5"/></svg>'
         else:
@@ -841,14 +864,14 @@ def get_portfolio_sparkline(isin: str):
             svg = (
                 f'<svg width="{w}" height="{h}" viewBox="0 0 {w} {h}" xmlns="http://www.w3.org/2000/svg">'
                 f'<polyline fill="none" stroke="{color}" stroke-width="1.5" points="{points_str}"/>'
-                f'</svg>'
+                f"</svg>"
             )
-            
+
     try:
         cache.set(cache_key, svg, timeout=86400)
     except Exception:
         pass
-        
+
     resp = make_response(svg)
     resp.headers["Content-Type"] = "image/svg+xml"
     resp.headers["Cache-Control"] = "public, max-age=86400"
@@ -859,19 +882,25 @@ def get_portfolio_sparkline(isin: str):
 @login_required
 def get_price_alerts():
     """Возвращает все ценовые алерты текущего пользователя."""
-    alerts = PriceAlert.query.filter_by(user_id=current_user.id).order_by(PriceAlert.created_at.desc()).all()
-    return jsonify([
-        {
-            "id": a.id,
-            "isin": a.isin,
-            "name": a.name or a.isin,
-            "target_price": float(a.target_price),
-            "condition": a.condition,
-            "is_triggered": a.is_triggered,
-            "created_at": a.created_at.strftime("%Y-%m-%d %H:%M:%S"),
-        }
-        for a in alerts
-    ])
+    alerts = (
+        PriceAlert.query.filter_by(user_id=current_user.id)
+        .order_by(PriceAlert.created_at.desc())
+        .all()
+    )
+    return jsonify(
+        [
+            {
+                "id": a.id,
+                "isin": a.isin,
+                "name": a.name or a.isin,
+                "target_price": float(a.target_price),
+                "condition": a.condition,
+                "is_triggered": a.is_triggered,
+                "created_at": a.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+            }
+            for a in alerts
+        ]
+    )
 
 
 @portfolio_bp.route("/api/alerts", methods=["POST"])
@@ -882,18 +911,20 @@ def create_price_alert():
     isin = str(data.get("isin", "")).strip().upper()
     target_price = data.get("target_price")
     condition = str(data.get("condition", "<=")).strip()
-    
+
     if not isin or target_price is None or condition not in (">=", "<="):
-        return jsonify({"status": "error", "message": "Некорректные параметры алерта."}), 400
-        
+        return jsonify(
+            {"status": "error", "message": "Некорректные параметры алерта."}
+        ), 400
+
     try:
         target_val = float(target_price)
     except (ValueError, TypeError):
         return jsonify({"status": "error", "message": "Цена должна быть числом."}), 400
-        
+
     moex_data = get_moex_bond(isin)
     bond_name = moex_data.get("name", isin) if moex_data else isin
-    
+
     new_alert = PriceAlert(
         user_id=current_user.id,
         isin=isin,
@@ -904,19 +935,21 @@ def create_price_alert():
     )
     db.session.add(new_alert)
     db.session.commit()
-    
-    return jsonify({
-        "status": "success",
-        "message": f"Алерт на цену {target_val} ₽ успешно установлен для {bond_name}.",
-        "alert": {
-            "id": new_alert.id,
-            "isin": new_alert.isin,
-            "name": new_alert.name,
-            "target_price": target_val,
-            "condition": new_alert.condition,
-            "is_triggered": False,
+
+    return jsonify(
+        {
+            "status": "success",
+            "message": f"Алерт на цену {target_val} ₽ успешно установлен для {bond_name}.",
+            "alert": {
+                "id": new_alert.id,
+                "isin": new_alert.isin,
+                "name": new_alert.name,
+                "target_price": target_val,
+                "condition": new_alert.condition,
+                "is_triggered": False,
+            },
         }
-    }), 201
+    ), 201
 
 
 @portfolio_bp.route("/api/alerts/<int:alert_id>", methods=["DELETE"])
@@ -926,7 +959,7 @@ def delete_price_alert(alert_id: int):
     alert = PriceAlert.query.filter_by(id=alert_id, user_id=current_user.id).first()
     if not alert:
         return jsonify({"status": "error", "message": "Алерт не найден."}), 404
-        
+
     db.session.delete(alert)
     db.session.commit()
     return jsonify({"status": "success", "message": "Алерт успешно удалён."})

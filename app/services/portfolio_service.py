@@ -11,7 +11,6 @@ from app.models import BondPortfolio
 from app.services.moex_service import get_bond_cached, get_coupon_calendar_cached
 from app.constants import calc_ndfl, LDV_YEARS_THRESHOLD, LDV_ANNUAL_DEDUCTION
 from app.moex import get_currency_rates, get_gcurve_rate
-from app.extensions import db
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +22,9 @@ def normalize_bond_price(price: float, facevalue: float) -> float:
     """
     if price <= 0 or facevalue <= 150.0:
         return price
-    is_valid_pct = (30.0 <= price <= 200.0)
+    is_valid_pct = 30.0 <= price <= 200.0
     pct_if_rub = (price / facevalue) * 100.0
-    is_valid_rub = (30.0 <= pct_if_rub <= 200.0)
+    is_valid_rub = 30.0 <= pct_if_rub <= 200.0
     if is_valid_pct and not is_valid_rub:
         return round((price / 100.0) * facevalue, 2)
     return price
@@ -50,10 +49,13 @@ def build_portfolio_entry(bond: BondPortfolio, rates: Optional[dict] = None) -> 
     if healed_buy_price != buy_p:
         buy_p = healed_buy_price
         bond.buy_price = buy_p
-        
+
         # Синхронизируем цену во всех связанных транзакциях покупки
         from app.models import Transaction
-        txs = Transaction.query.filter_by(user_id=bond.user_id, isin=bond.isin, tx_type='buy').all()
+
+        txs = Transaction.query.filter_by(
+            user_id=bond.user_id, isin=bond.isin, tx_type="buy"
+        ).all()
         for tx in txs:
             tx.price = normalize_bond_price(float(tx.price), facevalue)
         # db.session.commit() убран из гетера для чистоты архитектуры (коммитится на уровне роута)
@@ -83,7 +85,9 @@ def build_portfolio_entry(bond: BondPortfolio, rates: Optional[dict] = None) -> 
     last_price_rub = round(last_p * rate, 2) if currency != "RUB" else None
 
     # Расчет дюрации
-    dur = calc_bond_duration(bond.isin, last_p, facevalue, moex_data.get("ytm", 0.0), bond.amount)
+    dur = calc_bond_duration(
+        bond.isin, last_p, facevalue, moex_data.get("ytm", 0.0), bond.amount
+    )
 
     return {
         "id": bond.id,
@@ -129,7 +133,9 @@ def calc_portfolio_ytm(portfolio_list: list[dict], total_value: float) -> float:
     Поддерживает как 'current_value_rub' (multi-currency), так и устаревший
     'current_value' ключ для обратной совместимости с unit/property-тестами.
     """
-    valid_bonds = [b for b in portfolio_list if b.get("ytm") is not None and b["ytm"] != 0.0]
+    valid_bonds = [
+        b for b in portfolio_list if b.get("ytm") is not None and b["ytm"] != 0.0
+    ]
     if not valid_bonds:
         return 0.0
 
@@ -286,8 +292,7 @@ def calc_fifo_pnl(
     from app.models import Transaction
 
     buys = (
-        Transaction.query
-        .filter_by(user_id=user_id, isin=isin, tx_type="buy")
+        Transaction.query.filter_by(user_id=user_id, isin=isin, tx_type="buy")
         .order_by(Transaction.tx_date.asc(), Transaction.id.asc())
         .all()
     )
@@ -354,15 +359,17 @@ def calc_tax_report(
             ldv_applied = False
             total_pnl += pnl
 
-        trades.append({
-            "isin": bond.isin,
-            "name": bond.name or bond.isin,
-            "pnl": pnl,
-            "tax_basis": tb["tax_basis"],
-            "ldv_applied": ldv_applied,
-            "ldv_deduction": ldv_deduction,
-            "days_held": days_held,
-        })
+        trades.append(
+            {
+                "isin": bond.isin,
+                "name": bond.name or bond.isin,
+                "pnl": pnl,
+                "tax_basis": tb["tax_basis"],
+                "ldv_applied": ldv_applied,
+                "ldv_deduction": ldv_deduction,
+                "days_held": days_held,
+            }
+        )
 
     # Итоговая налоговая база не может быть отрицательной (убыток → перенос на будущее)
     taxable_basis = max(total_pnl, 0.0)
@@ -451,25 +458,30 @@ def calc_sharpe_ratio(
     }
 
 
-def calc_bond_duration(isin: str, last_price: float, facevalue: float, ytm_pct: float, amount: int) -> dict:
+def calc_bond_duration(
+    isin: str, last_price: float, facevalue: float, ytm_pct: float, amount: int
+) -> dict:
     """Рассчитывает дюрацию Маколея и модифицированную дюрацию облигации (в годах)."""
     import datetime
     from app.services.moex_service import get_coupon_calendar_cached
-    
+
     today = datetime.date.today()
     coupons = get_coupon_calendar_cached(isin)
-    
+
     # Если YTM не задана или некорректна, возвращаем заглушку по времени до погашения
     ytm = ytm_pct / 100.0 if ytm_pct and ytm_pct > 0 else 0.15  # fallback YTM 15%
-    
+
     if not coupons:
         # Пытаемся получить дату погашения из деталей
         from app.services.moex_service import get_bond_preview
+
         details = get_bond_preview(isin) or {}
         matdate_str = details.get("matdate")
         if matdate_str:
             try:
-                matdate = datetime.datetime.strptime(matdate_str[:10], "%Y-%m-%d").date()
+                matdate = datetime.datetime.strptime(
+                    matdate_str[:10], "%Y-%m-%d"
+                ).date()
                 years = max((matdate - today).days / 365.25, 0.1)
                 return {
                     "macaulay_duration": round(years, 2),
@@ -481,10 +493,10 @@ def calc_bond_duration(isin: str, last_price: float, facevalue: float, ytm_pct: 
 
     pv_sum = 0.0
     weighted_t_sum = 0.0
-    
+
     # Сортируем купоны по дате
     coupons_sorted = sorted(coupons, key=lambda x: x["date"])
-    
+
     for i, c in enumerate(coupons_sorted):
         c_date_str = c.get("date") or c.get("coupondate") or ""
         if not c_date_str:
@@ -493,16 +505,16 @@ def calc_bond_duration(isin: str, last_price: float, facevalue: float, ytm_pct: 
             c_date = datetime.datetime.strptime(c_date_str[:10], "%Y-%m-%d").date()
         except ValueError:
             continue
-            
+
         t = (c_date - today).days / 365.25
         if t <= 0:
             continue
-            
+
         val = float(c.get("value") or 0.0)
         # На последнем купоне выплачивается номинал (погашение)
         if i == len(coupons_sorted) - 1:
             val += facevalue
-            
+
         pv_cf = val / ((1 + ytm) ** t)
         pv_sum += pv_cf
         weighted_t_sum += t * pv_cf
@@ -512,7 +524,7 @@ def calc_bond_duration(isin: str, last_price: float, facevalue: float, ytm_pct: 
 
     macaulay_dur = weighted_t_sum / pv_sum
     modified_dur = macaulay_dur / (1 + ytm)
-    
+
     return {
         "macaulay_duration": round(macaulay_dur, 2),
         "modified_duration": round(modified_dur, 2),
@@ -524,6 +536,7 @@ def calc_portfolio_diversification(active_bonds: list) -> dict:
     в трех разрезах: по активам, по валютам и по эмитентам (ОФЗ vs Корпоративные).
     """
     from collections import defaultdict
+
     if not active_bonds:
         return {
             "assets": {"hhi": 0.0, "status": "Нет данных", "weights": []},
@@ -541,18 +554,26 @@ def calc_portfolio_diversification(active_bonds: list) -> dict:
         currency = bond.currency or "RUB"
         rate = 1.0 if currency in ["RUB", "GLD"] else rates.get(currency, 1.0)
         # Получаем актуальную цену (последняя известная или цена покупки)
-        price = float(bond.last_price) if bond.last_price is not None else float(bond.buy_price)
+        price = (
+            float(bond.last_price)
+            if bond.last_price is not None
+            else float(bond.buy_price)
+        )
         val_rub = price * bond.amount * rate
-        
+
         total_val_rub += val_rub
         key_name = bond.name or bond.isin
         asset_vals[key_name] = asset_vals.get(key_name, 0.0) + val_rub
         currency_vals[currency] += val_rub
-        
+
         # Определяем тип эмитента по ISIN
         # ОФЗ обычно начинаются с SU, государственные/муниципальные — RU000A0
         isin = bond.isin.upper().strip()
-        if isin.startswith("SU") or isin.startswith("RU000A0J") or "ОФЗ" in (bond.name or "").upper():
+        if (
+            isin.startswith("SU")
+            or isin.startswith("RU000A0J")
+            or "ОФЗ" in (bond.name or "").upper()
+        ):
             issuer_type = "Гос. облигации (ОФЗ)"
         else:
             issuer_type = "Корпоративные облигации"
@@ -571,11 +592,13 @@ def calc_portfolio_diversification(active_bonds: list) -> dict:
         hhi = 0.0
         for name, val in vals_dict.items():
             w = (val / total_val_rub) * 100.0
-            weights.append({"name": name, "weight": round(w, 2), "value_rub": round(val, 2)})
-            hhi += w ** 2
-            
+            weights.append(
+                {"name": name, "weight": round(w, 2), "value_rub": round(val, 2)}
+            )
+            hhi += w**2
+
         weights.sort(key=lambda x: x["weight"], reverse=True)
-        
+
         # Статусы концентрации по классификации HHI
         if hhi < 1500:
             status = "Отличная диверсификация"
@@ -586,7 +609,7 @@ def calc_portfolio_diversification(active_bonds: list) -> dict:
         else:
             status = "Высокая концентрация (высокий риск)"
             color = "danger"
-            
+
         return {
             "hhi": round(hhi, 2),
             "status": status,

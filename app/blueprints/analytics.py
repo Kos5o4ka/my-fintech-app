@@ -1,6 +1,6 @@
 import logging
 import math
-from datetime import datetime, date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 from flask import Blueprint, request, jsonify, render_template
@@ -8,16 +8,22 @@ from flask_login import login_required, current_user
 
 from app.extensions import db, cache
 from app.models import BondPortfolio
-from app.services.moex_service import get_bond_cached
 from app.services.portfolio_service import (
     build_portfolio_list,
-    calc_portfolio_ytm,
     calc_tax_report,
     calc_sharpe_ratio,
     calc_monthly_profit,
     calc_portfolio_diversification,
 )
-from app.constants import TIMEFRAME_DAYS, MAX_CHART_POINTS, CHART_RANGE_TTL, STATS_TTL, BENCHMARK_TTL
+from app.constants import (
+    TIMEFRAME_DAYS,
+    MAX_CHART_POINTS,
+    CHART_RANGE_TTL,
+    STATS_TTL,
+    SHARPE_TTL,
+    TAX_TTL,
+    BENCHMARK_TTL,
+)
 from app.moex import get_moex_bond, get_rgbi_history, get_bond_history_all
 
 logger = logging.getLogger(__name__)
@@ -60,7 +66,6 @@ def portfolio_tax():
     summary = calc_tax_report(sold, active, year)
 
     from app.services.moex_service import get_all_coupons_cached
-    from datetime import datetime
 
     def get_bond_coupon_income(bond, end_date):
         if not bond.purchase_date:
@@ -188,7 +193,7 @@ def portfolio_sharpe():
             "reason": f"Недостаточно данных (закрытых позиций: {len(sold)}, нужно ≥ 3)",
         }
         return jsonify(response_data)
-        
+
     try:
         cache.set(cache_key, result, timeout=SHARPE_TTL)
     except Exception:

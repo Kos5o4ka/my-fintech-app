@@ -8,7 +8,11 @@ from flask_wtf.csrf import generate_csrf
 
 from app.extensions import db
 from app.models import AuditLog
-from app.services.user_service import save_avatar, delete_avatar, update_telegram_settings
+from app.services.user_service import (
+    save_avatar,
+    delete_avatar,
+    update_telegram_settings,
+)
 
 logger = logging.getLogger(__name__)
 profile_bp = Blueprint("profile", __name__)
@@ -26,9 +30,9 @@ def profile_stats():
 
     active = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False).all()
     sold = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=True).count()
-    
+
     _, total_value = build_portfolio_list(active)
-    
+
     try:
         db.session.commit()
     except Exception:

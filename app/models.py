@@ -23,11 +23,21 @@ class User(db.Model, UserMixin):
     telegram_chat_id = db.Column(db.String(20), nullable=True, unique=True)
     telegram_notifications = db.Column(db.Boolean, default=False)
     telegram_username = db.Column(db.String(64), nullable=True)
-    bonds = db.relationship("BondPortfolio", backref="user", lazy=True, cascade="all, delete-orphan")
-    watchlists = db.relationship("Watchlist", backref="user", lazy=True, cascade="all, delete-orphan")
-    transactions = db.relationship("Transaction", backref="user", lazy=True, cascade="all, delete-orphan")
-    price_alerts = db.relationship("PriceAlert", backref="user", lazy=True, cascade="all, delete-orphan")
-    audit_logs = db.relationship("AuditLog", backref="user", lazy=True, cascade="all, delete-orphan")
+    bonds = db.relationship(
+        "BondPortfolio", backref="user", lazy=True, cascade="all, delete-orphan"
+    )
+    watchlists = db.relationship(
+        "Watchlist", backref="user", lazy=True, cascade="all, delete-orphan"
+    )
+    transactions = db.relationship(
+        "Transaction", backref="user", lazy=True, cascade="all, delete-orphan"
+    )
+    price_alerts = db.relationship(
+        "PriceAlert", backref="user", lazy=True, cascade="all, delete-orphan"
+    )
+    audit_logs = db.relationship(
+        "AuditLog", backref="user", lazy=True, cascade="all, delete-orphan"
+    )
 
 
 class BondPortfolio(db.Model):
@@ -118,6 +128,7 @@ class AuditLog(db.Model):
 
 class PriceAlert(db.Model):
     """Ценовые алерты пользователя для отслеживания стоимости облигаций."""
+
     __tablename__ = "price_alerts"
     __table_args__ = (
         db.Index("ix_alerts_user_id", "user_id"),

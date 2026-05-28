@@ -23,31 +23,35 @@ def migrate():
             if Transaction.query.filter_by(portfolio_id=bond.id).first():
                 skipped += 1
                 continue
-            db.session.add(Transaction(
-                user_id=bond.user_id,
-                isin=bond.isin,
-                name=bond.name,
-                tx_type="buy",
-                amount=bond.amount,
-                price=bond.buy_price,
-                commission=bond.broker_commission,
-                currency=bond.currency or "RUB",
-                tx_date=bond.purchase_date,
-                portfolio_id=bond.id,
-            ))
-            if bond.is_sold and bond.sell_price:
-                db.session.add(Transaction(
+            db.session.add(
+                Transaction(
                     user_id=bond.user_id,
                     isin=bond.isin,
                     name=bond.name,
-                    tx_type="sell",
+                    tx_type="buy",
                     amount=bond.amount,
-                    price=bond.sell_price,
+                    price=bond.buy_price,
                     commission=bond.broker_commission,
                     currency=bond.currency or "RUB",
-                    tx_date=bond.sell_date,
+                    tx_date=bond.purchase_date,
                     portfolio_id=bond.id,
-                ))
+                )
+            )
+            if bond.is_sold and bond.sell_price:
+                db.session.add(
+                    Transaction(
+                        user_id=bond.user_id,
+                        isin=bond.isin,
+                        name=bond.name,
+                        tx_type="sell",
+                        amount=bond.amount,
+                        price=bond.sell_price,
+                        commission=bond.broker_commission,
+                        currency=bond.currency or "RUB",
+                        tx_date=bond.sell_date,
+                        portfolio_id=bond.id,
+                    )
+                )
             migrated += 1
 
         db.session.commit()

@@ -37,3 +37,4 @@ openpyxl==3.1.5
 pydantic==2.12.5
 Pillow==11.3.0
 sentry-sdk[flask]==2.19.2
+defusedxml==0.7.1

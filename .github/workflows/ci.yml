@@ -55,6 +55,17 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
 
+      - name: Migrations apply cleanly (SQLite)
+        env:
+          FLASK_APP: app
+          FLASK_TESTING: "1"
+          SECRET_KEY: ci-test-secret
+          DATABASE_URL: "sqlite:///ci_migrate_check.db"
+        run: |
+          flask db upgrade
+          flask db downgrade base
+          flask db upgrade
+
       - name: Run tests
         env:
           FLASK_TESTING: "1"

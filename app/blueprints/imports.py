@@ -8,7 +8,7 @@ from flask import Blueprint, request, jsonify, render_template, make_response
 from flask_login import login_required, current_user
 from openpyxl.styles import Font, PatternFill, Alignment
 
-from app.models import BondPortfolio, Transaction
+from app.models import BondPortfolio
 
 logger = logging.getLogger(__name__)
 imports_bp = Blueprint("imports", __name__)
@@ -26,26 +26,28 @@ def import_page():
 def import_portfolio():
     """Импортирует сделки из отчета брокера с интеллектуальной дедупликацией."""
     broker = (request.form.get("broker") or "auto").strip().lower()
-    
+
     deals = []
     skipped_repo = 0
     errors = []
-    
+
     if "file" in request.files:
         f = request.files["file"]
         filename = f.filename or ""
-        
+
         try:
             file_content = f.read()
             from app.services.import_service import parse_broker_file
-            
+
             deals, skipped_repo, err = parse_broker_file(file_content, filename, broker)
             if err:
                 return jsonify({"status": "error", "message": err}), 400
-                
+
         except Exception as exc:
             logger.error("File import upload failed: %s", exc)
-            return jsonify({"status": "error", "message": f"Ошибка чтения файла: {exc}"}), 400
+            return jsonify(
+                {"status": "error", "message": f"Ошибка чтения файла: {exc}"}
+            ), 400
     else:
         deals = (request.get_json() or {}).get("deals", [])
         skipped_repo = 0
@@ -62,14 +64,24 @@ def import_portfolio():
         ), 400
 
     from app.services.import_service import save_imported_deals
+
     try:
-        imported_count, coupon_count, errors = save_imported_deals(deals, current_user.id)
+        imported_count, coupon_count, errors = save_imported_deals(
+            deals, current_user.id
+        )
     except Exception as exc:
         logger.error("save_imported_deals failed: %s", exc, exc_info=True)
-        return jsonify({"status": "error", "message": f"Ошибка при сохранении сделок: {exc}"}), 500
+        return jsonify(
+            {"status": "error", "message": f"Ошибка при сохранении сделок: {exc}"}
+        ), 500
 
     # If DB commit failed, errors contains a single critical error message
-    if imported_count == 0 and coupon_count == 0 and len(errors) == 1 and errors[0].startswith("Ошибка сохранения"):
+    if (
+        imported_count == 0
+        and coupon_count == 0
+        and len(errors) == 1
+        and errors[0].startswith("Ошибка сохранения")
+    ):
         return jsonify({"status": "error", "message": errors[0]}), 500
 
     msg = f"Импортировано {imported_count} записей."
@@ -80,13 +92,15 @@ def import_portfolio():
     if errors:
         msg += f" Ошибок: {len(errors)}."
 
-    return jsonify({
-        "status": "success",
-        "message": msg,
-        "imported_count": imported_count,
-        "coupon_count": coupon_count,
-        "errors": errors,
-    }), 200
+    return jsonify(
+        {
+            "status": "success",
+            "message": msg,
+            "imported_count": imported_count,
+            "coupon_count": coupon_count,
+            "errors": errors,
+        }
+    ), 200
 
 
 @imports_bp.route("/api/portfolio/export", methods=["GET"])
