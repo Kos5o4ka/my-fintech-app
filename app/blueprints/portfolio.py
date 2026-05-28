@@ -1,3 +1,5 @@
+"""Blueprint портфеля — тонкий HTTP-слой: парсинг запроса → вызов сервиса → JSON."""
+
 import hashlib
 import logging
 import math
@@ -8,8 +10,7 @@ from flask import Blueprint, request, jsonify, render_template, abort, make_resp
 from flask_login import login_required, current_user
 from pydantic import ValidationError
 
-from app.extensions import db, cache
-from app.models import BondPortfolio, Watchlist, Transaction, PriceAlert
+from app.extensions import cache
 from app.moex import (
     get_moex_bond,
     get_bond_history_all,
@@ -18,14 +19,31 @@ from app.moex import (
     get_screener_bonds,
 )
 from app.services.moex_service import (
-    get_bond_cached,
     get_bond_preview,
-    get_coupon_calendar_cached,
 )
 from app.services.portfolio_service import (
     build_portfolio_list,
     calc_portfolio_ytm,
     calc_coupon_income,
+    get_active_bonds,
+    get_bond_by_id,
+    delete_position,
+    reset_portfolio,
+    add_bond,
+    sell_bond,
+    update_bond_notes,
+    flush_portfolio_prices,
+    ensure_transactions_exist,
+    query_transactions,
+    get_allocation,
+    get_coupon_calendar_events,
+    get_upcoming_coupons,
+    get_watchlist,
+    add_to_watchlist,
+    remove_from_watchlist,
+    get_price_alerts,
+    create_price_alert,
+    delete_price_alert,
 )
 from app.schemas.portfolio import AddBondRequest, SellBondRequest, ScreenerRequest
 from app.constants import (
@@ -44,7 +62,6 @@ portfolio_bp = Blueprint("portfolio", __name__)
 
 
 def _etag(payload: dict) -> str:
-    """Быстрый ETag из MD5 тела ответа (первые 16 символов)."""
     import json
 
     raw = json.dumps(payload, ensure_ascii=False, sort_keys=True)
@@ -52,7 +69,6 @@ def _etag(payload: dict) -> str:
 
 
 def _bust_user_cache(user_id: int) -> None:
-    """Инвалидирует кэши, зависящие от состава портфеля пользователя."""
     current_year = date.today().year
     for key in [
         f"portfolio_income:{user_id}",
@@ -76,42 +92,23 @@ def portfolio_page() -> str:
 
 @portfolio_bp.route("/api/portfolio/<int:bond_id>", methods=["DELETE"])
 @login_required
-def delete_position(bond_id):
-    """Физическое удаление лота из портфеля и соответствующей транзакции покупки."""
-    bond = BondPortfolio.query.filter_by(id=bond_id, user_id=current_user.id).first()
-    if not bond:
+def delete_position_route(bond_id):
+    result = delete_position(bond_id, current_user.id)
+    if result is None:
         return jsonify({"status": "error", "message": "Позиция не найдена"}), 404
-
-    # Находим и удаляем соответствующую транзакцию покупки
-    tx = Transaction.query.filter_by(
-        user_id=current_user.id,
-        isin=bond.isin,
-        tx_type="buy",
-        amount=bond.amount,
-        price=bond.buy_price,
-        tx_date=bond.purchase_date,
-    ).first()
-    if tx:
-        db.session.delete(tx)
-
-    db.session.delete(bond)
-    db.session.commit()
     _bust_user_cache(current_user.id)
     return jsonify({"status": "success", "message": "Позиция успешно удалена"})
 
 
 @portfolio_bp.route("/api/portfolio/reset", methods=["DELETE"])
 @login_required
-def reset_portfolio():
-    """Полностью удаляет все позиции и транзакции пользователя."""
+def reset_portfolio_route():
     data = request.get_json() or {}
     password = data.get("password")
     if not password or not current_user.check_password(password):
         return jsonify({"status": "error", "message": "Неверный пароль"}), 403
 
-    Transaction.query.filter_by(user_id=current_user.id).delete()
-    BondPortfolio.query.filter_by(user_id=current_user.id).delete()
-    db.session.commit()
+    reset_portfolio(current_user.id)
     _bust_user_cache(current_user.id)
     return jsonify({"status": "success", "message": "Портфель успешно сброшен"})
 
@@ -124,21 +121,13 @@ def get_portfolio():
         request.args.get("per_page", DEFAULT_PAGE_SIZE, type=int), MAX_PAGE_SIZE
     )
 
-    q = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False)
-    total_count = q.count()
-    all_active = q.order_by(BondPortfolio.id).all()
-
-    all_bonds, total_val = build_portfolio_list(all_active)
-
-    # Сохраняем обновлённые last_price из MOEX в БД (build_portfolio_list пишет в ORM)
-    try:
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
+    active = get_active_bonds(current_user.id)
+    total_count = len(active)
+    all_bonds, total_val = build_portfolio_list(active)
+    flush_portfolio_prices()
 
     ytm = calc_portfolio_ytm(all_bonds, total_val)
 
-    # Средневзвешенная дюрация портфеля (веса по рублевой стоимости)
     valid_dur_bonds = [
         b
         for b in all_bonds
@@ -156,7 +145,6 @@ def get_portfolio():
     else:
         portfolio_duration = 0.0
 
-    # Срезаем список облигаций для текущей страницы
     paginated_bonds = all_bonds[(page - 1) * per_page : page * per_page]
 
     payload = {
@@ -185,69 +173,11 @@ def get_portfolio():
 
 @portfolio_bp.route("/api/portfolio/<int:bond_id>/notes", methods=["PATCH"])
 @login_required
-def update_bond_notes(bond_id: int):
-    """Обновляет заметку к позиции портфеля."""
-    bond = BondPortfolio.query.filter_by(
-        id=bond_id, user_id=current_user.id
-    ).first_or_404()
+def update_bond_notes_route(bond_id: int):
     data = request.get_json() or {}
     raw = (data.get("notes") or "").strip()
-    bond.notes = raw if raw else None
-    db.session.commit()
-    return jsonify({"status": "success", "notes": bond.notes or ""})
-
-
-def build_transaction_entry(t: Transaction) -> dict:
-    buy_p = float(t.price)
-    sell_p = float(t.price)
-    commission = float(t.commission) if t.commission else 0.0
-    pnl = 0.0
-    pnl_pct = 0.0
-    sell_date = None
-    purchase_date = None
-
-    if t.tx_type == "sell":
-        sell_date = t.tx_date.strftime("%Y-%m-%d")
-        bond = BondPortfolio.query.filter_by(
-            user_id=t.user_id,
-            isin=t.isin,
-            is_sold=True,
-            amount=t.amount,
-            sell_date=t.tx_date,
-        ).first()
-        if bond:
-            buy_p = float(bond.buy_price)
-            sell_p = float(bond.sell_price) if bond.sell_price else float(t.price)
-            commission = (
-                float(bond.broker_commission) if bond.broker_commission else commission
-            )
-            pnl = (sell_p - buy_p) * t.amount - commission
-            pnl_pct = (pnl / (buy_p * t.amount) * 100) if buy_p else 0.0
-            if bond.purchase_date:
-                purchase_date = bond.purchase_date.strftime("%Y-%m-%d")
-    else:
-        purchase_date = t.tx_date.strftime("%Y-%m-%d")
-
-    moex_data = get_bond_cached(t.isin) or {}
-    facevalue = float(moex_data.get("facevalue") or 1000)
-
-    return {
-        "id": t.id,
-        "isin": t.isin,
-        "name": t.name or "Облигация",
-        "tx_type": t.tx_type,
-        "amount": t.amount,
-        "buy_price": buy_p,
-        "sell_price": round(sell_p, 2),
-        "commission": round(commission, 2),
-        "pnl": round(pnl, 2),
-        "pnl_pct": round(pnl_pct, 2),
-        "purchase_date": purchase_date,
-        "sell_date": sell_date,
-        "date": t.tx_date.strftime("%Y-%m-%d"),
-        "currency": t.currency or "RUB",
-        "facevalue": facevalue,
-    }
+    notes = update_bond_notes(bond_id, current_user.id, raw)
+    return jsonify({"status": "success", "notes": notes})
 
 
 @portfolio_bp.route("/api/portfolio/history", methods=["GET"])
@@ -259,71 +189,30 @@ def portfolio_history():
     )
     date_from_str = request.args.get("date_from", "").strip()
     date_to_str = request.args.get("date_to", "").strip()
-    tx_type = request.args.get("tx_type")
+    tx_type = request.args.get("tx_type", "sell")
 
-    tx_count = Transaction.query.filter_by(user_id=current_user.id).count()
-    if tx_count == 0:
-        bonds = BondPortfolio.query.filter_by(user_id=current_user.id).all()
-        for b in bonds:
-            buy_tx = Transaction(
-                user_id=current_user.id,
-                isin=b.isin,
-                name=b.name,
-                tx_type="buy",
-                amount=b.amount,
-                price=b.buy_price,
-                tx_date=b.purchase_date,
-                commission=0.0,
-            )
-            db.session.add(buy_tx)
-            if b.is_sold:
-                sell_tx = Transaction(
-                    user_id=current_user.id,
-                    isin=b.isin,
-                    name=b.name,
-                    tx_type="sell",
-                    amount=b.amount,
-                    price=b.sell_price if b.sell_price is not None else b.buy_price,
-                    tx_date=b.sell_date if b.sell_date is not None else b.purchase_date,
-                    commission=b.broker_commission,
-                )
-                db.session.add(sell_tx)
-        db.session.commit()
+    ensure_transactions_exist(current_user.id)
 
-    if tx_type is None:
-        tx_type = "sell"
-
-    query = Transaction.query.filter_by(user_id=current_user.id)
-    if tx_type in ("buy", "sell", "coupon"):
-        query = query.filter_by(tx_type=tx_type)
-
+    date_from: Optional[date] = None
+    date_to: Optional[date] = None
     if date_from_str:
         try:
-            query = query.filter(
-                Transaction.tx_date
-                >= datetime.strptime(date_from_str, "%Y-%m-%d").date()
-            )
+            date_from = datetime.strptime(date_from_str, "%Y-%m-%d").date()
         except ValueError:
             pass
     if date_to_str:
         try:
-            query = query.filter(
-                Transaction.tx_date <= datetime.strptime(date_to_str, "%Y-%m-%d").date()
-            )
+            date_to = datetime.strptime(date_to_str, "%Y-%m-%d").date()
         except ValueError:
             pass
 
-    total_count = query.count()
-    tx_list = (
-        query.order_by(Transaction.tx_date.desc(), Transaction.id.desc())
-        .offset((page - 1) * per_page)
-        .limit(per_page)
-        .all()
+    trades, total_count = query_transactions(
+        current_user.id, tx_type, date_from, date_to, page, per_page
     )
     return jsonify(
         {
             "status": "success",
-            "trades": [build_transaction_entry(t) for t in tx_list],
+            "trades": trades,
             "pagination": {
                 "page": page,
                 "per_page": per_page,
@@ -357,7 +246,7 @@ def bond_preview_route(isin: str):
 
 @portfolio_bp.route("/api/add_bond", methods=["POST"])
 @login_required
-def add_bond():
+def add_bond_route():
     try:
         req = AddBondRequest.model_validate(request.get_json() or {})
     except ValidationError as e:
@@ -408,14 +297,9 @@ def add_bond():
     except Exception as exc:
         logger.warning("Date spec validation error for %s: %s", secid, exc)
 
-    existing = BondPortfolio.query.filter_by(
-        user_id=current_user.id, isin=isin, is_sold=False
-    ).first()
-    existing_amount = existing.amount if existing else 0
-
     live_price = moex_data.get("price", float(req.buy_price))
     currency = moex_data.get("currency", "RUB")
-    new_bond = BondPortfolio(
+    new_bond, existing_amount = add_bond(
         user_id=current_user.id,
         isin=isin,
         secid=secid,
@@ -424,24 +308,9 @@ def add_bond():
         buy_price=float(req.buy_price),
         last_price=live_price,
         purchase_date=purchase_date,
-        is_sold=False,
         currency=currency,
         notes=req.notes.strip() if req.notes else None,
     )
-    db.session.add(new_bond)
-    db.session.add(
-        Transaction(
-            user_id=current_user.id,
-            isin=isin,
-            name=bond_title,
-            tx_type="buy",
-            amount=int(req.amount),
-            price=float(req.buy_price),
-            currency=currency,
-            tx_date=purchase_date,
-        )
-    )
-    db.session.commit()
     _bust_user_cache(current_user.id)
     return jsonify(
         {
@@ -455,8 +324,8 @@ def add_bond():
 
 @portfolio_bp.route("/api/sell_bond/<int:bond_id>", methods=["POST"])
 @login_required
-def sell_bond(bond_id: int):
-    bond = db.session.get(BondPortfolio, bond_id)
+def sell_bond_route(bond_id: int):
+    bond = get_bond_by_id(bond_id)
     if bond is None:
         abort(404)
     if bond.user_id != current_user.id:
@@ -481,51 +350,15 @@ def sell_bond(bond_id: int):
         if req.sell_price
         else (float(bond.last_price) if bond.last_price else float(bond.buy_price))
     )
+    sell_qty = req.amount if req.amount else bond.amount
 
-    if req.amount and req.amount < bond.amount:
-        sell_qty = req.amount
-        bond.amount -= sell_qty
-        sold_bond = BondPortfolio(
-            user_id=bond.user_id,
-            isin=bond.isin,
-            secid=bond.secid,
-            name=bond.name,
-            amount=sell_qty,
-            buy_price=bond.buy_price,
-            last_price=bond.last_price,
-            purchase_date=bond.purchase_date,
-            is_sold=True,
-            sell_date=date.today(),
-            sell_price=sell_price,
-            broker_commission=req.broker_commission,
-            notes=bond.notes,
-        )
-        db.session.add(sold_bond)
-        message = f"Частично продано {sell_qty} шт. облигации {bond.name}."
-    else:
-        sell_qty = bond.amount
-        bond.is_sold = True
-        bond.sell_date = date.today()
-        bond.sell_price = sell_price
-        if req.broker_commission is not None:
-            bond.broker_commission = req.broker_commission
-        sold_bond = bond
-        message = f"Облигация {bond.name} полностью продана и переведена в архив."
-
-    db.session.add(
-        Transaction(
-            user_id=current_user.id,
-            isin=bond.isin,
-            name=bond.name,
-            tx_type="sell",
-            amount=sell_qty,
-            price=sell_price,
-            commission=req.broker_commission,
-            tx_date=sold_bond.sell_date,
-            currency=bond.currency or "RUB",
-        )
+    message = sell_bond(
+        bond=bond,
+        sell_price=sell_price,
+        sell_qty=sell_qty,
+        broker_commission=req.broker_commission,
+        user_id=current_user.id,
     )
-    db.session.commit()
     _bust_user_cache(current_user.id)
     return jsonify({"status": "success", "message": message})
 
@@ -597,35 +430,7 @@ def get_bond_chart_data(isin: str):
 @portfolio_bp.route("/api/portfolio/calendar", methods=["GET"])
 @login_required
 def get_portfolio_calendar():
-    active = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False).all()
-    events = []
-
-    grouped = {}
-    for bond in active:
-        key = bond.secid or bond.isin
-        if key not in grouped:
-            grouped[key] = {
-                "name": bond.name or bond.isin,
-                "isin": bond.isin,
-                "amount": 0,
-            }
-        grouped[key]["amount"] += bond.amount
-
-    for target, data in grouped.items():
-        for c in get_coupon_calendar_cached(target):
-            val = c.get("value")
-            if val is None:
-                val = 0.0
-            events.append(
-                {
-                    "name": data["name"],
-                    "isin": data["isin"],
-                    "date": c["date"],
-                    "total_payout": round(val * data["amount"], 2),
-                }
-            )
-    events.sort(key=lambda x: x["date"])
-    return jsonify(events[:10])
+    return jsonify(get_coupon_calendar_events(current_user.id))
 
 
 @portfolio_bp.route("/api/portfolio/income", methods=["GET"])
@@ -635,7 +440,7 @@ def portfolio_income():
     cached = cache.get(cache_key)
     if cached:
         return jsonify(cached)
-    active = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False).all()
+    active = get_active_bonds(current_user.id)
     result = calc_coupon_income(active)
     cache.set(cache_key, result, timeout=INCOME_TTL)
     return jsonify(result)
@@ -644,57 +449,22 @@ def portfolio_income():
 @portfolio_bp.route("/api/portfolio/allocation", methods=["GET"])
 @login_required
 def portfolio_allocation():
-    active = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False).all()
-    slices = [
-        {
-            "name": b.name or b.isin,
-            "value": round(
-                (float(b.last_price) if b.last_price else float(b.buy_price))
-                * b.amount,
-                2,
-            ),
-        }
-        for b in active
-    ]
-    slices.sort(key=lambda x: x["value"], reverse=True)
-    return jsonify(slices)
+    return jsonify(get_allocation(current_user.id))
 
 
 @portfolio_bp.route("/api/watchlist", methods=["GET"])
 @login_required
-def get_watchlist():
-    items = (
-        Watchlist.query.filter_by(user_id=current_user.id)
-        .order_by(Watchlist.added_at.desc())
-        .all()
-    )
-    result = []
-    for item in items:
-        moex_data = get_bond_cached(item.isin) or {}
-        result.append(
-            {
-                "isin": item.isin,
-                "name": item.name or item.isin,
-                "added_at": item.added_at.strftime("%Y-%m-%d"),
-                "price": moex_data.get("price"),
-                "ytm": moex_data.get("ytm"),
-                "nkd": moex_data.get("nkd"),
-            }
-        )
-    return jsonify(result)
+def get_watchlist_route():
+    return jsonify(get_watchlist(current_user.id))
 
 
 @portfolio_bp.route("/api/watchlist", methods=["POST"])
 @login_required
-def add_to_watchlist():
+def add_to_watchlist_route():
     data = request.get_json() or {}
     isin = data.get("isin", "").upper().strip()
     if not isin:
         return jsonify({"status": "error", "message": "ISIN обязателен."}), 400
-    if Watchlist.query.filter_by(user_id=current_user.id, isin=isin).first():
-        return jsonify(
-            {"status": "error", "message": "Облигация уже в списке наблюдения."}
-        ), 400
 
     moex_data = get_moex_bond(isin)
     if not moex_data:
@@ -702,14 +472,11 @@ def add_to_watchlist():
             {"status": "error", "message": "Облигация не найдена на Московской Бирже."}
         ), 404
 
-    item = Watchlist(
-        user_id=current_user.id,
-        isin=isin,
-        secid=moex_data["secid"],
-        name=moex_data.get("name", isin),
+    error = add_to_watchlist(
+        current_user.id, isin, moex_data["secid"], moex_data.get("name", isin)
     )
-    db.session.add(item)
-    db.session.commit()
+    if error:
+        return jsonify({"status": "error", "message": error}), 400
     return jsonify(
         {"status": "success", "message": "Облигация добавлена в список наблюдения."}
     ), 201
@@ -717,15 +484,12 @@ def add_to_watchlist():
 
 @portfolio_bp.route("/api/watchlist/<isin>", methods=["DELETE"])
 @login_required
-def remove_from_watchlist(isin):
+def remove_from_watchlist_route(isin):
     isin = isin.upper().strip()
-    item = Watchlist.query.filter_by(user_id=current_user.id, isin=isin).first()
-    if not item:
+    if not remove_from_watchlist(current_user.id, isin):
         return jsonify(
             {"status": "error", "message": "Элемент не найден в списке наблюдения."}
         ), 404
-    db.session.delete(item)
-    db.session.commit()
     return jsonify({"status": "success", "message": "Удалено из списка наблюдения."})
 
 
@@ -779,53 +543,17 @@ def screener():
 @portfolio_bp.route("/api/notifications/upcoming", methods=["GET"])
 @login_required
 def upcoming_notifications():
-    """Возвращает купонные выплаты в ближайшие N дней (для колокольчика)."""
     try:
         days = max(1, min(int(request.args.get("days", 7)), 90))
     except (ValueError, TypeError):
         days = 7
-
-    today = date.today()
-    horizon = today + timedelta(days=days)
-
-    active_bonds = BondPortfolio.query.filter_by(
-        user_id=current_user.id, is_sold=False
-    ).all()
-
-    events: list[dict] = []
-    for bond in active_bonds:
-        try:
-            coupons = get_coupon_calendar_cached(bond.isin) or []
-        except Exception:
-            continue
-        for c in coupons:
-            coupon_date_str = c.get("coupondate") or c.get("date") or ""
-            if not coupon_date_str:
-                continue
-            try:
-                coupon_date = date.fromisoformat(coupon_date_str[:10])
-            except ValueError:
-                continue
-            if today <= coupon_date <= horizon:
-                events.append(
-                    {
-                        "isin": bond.isin,
-                        "name": bond.name or bond.isin,
-                        "coupon_date": coupon_date_str[:10],
-                        "coupon_value": c.get("value") or c.get("couponvalue"),
-                        "amount": bond.amount,
-                        "days_left": (coupon_date - today).days,
-                    }
-                )
-
-    events.sort(key=lambda x: x["coupon_date"])
+    events = get_upcoming_coupons(current_user.id, days)
     return jsonify({"count": len(events), "events": events})
 
 
 @portfolio_bp.route("/api/portfolio/sparkline/<isin>", methods=["GET"])
 @login_required
 def get_portfolio_sparkline(isin: str):
-    """Возвращает динамический SVG-микрографик цены облигации за 30 дней."""
     isin = isin.upper().strip()
     cache_key = f"sparkline:{isin}"
 
@@ -846,7 +574,7 @@ def get_portfolio_sparkline(isin: str):
         full = get_bond_history_all(
             moex_data["secid"], moex_data.get("facevalue", 1000)
         )
-        prices = full.get("data", [])[-30:]  # последние 30 точек
+        prices = full.get("data", [])[-30:]
 
         if not prices or len(prices) < 2:
             svg = '<svg width="80" height="20" xmlns="http://www.w3.org/2000/svg"><line x1="0" y1="10" x2="80" y2="10" stroke="#94a3b8" stroke-width="1.5"/></svg>'
@@ -880,33 +608,13 @@ def get_portfolio_sparkline(isin: str):
 
 @portfolio_bp.route("/api/alerts", methods=["GET"])
 @login_required
-def get_price_alerts():
-    """Возвращает все ценовые алерты текущего пользователя."""
-    alerts = (
-        PriceAlert.query.filter_by(user_id=current_user.id)
-        .order_by(PriceAlert.created_at.desc())
-        .all()
-    )
-    return jsonify(
-        [
-            {
-                "id": a.id,
-                "isin": a.isin,
-                "name": a.name or a.isin,
-                "target_price": float(a.target_price),
-                "condition": a.condition,
-                "is_triggered": a.is_triggered,
-                "created_at": a.created_at.strftime("%Y-%m-%d %H:%M:%S"),
-            }
-            for a in alerts
-        ]
-    )
+def get_price_alerts_route():
+    return jsonify(get_price_alerts(current_user.id))
 
 
 @portfolio_bp.route("/api/alerts", methods=["POST"])
 @login_required
-def create_price_alert():
-    """Создаёт новый ценовой алерт."""
+def create_price_alert_route():
     data = request.get_json() or {}
     isin = str(data.get("isin", "")).strip().upper()
     target_price = data.get("target_price")
@@ -925,41 +633,19 @@ def create_price_alert():
     moex_data = get_moex_bond(isin)
     bond_name = moex_data.get("name", isin) if moex_data else isin
 
-    new_alert = PriceAlert(
-        user_id=current_user.id,
-        isin=isin,
-        name=bond_name,
-        target_price=target_val,
-        condition=condition,
-        is_triggered=False,
-    )
-    db.session.add(new_alert)
-    db.session.commit()
-
+    alert = create_price_alert(current_user.id, isin, bond_name, target_val, condition)
     return jsonify(
         {
             "status": "success",
             "message": f"Алерт на цену {target_val} ₽ успешно установлен для {bond_name}.",
-            "alert": {
-                "id": new_alert.id,
-                "isin": new_alert.isin,
-                "name": new_alert.name,
-                "target_price": target_val,
-                "condition": new_alert.condition,
-                "is_triggered": False,
-            },
+            "alert": alert,
         }
     ), 201
 
 
 @portfolio_bp.route("/api/alerts/<int:alert_id>", methods=["DELETE"])
 @login_required
-def delete_price_alert(alert_id: int):
-    """Удаляет ценовой алерт."""
-    alert = PriceAlert.query.filter_by(id=alert_id, user_id=current_user.id).first()
-    if not alert:
+def delete_price_alert_route(alert_id: int):
+    if not delete_price_alert(alert_id, current_user.id):
         return jsonify({"status": "error", "message": "Алерт не найден."}), 404
-
-    db.session.delete(alert)
-    db.session.commit()
     return jsonify({"status": "success", "message": "Алерт успешно удалён."})

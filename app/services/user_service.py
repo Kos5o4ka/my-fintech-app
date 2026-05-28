@@ -131,3 +131,42 @@ def update_telegram_settings(user: User, telegram_notifications: bool) -> None:
     """Обновляет флаг Telegram-уведомлений пользователя."""
     user.telegram_notifications = telegram_notifications
     db.session.commit()
+
+
+def unlink_telegram(user: User) -> None:
+    """Отвязывает Telegram от аккаунта пользователя."""
+    user.telegram_chat_id = None
+    user.telegram_notifications = False
+    user.telegram_username = None
+    db.session.commit()
+
+
+def get_profile_stats(user_id: int) -> dict:
+    """Счётчики для hero-секции профиля."""
+    from app.models import BondPortfolio
+    from app.services.portfolio_service import build_portfolio_list
+
+    active = BondPortfolio.query.filter_by(user_id=user_id, is_sold=False).all()
+    sold_count = BondPortfolio.query.filter_by(user_id=user_id, is_sold=True).count()
+    _, total_value = build_portfolio_list(active)
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+    return {
+        "bond_count": len(active),
+        "sold_count": sold_count,
+        "total_value": round(total_value, 2),
+    }
+
+
+def get_activity_log(user_id: int, page: int, per_page: int) -> tuple[list, int]:
+    """Возвращает (записи аудита, total)."""
+    from app.models import AuditLog
+
+    query = AuditLog.query.filter_by(user_id=user_id).order_by(
+        AuditLog.created_at.desc()
+    )
+    total = query.count()
+    logs = query.offset((page - 1) * per_page).limit(per_page).all()
+    return logs, total

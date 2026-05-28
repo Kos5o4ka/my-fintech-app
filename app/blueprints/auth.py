@@ -1,45 +1,29 @@
 """Blueprint аутентификации — вход, выход, смена пароля, 2FA через Telegram."""
 
 import logging
-from typing import Optional
 
 from pydantic import ValidationError
 from flask import Blueprint, request, jsonify, session
 from flask_login import login_user, logout_user, login_required, current_user
-from werkzeug.security import check_password_hash, generate_password_hash
 
-from app.extensions import db, limiter
-from app.models import User, AuditLog
+from app.extensions import limiter
 from app.schemas.auth import ChangePasswordRequest
 from app.utils import get_client_ip, get_user_agent
+from app.services.auth_service import (
+    find_user_by_username,
+    get_user_by_id,
+    verify_password,
+    set_password,
+    audit_log,
+    commit,
+)
 
 logger = logging.getLogger(__name__)
 auth_bp = Blueprint("auth", __name__)
 
 
-# ── Вспомогательные функции ───────────────────────────────────────────────────
-
-
-def _audit(
-    action: str,
-    user_id: Optional[int] = None,
-    details: Optional[dict] = None,
-) -> None:
-    """Записывает событие в журнал аудита (без commit — вызывать до commit сессии)."""
-    try:
-        log = AuditLog(
-            action=action,
-            user_id=user_id,
-            ip_address=get_client_ip(),
-            user_agent=get_user_agent(),
-            details=details,
-        )
-        db.session.add(log)
-    except Exception as exc:
-        logger.error("Audit log error: %s", exc)
-
-
-# ── Endpoints ─────────────────────────────────────────────────────────────────
+def _audit(action: str, user_id=None, details=None) -> None:
+    audit_log(action, user_id, get_client_ip(), get_user_agent(), details)
 
 
 @auth_bp.route("/api/auth/login", methods=["POST"])
@@ -49,23 +33,22 @@ def api_login():
     username = data.get("username", "").strip()
     password = data.get("password", "").strip()
 
-    user = User.query.filter_by(username=username).first()
+    user = find_user_by_username(username)
 
-    if not user or not check_password_hash(user.password_hash, password):
+    if not user or not verify_password(user, password):
         _audit("login_fail", details={"username": username[:50]})
-        db.session.commit()
+        commit()
         return jsonify(
             {"status": "error", "message": "Неверный логин или пароль."}
         ), 401
 
-    # Если у пользователя привязан Telegram — включаем 2FA
     if user.telegram_chat_id:
         from app.services.telegram_service import generate_otp, create_pending_2fa
 
         token = create_pending_2fa(user.id, user.telegram_chat_id)
         generate_otp(user.telegram_chat_id)
         _audit("login_2fa_sent", user_id=user.id)
-        db.session.commit()
+        commit()
         return jsonify(
             {
                 "status": "2fa_required",
@@ -74,14 +57,13 @@ def api_login():
             }
         )
 
-    # Обычный вход без 2FA
     session.permanent = True
     login_user(user, remember=True)
     _audit("login_ok", user_id=user.id)
     from app.services.telegram_service import refresh_tg_username
 
     refresh_tg_username(user)
-    db.session.commit()
+    commit()
     return jsonify(
         {
             "status": "success",
@@ -97,7 +79,6 @@ def api_login():
 @auth_bp.route("/api/auth/verify_2fa", methods=["POST"])
 @limiter.limit("10 per minute")
 def verify_2fa():
-    """Завершает вход после успешной проверки OTP-кода из Telegram."""
     data = request.get_json() or {}
     token = data.get("token", "").strip()
     code = data.get("code", "").strip()
@@ -121,12 +102,12 @@ def verify_2fa():
 
     if not verify_otp(chat_id, code):
         _audit("login_2fa_fail", user_id=user_id)
-        db.session.commit()
+        commit()
         return jsonify(
             {"status": "error", "message": "Неверный или просроченный код."}
         ), 401
 
-    user = db.session.get(User, user_id)
+    user = get_user_by_id(user_id)
     if not user:
         return jsonify({"status": "error", "message": "Пользователь не найден."}), 404
 
@@ -136,7 +117,7 @@ def verify_2fa():
     from app.services.telegram_service import refresh_tg_username
 
     refresh_tg_username(user)
-    db.session.commit()
+    commit()
     return jsonify(
         {
             "status": "success",
@@ -153,7 +134,7 @@ def verify_2fa():
 def api_logout():
     user_id = current_user.id if current_user.is_authenticated else None
     _audit("logout", user_id=user_id)
-    db.session.commit()
+    commit()
     logout_user()
     return jsonify({"status": "success", "message": "Вы успешно вышли из системы."})
 
@@ -167,7 +148,7 @@ def change_password():
         first_error = e.errors()[0]["msg"].replace("Value error, ", "")
         return jsonify({"status": "error", "message": first_error}), 400
 
-    if not check_password_hash(current_user.password_hash, req.old_password):
+    if not verify_password(current_user, req.old_password):
         return jsonify({"status": "error", "message": "Неверный текущий пароль."}), 401
 
     if req.new_password != req.confirm_password:
@@ -175,7 +156,7 @@ def change_password():
             {"status": "error", "message": "Новые пароли не совпадают."}
         ), 400
 
-    current_user.password_hash = generate_password_hash(req.new_password)
+    set_password(current_user, req.new_password)
     _audit("change_password", user_id=current_user.id)
-    db.session.commit()
+    commit()
     return jsonify({"status": "success", "message": "Пароль успешно изменён."})

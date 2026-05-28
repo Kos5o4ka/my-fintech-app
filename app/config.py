@@ -56,7 +56,7 @@ class TestingConfig(Config):
     TESTING = True
     SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
     WTF_CSRF_ENABLED = False
-    SECRET_KEY = "test-secret-key"
+    SECRET_KEY = "test-secret-key"  # noqa: S105  # nosec B105
     MAIL_SUPPRESS_SEND = True
 
 

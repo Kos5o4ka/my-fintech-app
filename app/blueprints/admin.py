@@ -1,14 +1,21 @@
+"""Blueprint администрирования — тонкий HTTP-слой."""
+
 import logging
 import re
 
 from flask import Blueprint, request, jsonify, abort, render_template
 from flask_login import login_required, current_user
-from werkzeug.security import generate_password_hash
 
-from app.extensions import db, limiter
-from app.models import User, AuditLog
+from app.extensions import limiter
 from app.constants import MIN_PASSWORD_LEN
 from app.utils import get_client_ip, get_user_agent
+from app.services.admin_service import (
+    get_all_users,
+    find_user_by_username,
+    create_user,
+    delete_user,
+    change_user_password,
+)
 
 logger = logging.getLogger(__name__)
 admin_bp = Blueprint("admin", __name__)
@@ -24,13 +31,10 @@ def admin_page():
 
 @admin_bp.route("/api/admin/users", methods=["GET"])
 @login_required
-def get_all_users():
+def get_all_users_route():
     if not current_user.is_admin:
         abort(403)
-    users = User.query.all()
-    return jsonify(
-        [{"id": u.id, "username": u.username, "is_admin": u.is_admin} for u in users]
-    )
+    return jsonify(get_all_users())
 
 
 @admin_bp.route("/api/admin/add_user", methods=["POST"])
@@ -61,7 +65,7 @@ def admin_add_user():
             400,
         )
 
-    if User.query.filter_by(username=username).first():
+    if find_user_by_username(username):
         return (
             jsonify(
                 {
@@ -72,13 +76,7 @@ def admin_add_user():
             400,
         )
 
-    new_user = User(
-        username=username,
-        password_hash=generate_password_hash(password),
-        is_admin=is_admin,
-    )
-    db.session.add(new_user)
-    db.session.commit()
+    new_user = create_user(username, password, is_admin)
     return (
         jsonify(
             {
@@ -93,24 +91,22 @@ def admin_add_user():
 
 @admin_bp.route("/api/admin/delete_user/<int:user_id>", methods=["DELETE"])
 @login_required
-def delete_user(user_id):
+def delete_user_route(user_id):
     if not current_user.is_admin:
         abort(403)
 
-    user_to_delete = db.session.get(User, user_id)
-    if user_to_delete is None:
-        abort(404)
-    if user_to_delete.id == current_user.id:
+    if user_id == current_user.id:
         return jsonify(
             {"status": "error", "message": "Вы не можете удалить сами себя."}
         ), 400
 
-    db.session.delete(user_to_delete)
-    db.session.commit()
+    user = delete_user(user_id)
+    if user is None:
+        abort(404)
     return jsonify(
         {
             "status": "success",
-            "message": f"Пользователь {user_to_delete.username} удален.",
+            "message": f"Пользователь {user.username} удален.",
         }
     )
 
@@ -121,15 +117,6 @@ def delete_user(user_id):
 def admin_change_password(user_id):
     if not current_user.is_admin:
         abort(403)
-
-    target = db.session.get(User, user_id)
-    if target is None:
-        abort(404)
-
-    if target.username == "root":
-        return jsonify(
-            {"status": "error", "message": "Пароль root-пользователя изменить нельзя."}
-        ), 403
 
     data = request.get_json() or {}
     new_password = data.get("new_password", "").strip()
@@ -142,16 +129,20 @@ def admin_change_password(user_id):
             }
         ), 400
 
-    target.password_hash = generate_password_hash(new_password)
-    log = AuditLog(
-        action="admin_change_password",
-        user_id=current_user.id,
-        ip_address=get_client_ip(),
-        user_agent=get_user_agent(),
-        details={"target_user_id": target.id, "target_username": target.username},
+    from app.services.admin_service import get_user_by_id
+
+    target = get_user_by_id(user_id)
+    if target is None:
+        abort(404)
+
+    if target.username == "root":
+        return jsonify(
+            {"status": "error", "message": "Пароль root-пользователя изменить нельзя."}
+        ), 403
+
+    change_user_password(
+        user_id, new_password, current_user.id, get_client_ip(), get_user_agent()
     )
-    db.session.add(log)
-    db.session.commit()
     return jsonify(
         {
             "status": "success",

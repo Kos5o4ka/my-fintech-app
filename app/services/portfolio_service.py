@@ -1,4 +1,4 @@
-"""Сервис портфеля — P&L, доходность, купонный доход, налоги, Sharpe Ratio."""
+"""Сервис портфеля — P&L, доходность, купонный доход, налоги, Sharpe Ratio, CRUD."""
 
 import logging
 import math
@@ -7,12 +7,491 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, date
 from typing import Optional
 
-from app.models import BondPortfolio
+from app.extensions import db
+from app.models import BondPortfolio, Transaction, Watchlist, PriceAlert
 from app.services.moex_service import get_bond_cached, get_coupon_calendar_cached
 from app.constants import calc_ndfl, LDV_YEARS_THRESHOLD, LDV_ANNUAL_DEDUCTION
 from app.moex import get_currency_rates, get_gcurve_rate
 
 logger = logging.getLogger(__name__)
+
+
+# ── CRUD / Query helpers ─────────────────────────────────────────────────────
+
+
+def get_active_bonds(user_id: int) -> list[BondPortfolio]:
+    return BondPortfolio.query.filter_by(user_id=user_id, is_sold=False).all()
+
+
+def get_sold_bonds(user_id: int) -> list[BondPortfolio]:
+    return BondPortfolio.query.filter_by(user_id=user_id, is_sold=True).all()
+
+
+def get_sold_bonds_in_range(
+    user_id: int, year_start: date, year_end: date
+) -> list[BondPortfolio]:
+    return BondPortfolio.query.filter(
+        BondPortfolio.user_id == user_id,
+        BondPortfolio.is_sold == True,  # noqa: E712
+        BondPortfolio.sell_date >= year_start,
+        BondPortfolio.sell_date <= year_end,
+    ).all()
+
+
+def get_bond_or_none(bond_id: int, user_id: int) -> Optional[BondPortfolio]:
+    return BondPortfolio.query.filter_by(id=bond_id, user_id=user_id).first()
+
+
+def get_bond_by_id(bond_id: int) -> Optional[BondPortfolio]:
+    return db.session.get(BondPortfolio, bond_id)
+
+
+def delete_position(bond_id: int, user_id: int) -> Optional[str]:
+    """Удаляет позицию и связанную транзакцию покупки. Возвращает None если не найдена."""
+    bond = get_bond_or_none(bond_id, user_id)
+    if not bond:
+        return None
+
+    tx = Transaction.query.filter_by(
+        user_id=user_id,
+        isin=bond.isin,
+        tx_type="buy",
+        amount=bond.amount,
+        price=bond.buy_price,
+        tx_date=bond.purchase_date,
+    ).first()
+    if tx:
+        db.session.delete(tx)
+
+    db.session.delete(bond)
+    db.session.commit()
+    return "ok"
+
+
+def reset_portfolio(user_id: int) -> None:
+    Transaction.query.filter_by(user_id=user_id).delete()
+    BondPortfolio.query.filter_by(user_id=user_id).delete()
+    db.session.commit()
+
+
+def add_bond(
+    user_id: int,
+    isin: str,
+    secid: str,
+    name: str,
+    amount: int,
+    buy_price: float,
+    last_price: float,
+    purchase_date: date,
+    currency: str = "RUB",
+    notes: Optional[str] = None,
+) -> tuple[BondPortfolio, int]:
+    """Добавляет облигацию + транзакцию. Возвращает (bond, existing_amount)."""
+    existing = BondPortfolio.query.filter_by(
+        user_id=user_id, isin=isin, is_sold=False
+    ).first()
+    existing_amount = existing.amount if existing else 0
+
+    new_bond = BondPortfolio(
+        user_id=user_id,
+        isin=isin,
+        secid=secid,
+        name=name,
+        amount=amount,
+        buy_price=buy_price,
+        last_price=last_price,
+        purchase_date=purchase_date,
+        is_sold=False,
+        currency=currency,
+        notes=notes,
+    )
+    db.session.add(new_bond)
+    db.session.add(
+        Transaction(
+            user_id=user_id,
+            isin=isin,
+            name=name,
+            tx_type="buy",
+            amount=amount,
+            price=buy_price,
+            currency=currency,
+            tx_date=purchase_date,
+        )
+    )
+    db.session.commit()
+    return new_bond, existing_amount
+
+
+def sell_bond(
+    bond: BondPortfolio,
+    sell_price: float,
+    sell_qty: int,
+    broker_commission: Optional[float],
+    user_id: int,
+) -> str:
+    """Продаёт (частично или полностью). Возвращает сообщение."""
+    if sell_qty < bond.amount:
+        bond.amount -= sell_qty
+        sold_bond = BondPortfolio(
+            user_id=bond.user_id,
+            isin=bond.isin,
+            secid=bond.secid,
+            name=bond.name,
+            amount=sell_qty,
+            buy_price=bond.buy_price,
+            last_price=bond.last_price,
+            purchase_date=bond.purchase_date,
+            is_sold=True,
+            sell_date=date.today(),
+            sell_price=sell_price,
+            broker_commission=broker_commission,
+            notes=bond.notes,
+        )
+        db.session.add(sold_bond)
+        message = f"Частично продано {sell_qty} шт. облигации {bond.name}."
+    else:
+        sell_qty = bond.amount
+        bond.is_sold = True
+        bond.sell_date = date.today()
+        bond.sell_price = sell_price
+        if broker_commission is not None:
+            bond.broker_commission = broker_commission
+        sold_bond = bond
+        message = f"Облигация {bond.name} полностью продана и переведена в архив."
+
+    db.session.add(
+        Transaction(
+            user_id=user_id,
+            isin=bond.isin,
+            name=bond.name,
+            tx_type="sell",
+            amount=sell_qty,
+            price=sell_price,
+            commission=broker_commission,
+            tx_date=sold_bond.sell_date,
+            currency=bond.currency or "RUB",
+        )
+    )
+    db.session.commit()
+    return message
+
+
+def update_bond_notes(bond_id: int, user_id: int, notes: str) -> Optional[str]:
+    """Обновляет заметку. Возвращает None если позиция не найдена."""
+    bond = BondPortfolio.query.filter_by(id=bond_id, user_id=user_id).first_or_404()
+    bond.notes = notes if notes else None
+    db.session.commit()
+    return bond.notes or ""
+
+
+def flush_portfolio_prices() -> None:
+    """Коммитит обновлённые last_price из build_portfolio_list."""
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+
+def build_transaction_entry(t: Transaction) -> dict:
+    """Строит словарь данных одной транзакции для API."""
+    buy_p = float(t.price)
+    sell_p = float(t.price)
+    commission = float(t.commission) if t.commission else 0.0
+    pnl = 0.0
+    pnl_pct = 0.0
+    sell_date = None
+    purchase_date = None
+
+    if t.tx_type == "sell":
+        sell_date = t.tx_date.strftime("%Y-%m-%d")
+        bond = BondPortfolio.query.filter_by(
+            user_id=t.user_id,
+            isin=t.isin,
+            is_sold=True,
+            amount=t.amount,
+            sell_date=t.tx_date,
+        ).first()
+        if bond:
+            buy_p = float(bond.buy_price)
+            sell_p = float(bond.sell_price) if bond.sell_price else float(t.price)
+            commission = (
+                float(bond.broker_commission) if bond.broker_commission else commission
+            )
+            pnl = (sell_p - buy_p) * t.amount - commission
+            pnl_pct = (pnl / (buy_p * t.amount) * 100) if buy_p else 0.0
+            if bond.purchase_date:
+                purchase_date = bond.purchase_date.strftime("%Y-%m-%d")
+    else:
+        purchase_date = t.tx_date.strftime("%Y-%m-%d")
+
+    moex_data = get_bond_cached(t.isin) or {}
+    facevalue = float(moex_data.get("facevalue") or 1000)
+
+    return {
+        "id": t.id,
+        "isin": t.isin,
+        "name": t.name or "Облигация",
+        "tx_type": t.tx_type,
+        "amount": t.amount,
+        "buy_price": buy_p,
+        "sell_price": round(sell_p, 2),
+        "commission": round(commission, 2),
+        "pnl": round(pnl, 2),
+        "pnl_pct": round(pnl_pct, 2),
+        "purchase_date": purchase_date,
+        "sell_date": sell_date,
+        "date": t.tx_date.strftime("%Y-%m-%d"),
+        "currency": t.currency or "RUB",
+        "facevalue": facevalue,
+    }
+
+
+def ensure_transactions_exist(user_id: int) -> None:
+    """Мигрирует legacy-позиции в таблицу Transaction если та пуста."""
+    tx_count = Transaction.query.filter_by(user_id=user_id).count()
+    if tx_count > 0:
+        return
+    bonds = BondPortfolio.query.filter_by(user_id=user_id).all()
+    for b in bonds:
+        db.session.add(
+            Transaction(
+                user_id=user_id,
+                isin=b.isin,
+                name=b.name,
+                tx_type="buy",
+                amount=b.amount,
+                price=b.buy_price,
+                tx_date=b.purchase_date,
+                commission=0.0,
+            )
+        )
+        if b.is_sold:
+            db.session.add(
+                Transaction(
+                    user_id=user_id,
+                    isin=b.isin,
+                    name=b.name,
+                    tx_type="sell",
+                    amount=b.amount,
+                    price=b.sell_price if b.sell_price is not None else b.buy_price,
+                    tx_date=b.sell_date if b.sell_date is not None else b.purchase_date,
+                    commission=b.broker_commission,
+                )
+            )
+    db.session.commit()
+
+
+def query_transactions(
+    user_id: int,
+    tx_type: Optional[str],
+    date_from: Optional[date],
+    date_to: Optional[date],
+    page: int,
+    per_page: int,
+) -> tuple[list[dict], int]:
+    """Возвращает (список транзакций, total_count)."""
+    query = Transaction.query.filter_by(user_id=user_id)
+    if tx_type in ("buy", "sell", "coupon"):
+        query = query.filter_by(tx_type=tx_type)
+    if date_from:
+        query = query.filter(Transaction.tx_date >= date_from)
+    if date_to:
+        query = query.filter(Transaction.tx_date <= date_to)
+
+    total_count = query.count()
+    tx_list = (
+        query.order_by(Transaction.tx_date.desc(), Transaction.id.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+    return [build_transaction_entry(t) for t in tx_list], total_count
+
+
+def get_allocation(user_id: int) -> list[dict]:
+    """Аллокация активного портфеля для pie-chart."""
+    active = get_active_bonds(user_id)
+    slices = [
+        {
+            "name": b.name or b.isin,
+            "value": round(
+                (float(b.last_price) if b.last_price else float(b.buy_price))
+                * b.amount,
+                2,
+            ),
+        }
+        for b in active
+    ]
+    slices.sort(key=lambda x: x["value"], reverse=True)
+    return slices
+
+
+def get_coupon_calendar_events(user_id: int) -> list[dict]:
+    """Ближайшие купонные выплаты (для календаря)."""
+    active = get_active_bonds(user_id)
+    grouped: dict[str, dict] = {}
+    for bond in active:
+        key = bond.secid or bond.isin
+        if key not in grouped:
+            grouped[key] = {
+                "name": bond.name or bond.isin,
+                "isin": bond.isin,
+                "amount": 0,
+            }
+        grouped[key]["amount"] += bond.amount
+
+    events = []
+    for target, data in grouped.items():
+        for c in get_coupon_calendar_cached(target):
+            val = c.get("value") or 0.0
+            events.append(
+                {
+                    "name": data["name"],
+                    "isin": data["isin"],
+                    "date": c["date"],
+                    "total_payout": round(val * data["amount"], 2),
+                }
+            )
+    events.sort(key=lambda x: x["date"])
+    return events[:10]
+
+
+def get_upcoming_coupons(user_id: int, days: int) -> list[dict]:
+    """Купонные выплаты в ближайшие N дней (для колокольчика)."""
+    from datetime import timedelta
+
+    today = date.today()
+    horizon = today + timedelta(days=days)
+    active = get_active_bonds(user_id)
+
+    events: list[dict] = []
+    for bond in active:
+        try:
+            coupons = get_coupon_calendar_cached(bond.isin) or []
+        except Exception:
+            continue
+        for c in coupons:
+            coupon_date_str = c.get("coupondate") or c.get("date") or ""
+            if not coupon_date_str:
+                continue
+            try:
+                coupon_date = date.fromisoformat(coupon_date_str[:10])
+            except ValueError:
+                continue
+            if today <= coupon_date <= horizon:
+                events.append(
+                    {
+                        "isin": bond.isin,
+                        "name": bond.name or bond.isin,
+                        "coupon_date": coupon_date_str[:10],
+                        "coupon_value": c.get("value") or c.get("couponvalue"),
+                        "amount": bond.amount,
+                        "days_left": (coupon_date - today).days,
+                    }
+                )
+
+    events.sort(key=lambda x: x["coupon_date"])
+    return events
+
+
+# ── Watchlist ────────────────────────────────────────────────────────────────
+
+
+def get_watchlist(user_id: int) -> list[dict]:
+    items = (
+        Watchlist.query.filter_by(user_id=user_id)
+        .order_by(Watchlist.added_at.desc())
+        .all()
+    )
+    result = []
+    for item in items:
+        moex_data = get_bond_cached(item.isin) or {}
+        result.append(
+            {
+                "isin": item.isin,
+                "name": item.name or item.isin,
+                "added_at": item.added_at.strftime("%Y-%m-%d"),
+                "price": moex_data.get("price"),
+                "ytm": moex_data.get("ytm"),
+                "nkd": moex_data.get("nkd"),
+            }
+        )
+    return result
+
+
+def add_to_watchlist(user_id: int, isin: str, secid: str, name: str) -> Optional[str]:
+    """Возвращает None при успехе, строку ошибки при дубликате."""
+    if Watchlist.query.filter_by(user_id=user_id, isin=isin).first():
+        return "Облигация уже в списке наблюдения."
+    item = Watchlist(user_id=user_id, isin=isin, secid=secid, name=name)
+    db.session.add(item)
+    db.session.commit()
+    return None
+
+
+def remove_from_watchlist(user_id: int, isin: str) -> bool:
+    """Возвращает True если удалено, False если не найдено."""
+    item = Watchlist.query.filter_by(user_id=user_id, isin=isin).first()
+    if not item:
+        return False
+    db.session.delete(item)
+    db.session.commit()
+    return True
+
+
+# ── Price Alerts ─────────────────────────────────────────────────────────────
+
+
+def get_price_alerts(user_id: int) -> list[dict]:
+    alerts = (
+        PriceAlert.query.filter_by(user_id=user_id)
+        .order_by(PriceAlert.created_at.desc())
+        .all()
+    )
+    return [
+        {
+            "id": a.id,
+            "isin": a.isin,
+            "name": a.name or a.isin,
+            "target_price": float(a.target_price),
+            "condition": a.condition,
+            "is_triggered": a.is_triggered,
+            "created_at": a.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        for a in alerts
+    ]
+
+
+def create_price_alert(
+    user_id: int, isin: str, name: str, target_price: float, condition: str
+) -> dict:
+    new_alert = PriceAlert(
+        user_id=user_id,
+        isin=isin,
+        name=name,
+        target_price=target_price,
+        condition=condition,
+        is_triggered=False,
+    )
+    db.session.add(new_alert)
+    db.session.commit()
+    return {
+        "id": new_alert.id,
+        "isin": new_alert.isin,
+        "name": new_alert.name,
+        "target_price": target_price,
+        "condition": new_alert.condition,
+        "is_triggered": False,
+    }
+
+
+def delete_price_alert(alert_id: int, user_id: int) -> bool:
+    alert = PriceAlert.query.filter_by(id=alert_id, user_id=user_id).first()
+    if not alert:
+        return False
+    db.session.delete(alert)
+    db.session.commit()
+    return True
 
 
 def normalize_bond_price(price: float, facevalue: float) -> float:

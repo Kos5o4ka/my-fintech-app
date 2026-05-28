@@ -93,7 +93,7 @@ def create_app(config_class=None) -> Flask:
     # ── Static asset versioning (cache-busting) ───────────────────────────────
     try:
         _git_hash = (
-            subprocess.check_output(
+            subprocess.check_output(  # nosec B603 B607
                 ["git", "rev-parse", "--short", "HEAD"],
                 cwd=os.path.dirname(__file__),
                 stderr=subprocess.DEVNULL,

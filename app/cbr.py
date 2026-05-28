@@ -3,10 +3,7 @@
 import logging
 import time
 
-try:
-    from defusedxml import ElementTree as ET
-except ImportError:
-    import xml.etree.ElementTree as ET  # noqa: S405 fallback if defusedxml not installed
+from defusedxml import ElementTree as ET  # nosec B405
 
 import requests
 

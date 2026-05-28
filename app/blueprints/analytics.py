@@ -1,3 +1,5 @@
+"""Blueprint аналитики — тонкий HTTP-слой: парсинг запроса → вызов сервиса → JSON."""
+
 import logging
 import math
 from datetime import date, datetime, timedelta
@@ -6,14 +8,17 @@ from typing import Optional
 from flask import Blueprint, request, jsonify, render_template
 from flask_login import login_required, current_user
 
-from app.extensions import db, cache
-from app.models import BondPortfolio
+from app.extensions import cache
 from app.services.portfolio_service import (
     build_portfolio_list,
     calc_tax_report,
     calc_sharpe_ratio,
     calc_monthly_profit,
     calc_portfolio_diversification,
+    get_active_bonds,
+    get_sold_bonds,
+    get_sold_bonds_in_range,
+    flush_portfolio_prices,
 )
 from app.constants import (
     TIMEFRAME_DAYS,
@@ -33,14 +38,12 @@ analytics_bp = Blueprint("analytics", __name__)
 @analytics_bp.route("/analytics")
 @login_required
 def analytics_page():
-    """Страница аналитики портфеля."""
     return render_template("analytics.html", active_page="analytics")
 
 
 @analytics_bp.route("/api/portfolio/tax", methods=["GET"])
 @login_required
 def portfolio_tax():
-    """Налоговый отчёт за год — сделки + купоны + НДФЛ (Stage 4 UI)."""
     try:
         year = int(request.args.get("year", date.today().year))
     except (ValueError, TypeError):
@@ -56,13 +59,8 @@ def portfolio_tax():
 
     year_start = date(year, 1, 1)
     year_end = date(year, 12, 31)
-    sold = BondPortfolio.query.filter(
-        BondPortfolio.user_id == current_user.id,
-        BondPortfolio.is_sold == True,  # noqa: E712
-        BondPortfolio.sell_date >= year_start,
-        BondPortfolio.sell_date <= year_end,
-    ).all()
-    active = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False).all()
+    sold = get_sold_bonds_in_range(current_user.id, year_start, year_end)
+    active = get_active_bonds(current_user.id)
     summary = calc_tax_report(sold, active, year)
 
     from app.services.moex_service import get_all_coupons_cached
@@ -81,7 +79,6 @@ def portfolio_tax():
                     inc += val * bond.amount
         return round(inc, 2)
 
-    # Build enriched response for Stage 4 Tax UI
     trades_list = []
     gross_profit = 0.0
     total_commission = 0.0
@@ -111,7 +108,6 @@ def portfolio_tax():
         )
 
     for bond in active:
-        # For active bonds, we calculate coupons up to the end of the selected year
         coupon_inc = get_bond_coupon_income(bond, date(year, 12, 31))
         if coupon_inc > 0:
             buy_p = float(bond.buy_price)
@@ -152,7 +148,6 @@ def portfolio_tax():
 @analytics_bp.route("/api/portfolio/benchmark", methods=["GET"])
 @login_required
 def portfolio_benchmark():
-    """Сравнение доходности портфеля с RGBI."""
     range_param = request.args.get("range", "month")
     cache_key = f"benchmark:{range_param}"
     cached = cache.get(cache_key)
@@ -176,7 +171,6 @@ def portfolio_benchmark():
 @analytics_bp.route("/api/portfolio/sharpe", methods=["GET"])
 @login_required
 def portfolio_sharpe():
-    """Коэффициент Шарпа по закрытым позициям портфеля (Stage 4)."""
     cache_key = f"portfolio_sharpe:{current_user.id}"
     try:
         cached = cache.get(cache_key)
@@ -185,14 +179,15 @@ def portfolio_sharpe():
     except Exception:
         pass
 
-    sold = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=True).all()
+    sold = get_sold_bonds(current_user.id)
     result = calc_sharpe_ratio(sold)
     if result is None:
-        response_data = {
-            "sharpe": None,
-            "reason": f"Недостаточно данных (закрытых позиций: {len(sold)}, нужно ≥ 3)",
-        }
-        return jsonify(response_data)
+        return jsonify(
+            {
+                "sharpe": None,
+                "reason": f"Недостаточно данных (закрытых позиций: {len(sold)}, нужно ≥ 3)",
+            }
+        )
 
     try:
         cache.set(cache_key, result, timeout=SHARPE_TTL)
@@ -202,7 +197,6 @@ def portfolio_sharpe():
 
 
 def _bond_history_for_compare(isin: str, range_param: str) -> dict:
-    """Вспомогательная функция: история цены одной облигации для вкладки Сравнение."""
     cache_key = f"bond_chart:{isin}:{range_param}"
     cached = cache.get(cache_key)
     if cached:
@@ -259,7 +253,6 @@ def _parse_date(val) -> Optional[date]:
 @analytics_bp.route("/api/portfolio/compare", methods=["GET"])
 @login_required
 def compare_bonds():
-    """Сравнение динамики цен двух облигаций (нормировано к 100)."""
     isin1 = request.args.get("isin1", "").upper().strip()
     isin2 = request.args.get("isin2", "").upper().strip()
     range_param = request.args.get("range", "month")
@@ -296,13 +289,12 @@ def compare_bonds():
 @analytics_bp.route("/api/portfolio_stats", methods=["GET"])
 @login_required
 def portfolio_stats():
-    """Профит по месяцам."""
     cache_key = f"portfolio_stats:{current_user.id}"
     cached = cache.get(cache_key)
     if cached:
         return jsonify(cached)
 
-    closed = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=True).all()
+    closed = get_sold_bonds(current_user.id)
     monthly = calc_monthly_profit(closed)
     sorted_months = sorted(monthly.keys())
     result = {
@@ -325,7 +317,6 @@ def portfolio_stats():
 @analytics_bp.route("/api/dashboard/pnl_chart", methods=["GET"])
 @login_required
 def dashboard_pnl_chart():
-    """Возвращает данные для area-чарта P&L на дашборде."""
     period = request.args.get("period", "30d")
     today = date.today()
 
@@ -346,13 +337,13 @@ def dashboard_pnl_chart():
                 m = date(m.year, m.month + 1, 1)
         label_fmt = "%b"
         tick_every = 1
-    else:  # 30d
+    else:
         start = today - timedelta(days=29)
         date_range = [start + timedelta(days=i) for i in range(30)]
         label_fmt = "%d.%m"
         tick_every = 5
 
-    sold = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=True).all()
+    sold = get_sold_bonds(current_user.id)
     daily_pnl: dict[date, float] = {}
     for bond in sold:
         if not bond.sell_date:
@@ -383,12 +374,9 @@ def dashboard_pnl_chart():
             )
             data.append(round(running, 2))
 
-    active = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False).all()
+    active = get_active_bonds(current_user.id)
     all_bonds, _ = build_portfolio_list(active)
-    try:
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
+    flush_portfolio_prices()
 
     unrealized = round(
         sum(b.get("pnl_rub", 0.0) for b in all_bonds),
@@ -403,7 +391,6 @@ def dashboard_pnl_chart():
 @analytics_bp.route("/api/portfolio/diversification", methods=["GET"])
 @login_required
 def portfolio_diversification():
-    """Анализ диверсификации портфеля по индексу HHI."""
-    active = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False).all()
+    active = get_active_bonds(current_user.id)
     result = calc_portfolio_diversification(active)
     return jsonify(result)

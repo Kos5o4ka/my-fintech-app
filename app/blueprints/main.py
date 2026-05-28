@@ -34,7 +34,8 @@ def health_check():
 
     try:
         cache.set("_health_probe", "1", timeout=5)
-        assert cache.get("_health_probe") == "1"
+        if cache.get("_health_probe") != "1":
+            raise RuntimeError("cache read-back mismatch")
         status["cache"] = "ok"
     except Exception as e:
         status["cache"] = str(e)

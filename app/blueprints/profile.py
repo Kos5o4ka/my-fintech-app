@@ -1,4 +1,4 @@
-"""Blueprint профиля — аватар, email, настройки, Telegram-привязка, activity."""
+"""Blueprint профиля — тонкий HTTP-слой."""
 
 import logging
 
@@ -6,48 +6,24 @@ from flask import Blueprint, request, jsonify, render_template
 from flask_login import login_required, current_user
 from flask_wtf.csrf import generate_csrf
 
-from app.extensions import db
-from app.models import AuditLog
 from app.services.user_service import (
     save_avatar,
     delete_avatar,
     update_telegram_settings,
+    get_profile_stats,
+    get_activity_log,
+    unlink_telegram,
 )
 
 logger = logging.getLogger(__name__)
 profile_bp = Blueprint("profile", __name__)
 
 
-# ── Быстрая статистика для hero профиля ──────────────────────────────────────
-
-
 @profile_bp.route("/api/profile/stats", methods=["GET"])
 @login_required
 def profile_stats():
-    """Счётчики для hero-секции профиля: облигаций, стоимость, закрытые сделки."""
-    from app.models import BondPortfolio
-    from app.services.portfolio_service import build_portfolio_list
-
-    active = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False).all()
-    sold = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=True).count()
-
-    _, total_value = build_portfolio_list(active)
-
-    try:
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
-
-    return jsonify(
-        {
-            "bond_count": len(active),
-            "sold_count": sold,
-            "total_value": round(total_value, 2),
-        }
-    )
-
-
-# ── Страница профиля ──────────────────────────────────────────────────────────
+    stats = get_profile_stats(current_user.id)
+    return jsonify(stats)
 
 
 @profile_bp.route("/profile", methods=["GET", "POST"])
@@ -63,24 +39,16 @@ def profile_page():
     return render_template("profile.html", csrf_token=generate_csrf())
 
 
-# ── Аватар — удаление ────────────────────────────────────────────────────────
-
-
 @profile_bp.route("/api/profile/avatar", methods=["DELETE"])
 @login_required
 def delete_avatar_route():
-    """Удаляет аватар пользователя с диска и сбрасывает avatar в None."""
     delete_avatar(current_user)
     return jsonify({"status": "success", "message": "Аватар успешно удалён."})
-
-
-# ── Telegram — привязка ───────────────────────────────────────────────────────
 
 
 @profile_bp.route("/api/profile/telegram/status", methods=["GET"])
 @login_required
 def telegram_status():
-    """Возвращает текущий статус Telegram-привязки."""
     from flask import current_app
 
     bot_username = current_app.config.get("TELEGRAM_BOT_USERNAME", "InvestTrackBot")
@@ -98,10 +66,6 @@ def telegram_status():
 @profile_bp.route("/api/profile/telegram/link", methods=["POST"])
 @login_required
 def telegram_link():
-    """Генерирует deep-link для привязки Telegram.
-
-    Если TELEGRAM_BOT_TOKEN не задан, возвращает ошибку конфигурации.
-    """
     from flask import current_app
     from app.services.telegram_service import generate_link_token, get_bot_deep_link
 
@@ -134,8 +98,7 @@ def telegram_link():
 
 @profile_bp.route("/api/profile/telegram/unlink", methods=["POST"])
 @login_required
-def telegram_unlink():
-    """Отвязывает Telegram от аккаунта пользователя."""
+def telegram_unlink_route():
     if not current_user.telegram_chat_id:
         return jsonify(
             {
@@ -144,10 +107,7 @@ def telegram_unlink():
             }
         ), 400
 
-    current_user.telegram_chat_id = None
-    current_user.telegram_notifications = False
-    current_user.telegram_username = None
-    db.session.commit()
+    unlink_telegram(current_user)
     return jsonify(
         {
             "status": "success",
@@ -159,7 +119,6 @@ def telegram_unlink():
 @profile_bp.route("/api/profile/telegram/notifications", methods=["POST"])
 @login_required
 def telegram_notifications():
-    """Включает/выключает Telegram-уведомления (только при привязанном боте)."""
     if not current_user.telegram_chat_id:
         return jsonify(
             {
@@ -180,8 +139,6 @@ def telegram_notifications():
     )
 
 
-# ── Activity feed (Stage 4) ───────────────────────────────────────────────────
-
 _ACTION_LABELS = {
     "login_ok": ("✅", "Вход в систему"),
     "login_fail": ("❌", "Неудачная попытка входа"),
@@ -197,17 +154,12 @@ _ACTION_LABELS = {
 @profile_bp.route("/api/profile/activity", methods=["GET"])
 @login_required
 def profile_activity():
-    """Журнал действий текущего пользователя (последние 50 записей)."""
     page = max(request.args.get("page", 1, type=int), 1)
     per_page = 20
-    query = AuditLog.query.filter_by(user_id=current_user.id).order_by(
-        AuditLog.created_at.desc()
-    )
-    total = query.count()
-    logs = query.offset((page - 1) * per_page).limit(per_page).all()
+    entries_raw, total = get_activity_log(current_user.id, page, per_page)
 
     entries = []
-    for log in logs:
+    for log in entries_raw:
         icon, label = _ACTION_LABELS.get(log.action, ("🔔", log.action))
         entries.append(
             {
@@ -229,6 +181,6 @@ def profile_activity():
             "entries": entries,
             "total": total,
             "page": page,
-            "pages": -(-total // per_page),  # ceiling division
+            "pages": -(-total // per_page),
         }
     )
