@@ -1,0 +1,40 @@
+meta {
+  name: Broadcast Notification
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/admin/broadcast
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "title": "Обновление системы",
+    "body": "Добавлены новые функции настроек и уведомлений.",
+    "recipients": "all",
+    "channels": ["site", "telegram"]
+  }
+}
+
+docs {
+  ## Admin Broadcast
+
+  Отправляет уведомление пользователям. Только для администраторов.
+
+  **Тело запроса:**
+  - `title` — заголовок (обязателен)
+  - `body` — текст (необязателен)
+  - `recipients` — `"all"` или массив ID пользователей `[1, 2, 3]`
+  - `channels` — массив: `"site"`, `"telegram"` или оба
+
+  **Ответ:**
+  ```json
+  {
+    "status": "success",
+    "message": "Отправлено: сайт — 5, Telegram — 3 из 5 пользователей."
+  }
+  ```
+}

@@ -24,6 +24,11 @@ class User(db.Model, UserMixin):
     telegram_notifications = db.Column(db.Boolean, default=False)
     telegram_username = db.Column(db.String(64), nullable=True)
     two_fa_enabled = db.Column(db.Boolean, default=True)
+    # Stage 12 — Settings
+    theme = db.Column(db.String(10), nullable=False, default="system")
+    notif_time = db.Column(db.String(5), nullable=False, default="09:00")
+    notif_timezone = db.Column(db.String(64), nullable=False, default="Europe/Moscow")
+    oferta_advance_days = db.Column(db.Integer, nullable=False, default=14)
     bonds = db.relationship(
         "BondPortfolio", backref="user", lazy=True, cascade="all, delete-orphan"
     )
@@ -108,22 +113,36 @@ class Transaction(db.Model):
 
 
 class AuditLog(db.Model):
-    """Журнал действий пользователей — вход, выход, смена пароля и т.д."""
+    """Журнал действий пользователей — аккаунт и портфель."""
 
     __tablename__ = "audit_log"
     __table_args__ = (
         db.Index("ix_audit_user_id", "user_id"),
         db.Index("ix_audit_created_at", "created_at"),
+        db.Index("ix_audit_user_category", "user_id", "category"),
     )
     id = db.Column(db.Integer, primary_key=True)
-    # nullable=True — чтобы логировать и неудачные попытки входа (без user_id)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
-    action = db.Column(
-        db.String(50), nullable=False
-    )  # login_ok | login_fail | logout | change_password | tg_link | tg_unlink
+    action = db.Column(db.String(50), nullable=False)
+    category = db.Column(db.String(20), nullable=False, default="account")
     ip_address = db.Column(db.String(45), nullable=True)
     user_agent = db.Column(db.String(255), nullable=True)
-    details = db.Column(JSON, nullable=True)  # SQLite: text, PostgreSQL: native JSON
+    details = db.Column(JSON, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class SiteNotification(db.Model):
+    """Уведомления на сайте (от админа к пользователям)."""
+
+    __tablename__ = "site_notifications"
+    __table_args__ = (
+        db.Index("ix_site_notif_user_unread", "user_id", "is_read"),
+    )
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    title = db.Column(db.String(255), nullable=False)
+    body = db.Column(db.Text, nullable=True)
+    is_read = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 

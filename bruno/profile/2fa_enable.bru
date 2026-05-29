@@ -1,0 +1,17 @@
+meta {
+  name: Enable 2FA
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/profile/2fa/enable
+  body: none
+  auth: none
+}
+
+docs {
+  ## Enable 2FA
+
+  Включает двухфакторную аутентификацию. Требуется привязанный Telegram.
+}

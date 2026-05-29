@@ -49,12 +49,19 @@ def generate_otp(chat_id: str) -> str:
     """
     code = f"{secrets.randbelow(1_000_000):06d}"
     cache.set(f"tg_otp:{chat_id}", code, timeout=_OTP_TTL)
+    # copy_text button (Telegram Bot API 6.7+, client 10.6+)
+    reply_markup = {
+        "inline_keyboard": [[
+            {"text": "📋 Скопировать код", "copy_text": {"text": code}}
+        ]]
+    }
     send_message(
         chat_id,
         f"🔐 Код подтверждения для входа в InvestTrack:\n\n"
-        f"<b>{code}</b>\n\n"
-        f"Код действителен 5 минут. Никому не сообщайте его.",
+        f"<code>{code}</code>\n\n"
+        f"⏱ Код действителен 5 минут. Никому не сообщайте его.",
         parse_mode="HTML",
+        reply_markup=reply_markup,
     )
     return code
 
@@ -95,7 +102,12 @@ def resolve_pending_2fa(token: str) -> Optional[dict]:
 # ── Отправка сообщений ────────────────────────────────────────────────────────
 
 
-def send_message(chat_id: str, text: str, parse_mode: str = "HTML") -> bool:
+def send_message(
+    chat_id: str,
+    text: str,
+    parse_mode: str = "HTML",
+    reply_markup: dict | None = None,
+) -> bool:
     """Отправляет сообщение через Telegram Bot API.
 
     Возвращает True при успехе, False при ошибке.
@@ -106,7 +118,9 @@ def send_message(chat_id: str, text: str, parse_mode: str = "HTML") -> bool:
         return False
 
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-    payload = {"chat_id": chat_id, "text": text, "parse_mode": parse_mode}
+    payload: dict = {"chat_id": chat_id, "text": text, "parse_mode": parse_mode}
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
     try:
         resp = http_requests.post(url, json=payload, timeout=10)
         if not resp.ok:

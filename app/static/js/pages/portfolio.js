@@ -31,7 +31,8 @@ function getCurrencySymbol(cur) {
 }
 
 // Set today's date as default
-document.getElementById('bondDate').value = new Date().toISOString().split('T')[0];
+var _todayStr = new Date().toISOString().split('T')[0];
+document.getElementById('bondDate').value = _todayStr;
 
 // Init Bootstrap tooltips
 document.addEventListener('DOMContentLoaded', () => {
@@ -607,8 +608,8 @@ function applyHistoryFilter() {
 }
 
 function clearHistoryFilter() {
-    document.getElementById('historyDateFrom').value = '';
-    document.getElementById('historyDateTo').value = '';
+    if (window.fpClear) { window.fpClear('historyDateFrom'); window.fpClear('historyDateTo'); }
+    else { document.getElementById('historyDateFrom').value = ''; document.getElementById('historyDateTo').value = ''; }
     fetchTradeHistory();
 }
 
@@ -727,7 +728,8 @@ document.getElementById('addBondForm').addEventListener('submit', async (e) => {
                 window.Common.showToast(data.message);
             }
             document.getElementById('addBondForm').reset();
-            document.getElementById('bondDate').value = new Date().toISOString().split('T')[0];
+            if (window.fpSet) window.fpSet('bondDate', new Date().toISOString().split('T')[0]);
+            else document.getElementById('bondDate').value = new Date().toISOString().split('T')[0];
             historyLoaded = false;
             await loadDashboard();
         } else {
@@ -1128,6 +1130,7 @@ async function runScreener() {
 function clearScreener() {
     ['screenerMinYtm','screenerMaxYtm','screenerMatFrom','screenerMatTo',
      'screenerIssuerType','screenerMinDuration','screenerMaxDuration'].forEach(id => {
+        if (window.fpClear && (id === 'screenerMatFrom' || id === 'screenerMatTo')) { window.fpClear(id); return; }
         const el = document.getElementById(id);
         if (el) el.value = '';
     });

@@ -160,13 +160,38 @@ def get_profile_stats(user_id: int) -> dict:
     }
 
 
-def get_activity_log(user_id: int, page: int, per_page: int) -> tuple[list, int]:
-    """Возвращает (записи аудита, total)."""
+def get_activity_log(
+    user_id: int, page: int, per_page: int, category: str | None = None
+) -> tuple[list, int]:
+    """Возвращает (записи аудита, total). Фильтр по category: account|portfolio."""
     from app.models import AuditLog
 
-    query = AuditLog.query.filter_by(user_id=user_id).order_by(
-        AuditLog.created_at.desc()
-    )
+    query = AuditLog.query.filter_by(user_id=user_id)
+    if category:
+        query = query.filter_by(category=category)
+    query = query.order_by(AuditLog.created_at.desc())
     total = query.count()
     logs = query.offset((page - 1) * per_page).limit(per_page).all()
     return logs, total
+
+
+def update_user_settings(user: User, **kwargs) -> None:
+    """Обновляет настройки пользователя (theme, notif_time, etc.)."""
+    for key in ("theme", "notif_time", "notif_timezone", "oferta_advance_days"):
+        if key in kwargs:
+            setattr(user, key, kwargs[key])
+    from app.services.audit_service import log_action
+    log_action("settings_update", user_id=user.id, category="account")
+    db.session.commit()
+
+
+def enable_2fa(user: User) -> None:
+    """Включает 2FA для пользователя."""
+    user.two_fa_enabled = True
+    db.session.commit()
+
+
+def disable_2fa(user: User) -> None:
+    """Отключает 2FA для пользователя."""
+    user.two_fa_enabled = False
+    db.session.commit()

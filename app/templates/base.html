@@ -2,7 +2,7 @@
 <html lang="ru" data-bs-theme="light">
 <head>
   <meta charset="UTF-8">
-  <script nonce="{{ g.csp_nonce }}">(function(){var t=localStorage.getItem('portfolioTheme');if(t==='dark')document.documentElement.setAttribute('data-bs-theme','dark');})()</script>
+  <script nonce="{{ g.csp_nonce }}">(function(){var t=localStorage.getItem('portfolioTheme');if(t==='dark'||t==='light'){document.documentElement.setAttribute('data-bs-theme',t)}else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches){document.documentElement.setAttribute('data-bs-theme','dark')}})()</script>
   <title>{% block title %}InvestTrack{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="{% block description %}InvestTrack — персональный трекер облигационного портфеля{% endblock %}">
@@ -19,6 +19,8 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/core/sidebar.min.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/core/animations.min.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/core/base.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/flatpickr.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/vendor/flatpickr-theme.css') }}">
   {% block head_extra %}{% endblock %}
 </head>
 <body{% if current_user.is_authenticated %} data-user-id="{{ current_user.id }}"{% endif %}>
@@ -142,6 +144,8 @@
             </svg>
             <span id="bellBadge"
                   style="display:none;position:absolute;top:-4px;right:-5px;background:#ef4444;color:#fff;font-size:.58rem;font-weight:800;min-width:15px;height:15px;border-radius:50%;align-items:center;justify-content:center;line-height:1;padding:0 3px;border:2px solid var(--sidebar-bg,#0f172a)">0</span>
+            <span id="siteNotifBadge"
+                  style="display:none;position:absolute;top:-4px;left:-5px;background:#2563eb;color:#fff;font-size:.58rem;font-weight:800;min-width:15px;height:15px;border-radius:50%;align-items:center;justify-content:center;line-height:1;padding:0 3px;border:2px solid var(--sidebar-bg,#0f172a)">0</span>
           </span>
           <span class="sidebar-nav-label">Уведомления</span>
         </button>
@@ -166,14 +170,6 @@
       </div>
 
     </nav>
-
-    {# Theme toggle #}
-    <div style="padding:0 .55rem">
-      <button class="sidebar-theme-btn" id="sidebarThemeBtn" aria-label="Переключить тему">
-        <span class="theme-icon" id="themeIconSidebar"></span>
-        <span class="theme-label">Тема</span>
-      </button>
-    </div>
 
     {# User widget #}
     <a href="/profile" class="sidebar-user" aria-label="Открыть профиль">
@@ -240,17 +236,6 @@
     </a>
     {% endif %}
 
-    <button class="bottom-bar-item" id="bottomBarThemeBtn" aria-label="Тема">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-        <circle cx="8" cy="8" r="2.5"/>
-        <line x1="8" y1="1" x2="8" y2="3"/>
-        <line x1="8" y1="13" x2="8" y2="15"/>
-        <line x1="1" y1="8" x2="3" y2="8"/>
-        <line x1="13" y1="8" x2="15" y2="8"/>
-      </svg>
-      Тема
-    </button>
-
   </nav>
 
 </div>{# /app-layout #}
@@ -313,6 +298,9 @@
 {% block modals %}{% endblock %}
 <script src="{{ url_for('static', filename='js/core/common.min.js') }}?v={{ static_ver }}" defer></script>
 <script src="{{ url_for('static', filename='js/core/sidebar.min.js') }}?v={{ static_ver }}" defer></script>
+<script src="{{ url_for('static', filename='vendor/flatpickr.min.js') }}" defer></script>
+<script src="{{ url_for('static', filename='vendor/flatpickr-ru.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/vendor/flatpickr-init.js') }}" defer></script>
 {% block scripts %}{% endblock %}
 
 {% if current_user.is_authenticated %}

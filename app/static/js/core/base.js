@@ -164,20 +164,23 @@
       });
     }
 
-    // Theme toggle (sidebar) — replaces CSP-blocked onclick="window.Common.toggleTheme()"
-    var sidebarThemeBtn = document.getElementById('sidebarThemeBtn');
-    if (sidebarThemeBtn) {
-      sidebarThemeBtn.addEventListener('click', function() {
-        window.Common.toggleTheme();
-      });
+    // Poll site notifications count every 60s
+    function pollSiteNotifs() {
+      fetch('/api/notifications/unread_count')
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          var badge = document.getElementById('siteNotifBadge');
+          if (!badge) return;
+          if (d.count > 0) {
+            badge.textContent = d.count > 9 ? '9+' : d.count;
+            badge.style.display = 'inline-flex';
+          } else {
+            badge.style.display = 'none';
+          }
+        })
+        .catch(function() {});
     }
-
-    // Theme toggle (mobile bottom bar)
-    var bottomBarThemeBtn = document.getElementById('bottomBarThemeBtn');
-    if (bottomBarThemeBtn) {
-      bottomBarThemeBtn.addEventListener('click', function() {
-        window.Common.toggleTheme();
-      });
-    }
+    pollSiteNotifs();
+    setInterval(pollSiteNotifs, 60000);
   });
 })();

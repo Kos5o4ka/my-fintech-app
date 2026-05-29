@@ -1,0 +1,32 @@
+meta {
+  name: Save Settings
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/profile/settings
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "theme": "dark",
+    "notif_time": "18:30",
+    "notif_timezone": "Europe/Moscow",
+    "oferta_advance_days": 7
+  }
+}
+
+docs {
+  ## Save User Settings
+
+  Обновляет настройки пользователя. Все поля опциональны, невалидные значения заменяются дефолтами.
+
+  **Тело запроса:**
+  - `theme` — `system` | `light` | `dark`
+  - `notif_time` — формат `HH:MM`
+  - `notif_timezone` — IANA timezone (например `Europe/Moscow`)
+  - `oferta_advance_days` — `0` | `7` | `14` | `30`
+}

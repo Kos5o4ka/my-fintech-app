@@ -30,7 +30,7 @@ graph TB
             Admin["blueprints/admin.py\n──────────────\n/admin\n/api/admin/*"]
             TGBot["blueprints/telegram_bot.py\n──────────────\n/api/telegram/webhook"]
 
-            Services["⚙️ Services Layer\n──────────────\nportfolio_service.py\nmoex_service.py\nuser_service.py\ntelegram_service.py"]
+            Services["⚙️ Services Layer\n──────────────\nportfolio_service.py\nmoex_service.py\nuser_service.py\ntelegram_service.py\naudit_service.py\nnotification_service.py\nimport_service.py\nadmin_service.py\nauth_service.py"]
 
             Scheduler["⏰ APScheduler\n──────────────\nЦены каждые 15 мин\nКупоны ежедн. 09:00"]
         end
@@ -125,6 +125,10 @@ erDiagram
         bool telegram_notifications
         bool two_fa_enabled
         string telegram_username
+        string theme
+        string notif_time
+        string notif_timezone
+        int oferta_advance_days
     }
 
     BOND_PORTFOLIO {
@@ -158,9 +162,30 @@ erDiagram
         int id PK
         int user_id FK
         string action
+        string category
         string ip_address
         string user_agent
-        string details
+        json details
+        datetime created_at
+    }
+
+    SITE_NOTIFICATION {
+        int id PK
+        int user_id FK
+        string title
+        text body
+        bool is_read
+        datetime created_at
+    }
+
+    PRICE_ALERT {
+        int id PK
+        int user_id FK
+        string isin
+        string name
+        float target_price
+        string condition
+        bool is_triggered
         datetime created_at
     }
 
@@ -181,6 +206,8 @@ erDiagram
     USER ||--o{ WATCHLIST_ITEM : "watches"
     USER ||--o{ AUDIT_LOG : "generates"
     USER ||--o{ TRANSACTION : "logs"
+    USER ||--o{ SITE_NOTIFICATION : "receives"
+    USER ||--o{ PRICE_ALERT : "sets"
 ```
 
 ---

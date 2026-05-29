@@ -16,6 +16,7 @@ from app.services.admin_service import (
     delete_user,
     change_user_password,
 )
+from app.services.notification_service import broadcast
 
 logger = logging.getLogger(__name__)
 admin_bp = Blueprint("admin", __name__)
@@ -149,3 +150,35 @@ def admin_change_password(user_id):
             "message": f"Пароль пользователя «{target.username}» успешно изменён.",
         }
     )
+
+
+@admin_bp.route("/api/admin/broadcast", methods=["POST"])
+@login_required
+@limiter.limit("10 per hour")
+def admin_broadcast():
+    if not current_user.is_admin:
+        abort(403)
+
+    data = request.get_json() or {}
+    title = (data.get("title") or "").strip()
+    body = (data.get("body") or "").strip()
+    recipients = data.get("recipients", "all")
+    channels = data.get("channels", [])
+
+    if not title:
+        return jsonify({"status": "error", "message": "Заголовок обязателен."}), 400
+    if not channels:
+        return jsonify({"status": "error", "message": "Выберите хотя бы один канал."}), 400
+
+    valid_channels = [c for c in channels if c in ("site", "telegram")]
+    if not valid_channels:
+        return jsonify({"status": "error", "message": "Неизвестный канал."}), 400
+
+    if isinstance(recipients, list):
+        recipients = [int(r) for r in recipients if str(r).isdigit()]
+
+    result = broadcast(current_user.id, recipients, valid_channels, title, body)
+    return jsonify({
+        "status": "success",
+        "message": f"Отправлено: сайт — {result['sent_site']}, Telegram — {result['sent_tg']} из {result['total_users']} пользователей.",
+    })

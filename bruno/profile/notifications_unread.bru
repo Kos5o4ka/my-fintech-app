@@ -1,0 +1,24 @@
+meta {
+  name: Notifications Unread Count
+  type: http
+  seq: 13
+}
+
+get {
+  url: {{baseUrl}}/api/notifications/unread_count
+  body: none
+  auth: none
+}
+
+docs {
+  ## Get Unread Notifications Count
+
+  Возвращает количество непрочитанных site notifications.
+
+  **Ответ:**
+  ```json
+  {
+    "count": 3
+  }
+  ```
+}

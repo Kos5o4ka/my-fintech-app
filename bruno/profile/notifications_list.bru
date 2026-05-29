@@ -1,0 +1,39 @@
+meta {
+  name: Notifications List
+  type: http
+  seq: 14
+}
+
+get {
+  url: {{baseUrl}}/api/notifications
+  body: none
+  auth: none
+}
+
+query {
+  page: 1
+}
+
+docs {
+  ## Get Notifications
+
+  Список site notifications текущего пользователя, постранично.
+
+  **Ответ:**
+  ```json
+  {
+    "status": "success",
+    "notifications": [
+      {
+        "id": 1,
+        "title": "Обновление",
+        "body": "Добавлена новая функция",
+        "is_read": false,
+        "created_at": "2026-05-29 10:00"
+      }
+    ],
+    "total": 5,
+    "page": 1
+  }
+  ```
+}

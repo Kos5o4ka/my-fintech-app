@@ -45,17 +45,18 @@ def process_file(filepath):
         print(f"Updated {filepath}")
 
 
-for root, _, files in os.walk(ROOT):
-    if (
-        ".venv" in root
-        or "venv" in root
-        or "__pycache__" in root
-        or ".git" in root
-        or "scripts" in root
-    ):
-        continue
-    for file in files:
-        if file.endswith(".py"):
-            process_file(os.path.join(root, file))
+if __name__ == "__main__":
+    for root, _, files in os.walk(ROOT):
+        if (
+            ".venv" in root
+            or "venv" in root
+            or "__pycache__" in root
+            or ".git" in root
+            or "scripts" in root
+        ):
+            continue
+        for file in files:
+            if file.endswith(".py"):
+                process_file(os.path.join(root, file))
 
-print("Done")
+    print("Done")

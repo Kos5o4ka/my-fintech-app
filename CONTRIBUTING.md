@@ -132,12 +132,18 @@ my-fintech-app/
 ├── services/
 │   ├── portfolio_service.py    # Бизнес-логика: P&L, YTM, Sharpe, налоги, купоны
 │   ├── moex_service.py         # Кэшированный доступ к MOEX
-│   ├── user_service.py         # Аватары, telegram-настройки
-│   └── telegram_service.py     # OTP, привязка, deep-link
+│   ├── user_service.py         # Аватары, настройки, 2FA toggle
+│   ├── telegram_service.py     # OTP, привязка, deep-link
+│   ├── audit_service.py        # Централизованный аудит-лог
+│   ├── notification_service.py # Site notifications, broadcast
+│   ├── admin_service.py        # CRUD пользователей
+│   ├── auth_service.py         # Логин, пароль
+│   └── import_service.py       # Парсинг брокерских отчётов
 │
 ├── schemas/
 │   ├── portfolio.py            # AddBondRequest, SellBondRequest, ScreenerRequest
-│   └── auth.py                 # LoginRequest, ChangePasswordRequest
+│   ├── auth.py                 # LoginRequest, ChangePasswordRequest
+│   └── profile.py              # SettingsUpdate, Disable2FARequest
 │
 ├── templates/                  # Jinja2 HTML-шаблоны (без inline CSS/JS!)
 │   ├── base.html               # Авторизованный лейаут (sidebar, bell, theme)
@@ -174,8 +180,10 @@ my-fintech-app/
 │
 ├── migrations/                 # Alembic миграции
 ├── tests/
-│   ├── test_app.py             # 36 интеграционных тестов
-│   └── test_properties.py      # 17 Hypothesis property-based тестов
+│   ├── test_app.py             # Базовые интеграционные тесты
+│   ├── test_analytics_and_import.py  # Аналитика, импорт, алерты
+│   ├── test_stage12.py         # Настройки, уведомления, 2FA, broadcast
+│   └── test_properties.py      # Hypothesis property-based тесты
 │
 ├── nginx/                      # Nginx конфиги (для Docker)
 ├── bruno/                      # Bruno REST-клиент коллекция (API requests)

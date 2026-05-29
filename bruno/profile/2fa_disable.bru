@@ -1,0 +1,28 @@
+meta {
+  name: Disable 2FA
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseUrl}}/api/profile/2fa/disable
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "method": "otp",
+    "code": "123456"
+  }
+}
+
+docs {
+  ## Disable 2FA
+
+  Отключает 2FA. Требуется подтверждение через OTP-код из Telegram или пароль аккаунта.
+
+  **Методы:**
+  - `otp` — код из Telegram (поле `code`)
+  - `password` — пароль аккаунта (поле `password`)
+}

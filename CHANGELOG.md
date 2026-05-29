@@ -7,6 +7,31 @@
 
 ---
 
+## [2.2.0] — 2026-05-29
+
+### Added
+- **Вкладка «Настройки» в профиле**: тема оформления (системная/светлая/тёмная), время уведомлений с авто-определением часового пояса (`Intl.DateTimeFormat`), срок уведомлений об офертах (7/14/30 дней)
+- **Разделение активности на категории**: фильтры «Аккаунт» / «Портфель» в журнале действий; колонка `category` в `AuditLog` с индексом `ix_audit_user_category`
+- **Site Notifications**: модель `SiteNotification`, эндпоинты `GET /api/notifications/unread_count`, `GET /api/notifications`, `POST /api/notifications/read`; polling каждые 60с, синий badge в sidebar
+- **Admin Broadcast**: `POST /api/admin/broadcast` — рассылка уведомлений (сайт / Telegram / оба), выбор получателей (все или список)
+- **2FA toggle**: эндпоинты `POST /api/profile/2fa/enable`, `/2fa/disable`, `/2fa/send-otp`; отключение через OTP или пароль; модалка с двумя методами
+- **OTP copy button**: `copy_text` inline keyboard (Telegram Bot API 6.7+) для одного нажатия копирования кода
+- **Bot settings** (`/settings`): inline keyboard для toggle уведомлений, выбора времени и дней оферт
+- **Pydantic-схема `SettingsUpdate`**: валидация настроек через `app/schemas/profile.py`
+- **`audit_service.py`**: централизованный сервис аудит-лога
+- **`notification_service.py`**: сервис рассылки и CRUD site notifications
+- **Flatpickr date picker**: красивый кастомный календарь и time picker вместо стандартных браузерных; русская локализация, тёмная тема через CSS-переменные; `flatpickr-init.js` с авто-инициализацией и MutationObserver
+- **45 новых тестов** (`tests/test_stage12.py`): settings, activity categories, 2FA toggle, site notifications, admin broadcast, audit service, notification service, Pydantic schema validation
+- **Миграция `stage12_settings_notif_activity`**: идемпотентная (IF NOT EXISTS); user settings columns, audit_log.category, site_notifications table
+
+### Changed
+- **Рефакторинг profile.py**: убраны все `db.session.commit()` из blueprint (было 3); 2FA enable/disable, settings audit → перенесены в `user_service.py`; валидация через Pydantic вместо inline regex; все импорты подняты на уровень модуля
+- **profile.js**: устранена двойная привязка tab handlers; `window.prfTab` → единая функция `switchTab()`
+- **portfolio.js**: даты работают через flatpickr API (`fpSet`/`fpClear`) при программном сбросе
+- **base.html**: тема кнопка убрана из sidebar; theme init script поддерживает `system`; flatpickr CSS/JS подключены
+
+---
+
 ## [Unreleased]
 
 ### Added
@@ -203,7 +228,8 @@
 
 ---
 
-[Unreleased]: https://github.com/Kos5o4ka/my-fintech-app/compare/v1.3.3...bugfix/v1.4.0-ui-data
+[2.2.0]: https://github.com/Kos5o4ka/my-fintech-app/compare/v2.1.0...v2.2.0
+[Unreleased]: https://github.com/Kos5o4ka/my-fintech-app/compare/v2.2.0...HEAD
 [1.3.3]: https://github.com/Kos5o4ka/my-fintech-app/compare/v1.3.0...v1.3.3
 [1.3.0]: https://github.com/Kos5o4ka/my-fintech-app/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/Kos5o4ka/my-fintech-app/compare/v1.1.0...v1.2.0

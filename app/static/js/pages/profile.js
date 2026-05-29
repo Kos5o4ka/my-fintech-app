@@ -1,17 +1,6 @@
 window._activityPage = 1;
 window._activityLoaded = false;
-
-window.prfTab = function(idx) {
-  document.querySelectorAll('.prf-tab').forEach((t, i) => t.classList.toggle('active', i === idx));
-  document.querySelectorAll('.prf-panel').forEach((p, i) => p.classList.toggle('active', i === idx));
-};
-
-// Tab click listeners (replaces CSP-blocked onclick="prfTab(N)")
-document.querySelectorAll('.prf-tab').forEach(function(btn) {
-  btn.addEventListener('click', function() {
-    window.prfTab(parseInt(this.dataset.tab, 10));
-  });
-});
+window._activityCategory = '';
 
 document.getElementById('avatarFileInput')?.addEventListener('change', function () {
   document.getElementById('uploadZoneText').textContent =
@@ -28,7 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let resetModal;
   const resetPortfolioBtn = document.getElementById('resetPortfolioBtn');
   const confirmResetBtn = document.getElementById('confirmResetPortfolioBtn');
-  
+
   if (resetPortfolioBtn && confirmResetBtn) {
     resetPortfolioBtn.addEventListener('click', () => {
       if (!resetModal) resetModal = new bootstrap.Modal(document.getElementById('resetPortfolioModal'));
@@ -38,14 +27,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     confirmResetBtn.addEventListener('click', async () => {
       const password = document.getElementById('resetPortfolioPassword').value;
-      if (!password) {
-        window.Common.showToast('Введите пароль');
-        return;
-      }
-      
+      if (!password) { window.Common.showToast('Введите пароль'); return; }
       confirmResetBtn.disabled = true;
       confirmResetBtn.textContent = 'Удаление...';
-      
       try {
         const res = await window.Common.csrfFetch('/api/portfolio/reset', {
           method: 'DELETE',
@@ -53,7 +37,6 @@ document.addEventListener('DOMContentLoaded', () => {
           body: JSON.stringify({ password })
         });
         const data = await res.json();
-        
         if (res.ok) {
           window.Common.showToast(data.message);
           resetModal.hide();
@@ -61,12 +44,8 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
           window.Common.showSystemMessage(data.message, true);
         }
-      } catch (err) {
-        window.Common.showSystemMessage('Ошибка соединения', true);
-      } finally {
-        confirmResetBtn.disabled = false;
-        confirmResetBtn.textContent = 'Сбросить портфель';
-      }
+      } catch { window.Common.showSystemMessage('Ошибка соединения', true); }
+      finally { confirmResetBtn.disabled = false; confirmResetBtn.textContent = 'Сбросить портфель'; }
     });
   }
 
@@ -78,16 +57,9 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const res = await window.Common.csrfFetch('/api/profile/avatar', { method: 'DELETE' });
       const data = await res.json();
-      if (res.ok) {
-        window.Common.showToast(data.message);
-        setTimeout(() => location.reload(), 900);
-      } else {
-        window.Common.showSystemMessage(data.message, true);
-        btn.disabled = false; btn.textContent = 'Удалить аватар';
-      }
-    } catch {
-      btn.disabled = false; btn.textContent = 'Удалить аватар';
-    }
+      if (res.ok) { window.Common.showToast(data.message); setTimeout(() => location.reload(), 900); }
+      else { window.Common.showSystemMessage(data.message, true); btn.disabled = false; btn.textContent = 'Удалить аватар'; }
+    } catch { btn.disabled = false; btn.textContent = 'Удалить аватар'; }
   });
 
   // ── Hero quick stats ─────────────────────────────────────────────────
@@ -117,15 +89,9 @@ document.addEventListener('DOMContentLoaded', () => {
         })
       });
       const data = await res.json();
-      if (res.ok && data.status === 'success') {
-        window.Common.showToast(data.message);
-        e.target.reset();
-      } else {
-        window.Common.showSystemMessage(data.message, true);
-      }
-    } finally {
-      btn.disabled = false; btn.textContent = 'Изменить пароль';
-    }
+      if (res.ok && data.status === 'success') { window.Common.showToast(data.message); e.target.reset(); }
+      else { window.Common.showSystemMessage(data.message, true); }
+    } finally { btn.disabled = false; btn.textContent = 'Изменить пароль'; }
   });
 
   // ── Telegram-бот ──────────────────────────────────────────────────
@@ -145,7 +111,6 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('tgLinkedBlock').style.display = '';
         document.getElementById('tgUnlinkedBlock').style.display = 'none';
         document.getElementById('tgNotifCheck').checked = data.notifications;
-        // Обновляем строку @username в панели «Учётная запись»
         const profileTgEl = document.getElementById('profileTgUsername');
         if (profileTgEl) {
           profileTgEl.textContent = tgUser || 'привязан';
@@ -157,19 +122,12 @@ document.addEventListener('DOMContentLoaded', () => {
         desc.textContent = 'Привяжите бот для уведомлений и 2FA';
         document.getElementById('tgLinkedBlock').style.display  = 'none';
         document.getElementById('tgUnlinkedBlock').style.display = '';
-        // Сбрасываем строку @username
         const profileTgEl = document.getElementById('profileTgUsername');
-        if (profileTgEl) {
-          profileTgEl.textContent = 'не привязан';
-          profileTgEl.style.color = 'var(--text-tertiary)';
-        }
+        if (profileTgEl) { profileTgEl.textContent = 'не привязан'; profileTgEl.style.color = 'var(--text-tertiary)'; }
       }
-    } catch {
-      document.getElementById('tgStatusText').textContent = 'Ошибка загрузки';
-    }
+    } catch { document.getElementById('tgStatusText').textContent = 'Ошибка загрузки'; }
   }
 
-  // Кнопка «Привязать»
   document.getElementById('tgLinkBtn')?.addEventListener('click', async () => {
     const btn = document.getElementById('tgLinkBtn');
     btn.disabled = true; btn.textContent = 'Получаем ссылку…';
@@ -188,12 +146,9 @@ document.addEventListener('DOMContentLoaded', () => {
         window.Common.showSystemMessage(data.message || 'Ошибка', true);
         btn.disabled = false; btn.textContent = 'Привязать Telegram';
       }
-    } catch {
-      btn.disabled = false; btn.textContent = 'Привязать Telegram';
-    }
+    } catch { btn.disabled = false; btn.textContent = 'Привязать Telegram'; }
   });
 
-  // Переключатель Telegram-уведомлений
   document.getElementById('tgNotifCheck')?.addEventListener('change', async function () {
     try {
       const res  = await window.Common.csrfFetch('/api/profile/telegram/notifications', {
@@ -207,7 +162,6 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch { this.checked = !this.checked; }
   });
 
-  // Кнопка «Отвязать»
   document.getElementById('tgUnlinkBtn')?.addEventListener('click', async () => {
     if (!confirm('Отвязать Telegram? Уведомления и 2FA будут отключены.')) return;
     const btn = document.getElementById('tgUnlinkBtn');
@@ -226,7 +180,6 @@ document.addEventListener('DOMContentLoaded', () => {
     toggle2faBtn.addEventListener('click', async () => {
       const isEnabled = toggle2faBtn.dataset['2faEnabled'] === 'true';
       if (!isEnabled) {
-        // Включаем без подтверждения
         const res  = await window.Common.csrfFetch('/api/profile/2fa/enable', { method: 'POST' });
         const data = await res.json();
         if (res.ok) {
@@ -236,11 +189,8 @@ document.addEventListener('DOMContentLoaded', () => {
           toggle2faBtn.className = 'btn btn-outline-warning w-100 mt-2';
           const badge = document.getElementById('twoFaStatusBadge');
           if (badge) { badge.textContent = 'Включена'; badge.style.color = 'var(--emerald-400)'; }
-        } else {
-          window.Common.showSystemMessage(data.message, true);
-        }
+        } else { window.Common.showSystemMessage(data.message, true); }
       } else {
-        // Открываем модалку отключения
         const modal = new bootstrap.Modal(document.getElementById('disable2faModal'));
         document.getElementById('error2fa').style.display = 'none';
         document.getElementById('input2faOtp').value = '';
@@ -250,7 +200,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Переключатель метода в модалке
   let _2faMethod = 'otp';
   document.getElementById('method2faOtp')?.addEventListener('click', () => {
     _2faMethod = 'otp';
@@ -258,8 +207,6 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('section2faPwd').style.display = 'none';
     document.getElementById('method2faOtp').className = 'btn btn-sm btn-primary';
     document.getElementById('method2faPwd').className = 'btn btn-sm btn-outline-secondary';
-    document.getElementById('method2faOtp').style.flex = '1';
-    document.getElementById('method2faPwd').style.flex = '1';
   });
   document.getElementById('method2faPwd')?.addEventListener('click', () => {
     _2faMethod = 'password';
@@ -267,11 +214,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('section2faPwd').style.display = '';
     document.getElementById('method2faPwd').className = 'btn btn-sm btn-primary';
     document.getElementById('method2faOtp').className = 'btn btn-sm btn-outline-secondary';
-    document.getElementById('method2faOtp').style.flex = '1';
-    document.getElementById('method2faPwd').style.flex = '1';
   });
 
-  // Отправить OTP для отключения 2FA
   document.getElementById('send2faOtpBtn')?.addEventListener('click', async () => {
     const btn = document.getElementById('send2faOtpBtn');
     btn.disabled = true; btn.textContent = 'Отправляем…';
@@ -283,7 +227,6 @@ document.addEventListener('DOMContentLoaded', () => {
     } finally { btn.disabled = false; }
   });
 
-  // Подтвердить отключение 2FA
   document.getElementById('confirm2faDisableBtn')?.addEventListener('click', async () => {
     const errEl = document.getElementById('error2fa');
     errEl.style.display = 'none';
@@ -291,7 +234,7 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.disabled = true; btn.textContent = 'Проверяем…';
     try {
       const body = _2faMethod === 'otp'
-        ? { method: 'otp',      code:     document.getElementById('input2faOtp').value.trim() }
+        ? { method: 'otp', code: document.getElementById('input2faOtp').value.trim() }
         : { method: 'password', password: document.getElementById('input2faPwd').value };
       const res  = await window.Common.csrfFetch('/api/profile/2fa/disable', {
         method: 'POST',
@@ -302,24 +245,96 @@ document.addEventListener('DOMContentLoaded', () => {
       if (res.ok) {
         bootstrap.Modal.getInstance(document.getElementById('disable2faModal')).hide();
         window.Common.showToast(data.message);
-        // Обновляем UI кнопки и бейджа
         const tb = document.getElementById('toggle2faBtn');
-        if (tb) {
-          tb.dataset['2faEnabled'] = 'false';
-          tb.textContent = 'Включить 2FA';
-          tb.className = 'btn btn-outline-success w-100 mt-2';
-        }
+        if (tb) { tb.dataset['2faEnabled'] = 'false'; tb.textContent = 'Включить 2FA'; tb.className = 'btn btn-outline-success w-100 mt-2'; }
         const badge = document.getElementById('twoFaStatusBadge');
         if (badge) { badge.textContent = 'Отключена'; badge.style.color = 'var(--text-tertiary)'; }
-      } else {
-        errEl.textContent = data.message;
-        errEl.style.display = 'block';
-      }
+      } else { errEl.textContent = data.message; errEl.style.display = 'block'; }
     } finally { btn.disabled = false; btn.textContent = 'Отключить 2FA'; }
   });
 
+  // ── Settings panel ────────────────────────────────────────────────────
+  let _settingsTheme = 'system';
+  let _settingsOferta = 14;
+
+  function initSettings() {
+    fetch('/api/profile/settings').then(r => r.json()).then(d => {
+      if (d.status !== 'success') return;
+      _settingsTheme = d.theme || 'system';
+      _settingsOferta = d.oferta_advance_days ?? 14;
+      document.getElementById('settingsNotifTime').value = d.notif_time || '09:00';
+      highlightTheme(_settingsTheme);
+      highlightOferta(_settingsOferta);
+      // Detect browser timezone
+      try {
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (tz) document.getElementById('settingsTzName').textContent = tz;
+      } catch {}
+    }).catch(() => {});
+  }
+
+  function highlightTheme(v) {
+    document.querySelectorAll('.theme-opt').forEach(b => {
+      b.classList.toggle('btn-primary', b.dataset.theme === v);
+      b.classList.toggle('btn-outline-secondary', b.dataset.theme !== v);
+    });
+  }
+  function highlightOferta(v) {
+    document.querySelectorAll('.oferta-opt').forEach(b => {
+      const d = parseInt(b.dataset.days, 10);
+      b.classList.toggle('btn-primary', d === v);
+      b.classList.toggle('btn-outline-secondary', d !== v);
+    });
+  }
+
+  document.querySelectorAll('.theme-opt').forEach(b => {
+    b.addEventListener('click', () => {
+      _settingsTheme = b.dataset.theme;
+      highlightTheme(_settingsTheme);
+      // Instant preview
+      if (_settingsTheme === 'system') {
+        const sys = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-bs-theme', sys);
+        localStorage.removeItem('portfolioTheme');
+      } else {
+        document.documentElement.setAttribute('data-bs-theme', _settingsTheme);
+        localStorage.setItem('portfolioTheme', _settingsTheme);
+      }
+    });
+  });
+
+  document.querySelectorAll('.oferta-opt').forEach(b => {
+    b.addEventListener('click', () => {
+      _settingsOferta = parseInt(b.dataset.days, 10);
+      highlightOferta(_settingsOferta);
+    });
+  });
+
+  document.getElementById('saveSettingsBtn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('saveSettingsBtn');
+    btn.disabled = true; btn.textContent = 'Сохранение…';
+    let tz = 'Europe/Moscow';
+    try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || tz; } catch {}
+    try {
+      const res = await window.Common.csrfFetch('/api/profile/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          theme: _settingsTheme,
+          notif_time: document.getElementById('settingsNotifTime').value || '09:00',
+          notif_timezone: tz,
+          oferta_advance_days: _settingsOferta,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) window.Common.showToast(data.message);
+      else window.Common.showSystemMessage(data.message, true);
+    } finally { btn.disabled = false; btn.textContent = 'Сохранить настройки'; }
+  });
+
   // ── Activity feed ──────────────────────────────────────────────────────
-  window.loadActivity = async function (page) {
+  window.loadActivity = async function (page, category) {
+    if (category !== undefined) window._activityCategory = category;
     page = Math.max(1, page || 1);
     window._activityPage = page;
 
@@ -331,12 +346,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (pagEl)  pagEl.style.display = 'none';
 
     try {
-      const res  = await fetch(`/api/profile/activity?page=${page}`);
+      let url = `/api/profile/activity?page=${page}`;
+      if (window._activityCategory) url += `&category=${window._activityCategory}`;
+      const res  = await fetch(url);
       const data = await res.json();
       if (loadEl) loadEl.style.display = 'none';
 
       if (!data.entries || !data.entries.length) {
-        if (listEl) listEl.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--text-tertiary)">Журнал пуст — входов в систему ещё не было.</div>';
+        if (listEl) listEl.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--text-tertiary)">Нет записей.</div>';
         return;
       }
 
@@ -354,7 +371,6 @@ document.addEventListener('DOMContentLoaded', () => {
       `).join('');
       if (listEl) listEl.innerHTML = rows;
 
-      // Pagination
       if (data.pages > 1) {
         if (pagEl) pagEl.style.display = 'block';
         const pageInfo = document.getElementById('activityPageInfo');
@@ -364,7 +380,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (prevBtn) prevBtn.disabled = data.page <= 1;
         if (nextBtn) nextBtn.disabled = data.page >= data.pages;
       }
-
       window._activityLoaded = true;
     } catch {
       if (loadEl) loadEl.style.display = 'none';
@@ -372,31 +387,31 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  // Загружаем статус при открытии вкладок
-  const origPrfTab = window.prfTab;
-  window.prfTab = function (idx) {
-    if (origPrfTab) origPrfTab(idx);
-    if (idx === 2) loadTelegramStatus();
-    if (idx === 3 && !window._activityLoaded) window.loadActivity(1);
-  };
-  // Обновляем слушатели вкладок, чтобы использовать расширенную версию prfTab
-  document.querySelectorAll('.prf-tab').forEach(function(btn) {
-    btn.onclick = null;
-    btn.addEventListener('click', function() {
-      window.prfTab(parseInt(this.dataset.tab, 10));
+  // Activity category filter buttons
+  document.querySelectorAll('#activityCategoryBtns .btn').forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('#activityCategoryBtns .btn').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      window.loadActivity(1, b.dataset.cat);
     });
   });
-  // Пагинация активности
+
+  // Tab switch — single binding point
+  function switchTab(idx) {
+    document.querySelectorAll('.prf-tab').forEach((t, i) => t.classList.toggle('active', i === idx));
+    document.querySelectorAll('.prf-panel').forEach((p, i) => p.classList.toggle('active', i === idx));
+    if (idx === 2) loadTelegramStatus();
+    if (idx === 3) initSettings();
+    if (idx === 4 && !window._activityLoaded) window.loadActivity(1);
+  }
+  document.querySelectorAll('.prf-tab').forEach(btn => {
+    btn.addEventListener('click', () => switchTab(parseInt(btn.dataset.tab, 10)));
+  });
+
   var prevBtn = document.getElementById('activityPrevBtn');
-  if (prevBtn) {
-    prevBtn.addEventListener('click', function() { window.loadActivity(window._activityPage - 1); });
-  }
+  if (prevBtn) prevBtn.addEventListener('click', function() { window.loadActivity(window._activityPage - 1); });
   var nextBtn = document.getElementById('activityNextBtn');
-  if (nextBtn) {
-    nextBtn.addEventListener('click', function() { window.loadActivity(window._activityPage + 1); });
-  }
-  // Если уже открыта вкладка 2 — загружаем сразу
-  if (document.getElementById('prf-panel-2').classList.contains('active')) {
-    loadTelegramStatus();
-  }
+  if (nextBtn) nextBtn.addEventListener('click', function() { window.loadActivity(window._activityPage + 1); });
+
+  if (document.getElementById('prf-panel-2')?.classList.contains('active')) loadTelegramStatus();
 });

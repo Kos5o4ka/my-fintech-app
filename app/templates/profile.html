@@ -70,6 +70,10 @@
       Уведомления
     </button>
     <button class="prf-tab" data-tab="3">
+      <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="8" cy="8" r="2.5"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2"/></svg>
+      Настройки
+    </button>
+    <button class="prf-tab" data-tab="4">
       <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><polyline points="8,5 8,8 10,10"/></svg>
       Активность
     </button>
@@ -285,11 +289,62 @@
     </div>
   </div>
 
-  {# ── Panel 3: Activity Feed ───────────────────────────────────── #}
+  {# ── Panel 3: Settings ─────────────────────────────────────────── #}
   <div class="prf-panel" id="prf-panel-3">
+    <div class="prf-panel-container" style="max-width:560px">
+
+      {# ── Appearance ──────────────────────────────────────────────── #}
+      <div class="prf-section-label">Внешний вид</div>
+      <div class="card mb-4">
+        <div class="card-body p-4">
+          <div style="font-size:.85rem;font-weight:600;margin-bottom:.75rem">Тема оформления</div>
+          <div class="d-flex gap-2" id="themeSelector">
+            <button class="btn btn-sm flex-fill theme-opt" data-theme="system">Системная</button>
+            <button class="btn btn-sm flex-fill theme-opt" data-theme="light">Светлая</button>
+            <button class="btn btn-sm flex-fill theme-opt" data-theme="dark">Тёмная</button>
+          </div>
+        </div>
+      </div>
+
+      {# ── Notification settings ───────────────────────────────────── #}
+      <div class="prf-section-label">Уведомления</div>
+      <div class="card mb-4">
+        <div class="card-body p-4">
+          <div style="font-size:.85rem;font-weight:600;margin-bottom:.5rem">Время уведомлений в Telegram</div>
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <input type="time" id="settingsNotifTime" class="form-control" style="max-width:140px"
+                   value="{{ current_user.notif_time or '09:00' }}">
+          </div>
+          <div id="settingsTzNote" style="font-size:.75rem;color:var(--text-tertiary);margin-bottom:1.25rem">
+            Часовой пояс: <span id="settingsTzName">{{ current_user.notif_timezone or 'Europe/Moscow' }}</span>
+          </div>
+
+          <div style="font-size:.85rem;font-weight:600;margin-bottom:.5rem">Уведомления об офертах</div>
+          <div class="d-flex gap-2 flex-wrap" id="ofertaSelector">
+            <button class="btn btn-sm oferta-opt" data-days="7">За 7 дней</button>
+            <button class="btn btn-sm oferta-opt" data-days="14">За 14 дней</button>
+            <button class="btn btn-sm oferta-opt" data-days="30">За 30 дней</button>
+            <button class="btn btn-sm oferta-opt" data-days="0">Не присылать</button>
+          </div>
+        </div>
+      </div>
+
+      <button id="saveSettingsBtn" class="btn btn-primary w-100">Сохранить настройки</button>
+
+    </div>
+  </div>
+
+  {# ── Panel 4: Activity Feed ───────────────────────────────────── #}
+  <div class="prf-panel" id="prf-panel-4">
     <div class="prf-panel-activity">
 
       <div class="prf-section-label">Журнал действий</div>
+
+      <div class="d-flex gap-2 mb-3" id="activityCategoryBtns">
+        <button class="btn btn-sm btn-outline-secondary active" data-cat="">Все</button>
+        <button class="btn btn-sm btn-outline-secondary" data-cat="account">Аккаунт</button>
+        <button class="btn btn-sm btn-outline-secondary" data-cat="portfolio">Портфель</button>
+      </div>
 
       <div id="activityLoading" class="text-center py-4 prf-activity-loading" style="display: none;">
         <div class="spinner-border spinner-border-sm me-2" role="status"></div>Загрузка…

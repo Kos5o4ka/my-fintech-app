@@ -1,0 +1,27 @@
+meta {
+  name: Mark Notifications Read
+  type: http
+  seq: 15
+}
+
+post {
+  url: {{baseUrl}}/api/notifications/read
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "all": true
+  }
+}
+
+docs {
+  ## Mark Notifications as Read
+
+  Помечает уведомления как прочитанные.
+
+  **Тело запроса (варианты):**
+  - `{"all": true}` — пометить все
+  - `{"ids": [1, 2, 3]}` — конкретные ID
+}

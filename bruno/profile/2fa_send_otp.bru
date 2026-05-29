@@ -1,0 +1,18 @@
+meta {
+  name: Send 2FA OTP
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/api/profile/2fa/send-otp
+  body: none
+  auth: none
+}
+
+docs {
+  ## Send 2FA OTP
+
+  Отправляет OTP-код в Telegram для подтверждения отключения 2FA.
+  Требуется привязанный Telegram.
+}
