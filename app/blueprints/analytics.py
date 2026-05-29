@@ -82,6 +82,9 @@ def portfolio_tax():
     trades_list = []
     gross_profit = 0.0
     total_commission = 0.0
+
+    from collections import defaultdict
+    grouped_sold = defaultdict(list)
     for bond in sold:
         buy_p = float(bond.buy_price)
         sell_p = float(bond.sell_price) if bond.sell_price else buy_p
@@ -90,22 +93,54 @@ def portfolio_tax():
         pnl = (sell_p - buy_p) * bond.amount - comm + coupon_inc
         gross_profit += pnl
         total_commission += comm
-        trades_list.append(
-            {
-                "id": bond.id,
-                "name": bond.name or bond.isin,
-                "isin": bond.isin,
-                "amount": bond.amount,
-                "buy_price": round(buy_p, 2),
-                "sell_price": round(sell_p, 2),
-                "commission": round(comm, 2),
-                "coupons": coupon_inc,
-                "pnl": round(pnl, 2),
-                "sell_date": bond.sell_date.strftime("%Y-%m-%d")
-                if bond.sell_date
-                else None,
-            }
-        )
+        
+        sell_date_str = bond.sell_date.strftime("%Y-%m-%d") if bond.sell_date else ""
+        group_key = (bond.isin, sell_date_str, round(sell_p, 2), round(buy_p, 2))
+        
+        grouped_sold[group_key].append({
+            "id": bond.id,
+            "amount": bond.amount,
+            "commission": comm,
+            "coupons": coupon_inc,
+            "pnl": pnl,
+            "time": bond.updated_at.strftime("%H:%M:%S") if getattr(bond, "updated_at", None) else "",
+            "name": bond.name or bond.isin
+        })
+
+    for key, items in grouped_sold.items():
+        isin, sell_date_str, sell_p, buy_p = key
+        total_amount = sum(item["amount"] for item in items)
+        total_comm = sum(item["commission"] for item in items)
+        total_coupons = sum(item["coupons"] for item in items)
+        total_pnl = sum(item["pnl"] for item in items)
+        name = items[0]["name"]
+        
+        trade_entry = {
+            "id": items[0]["id"],
+            "name": name,
+            "isin": isin,
+            "amount": total_amount,
+            "buy_price": buy_p,
+            "sell_price": sell_p,
+            "commission": round(total_comm, 2),
+            "coupons": round(total_coupons, 2),
+            "pnl": round(total_pnl, 2),
+            "sell_date": sell_date_str or None,
+        }
+        
+        if len(items) > 1:
+            trade_entry["sub_trades"] = [
+                {
+                    "id": it["id"],
+                    "amount": it["amount"],
+                    "commission": round(it["commission"], 2),
+                    "pnl": round(it["pnl"], 2),
+                    "time": it["time"]
+                }
+                for it in items
+            ]
+        
+        trades_list.append(trade_entry)
 
     for bond in active:
         coupon_inc = get_bond_coupon_income(bond, date(year, 12, 31))

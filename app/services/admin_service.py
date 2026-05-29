@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 def get_all_users() -> list[dict]:
     users = User.query.all()
-    return [{"id": u.id, "username": u.username, "is_admin": u.is_admin} for u in users]
+    return [{"id": u.id, "username": u.username, "is_admin": u.is_admin, "avatar": u.avatar} for u in users]
 
 
 def find_user_by_username(username: str) -> Optional[User]:

@@ -9,6 +9,7 @@ from typing import Optional
 from flask import Blueprint, request, jsonify, render_template, abort, make_response
 from flask_login import login_required, current_user
 from pydantic import ValidationError
+from werkzeug.security import check_password_hash
 
 from app.extensions import cache
 from app.moex import (
@@ -21,6 +22,7 @@ from app.moex import (
 from app.services.moex_service import (
     get_bond_preview,
 )
+from app.services.audit_service import log_action
 from app.services.portfolio_service import (
     build_portfolio_list,
     calc_portfolio_ytm,
@@ -90,12 +92,48 @@ def portfolio_page() -> str:
     return render_template("portfolio.html", active_page="portfolio")
 
 
+@portfolio_bp.route("/portfolio/report", methods=["GET"])
+@login_required
+def portfolio_report():
+    from app.services.portfolio_service import build_portfolio_list, calc_portfolio_ytm
+    from app.services.analytics_service import get_tax_report, get_portfolio_sharpe_ratio
+    
+    active_bonds = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False).all()
+    all_bonds, total_val = build_portfolio_list(active_bonds)
+    ytm = calc_portfolio_ytm(all_bonds, total_val)
+    
+    sold_count = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=True).count()
+    
+    year = datetime.now().year
+    tax = get_tax_report(current_user.id, year)
+    sharpe = get_portfolio_sharpe_ratio(current_user.id)
+    
+    generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+    
+    return render_template(
+        "pdf_report.html",
+        bonds=all_bonds,
+        total_value=total_val,
+        portfolio_ytm=ytm,
+        bond_count=len(all_bonds),
+        sold_count=sold_count,
+        tax=tax,
+        sharpe=sharpe,
+        year=year,
+        generated_at=generated_at,
+        username=current_user.username
+    )
+
+
 @portfolio_bp.route("/api/portfolio/<int:bond_id>", methods=["DELETE"])
 @login_required
 def delete_position_route(bond_id):
+    bond = get_bond_by_id(bond_id)
+    bond_isin = bond.isin if bond else str(bond_id)
     result = delete_position(bond_id, current_user.id)
     if result is None:
         return jsonify({"status": "error", "message": "Позиция не найдена"}), 404
+    log_action("bond_delete", user_id=current_user.id, category="portfolio", details=f"Удалена позиция: {bond_isin}")
     _bust_user_cache(current_user.id)
     return jsonify({"status": "success", "message": "Позиция успешно удалена"})
 
@@ -105,12 +143,24 @@ def delete_position_route(bond_id):
 def reset_portfolio_route():
     data = request.get_json() or {}
     password = data.get("password")
-    if not password or not current_user.check_password(password):
+    if not password or not check_password_hash(current_user.password_hash, password):
         return jsonify({"status": "error", "message": "Неверный пароль"}), 403
 
     reset_portfolio(current_user.id)
+    log_action("portfolio_reset", user_id=current_user.id, category="portfolio", details="Сброс портфеля и истории сделок")
     _bust_user_cache(current_user.id)
     return jsonify({"status": "success", "message": "Портфель успешно сброшен"})
+
+
+@portfolio_bp.route("/api/portfolio/tinkoff_sync", methods=["POST"])
+@login_required
+def tinkoff_sync_route():
+    from app.services.tinkoff_service import sync_tinkoff_portfolio
+    result = sync_tinkoff_portfolio(current_user)
+    if result["status"] == "success":
+        return jsonify(result)
+    else:
+        return jsonify(result), 400
 
 
 @portfolio_bp.route("/api/portfolio", methods=["GET"])
@@ -311,6 +361,7 @@ def add_bond_route():
         currency=currency,
         notes=req.notes.strip() if req.notes else None,
     )
+    log_action("bond_add", user_id=current_user.id, category="portfolio", details=f"Добавлена бумага {bond_title} ({isin})")
     _bust_user_cache(current_user.id)
     return jsonify(
         {
@@ -359,6 +410,7 @@ def sell_bond_route(bond_id: int):
         broker_commission=req.broker_commission,
         user_id=current_user.id,
     )
+    log_action("bond_sell", user_id=current_user.id, category="portfolio", details=f"Продано {sell_qty} шт. бумаги {bond.isin}")
     _bust_user_cache(current_user.id)
     return jsonify({"status": "success", "message": message})
 

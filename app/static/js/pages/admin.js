@@ -13,9 +13,44 @@ async function loadUsersList() {
     return;
   }
   const users = await res.json();
+  // Сортировка: сначала админы по ID (возрастанию), затем юзеры по ID (возрастанию)
+  users.sort((a, b) => {
+    if (a.is_admin && !b.is_admin) return -1;
+    if (!a.is_admin && b.is_admin) return 1;
+    return a.id - b.id;
+  });
   _usersCache = users;
+  
+  renderUsersTable(_usersCache);
+
+  // Populate broadcast user select
+  const sel = document.getElementById('bcUserCheckboxList');
+  if (sel) {
+    const esc = window.Common.escapeHtml;
+    sel.innerHTML = users.map(u => {
+      const avatarUrl = u.avatar ? `/static/avatars/${u.avatar}` : null;
+      const avatarHtml = avatarUrl 
+          ? `<img src="${avatarUrl}" alt="${esc(u.username)}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;margin-right:8px;">`
+          : `<div style="width:24px;height:24px;border-radius:50%;background:var(--surface-3);color:var(--text-secondary);display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:bold;margin-right:8px;">${esc(u.username.substring(0, 2).toUpperCase())}</div>`;
+      return `<div class="form-check d-flex align-items-center mb-2">
+         <input class="form-check-input bc-user-chk me-2" type="checkbox" value="${u.id}" id="bcUserChk${u.id}" style="margin-top:0;">
+         <label class="form-check-label d-flex align-items-center mb-0 cursor-pointer" for="bcUserChk${u.id}">
+           ${avatarHtml}
+           <span>${esc(u.username)} <small class="text-muted ms-1">(ID: ${u.id})</small></span>
+         </label>
+       </div>`;
+    }).join('');
+  }
+}
+
+function renderUsersTable(usersToRender) {
+  const tbody = document.getElementById('admin-users-table');
   const esc = window.Common.escapeHtml;
-  tbody.innerHTML = users.map(u => {
+  if (!usersToRender.length) {
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Не найдено</td></tr>';
+    return;
+  }
+  tbody.innerHTML = usersToRender.map(u => {
     const isSelf = u.id === _currentUserId;
     const isRoot = u.username === 'root';
     const actions = isSelf
@@ -33,13 +68,20 @@ async function loadUsersList() {
       <td>${actions}</td>
     </tr>`;
   }).join('');
-
-  // Populate broadcast user select
-  const sel = document.getElementById('bcUserSelect');
-  if (sel) {
-    sel.innerHTML = users.map(u => `<option value="${u.id}">${esc(u.username)}</option>`).join('');
-  }
 }
+
+document.getElementById('adminUserSearch')?.addEventListener('input', e => {
+  const q = e.target.value.toLowerCase().trim();
+  if (!q) {
+    renderUsersTable(_usersCache);
+    return;
+  }
+  const filtered = _usersCache.filter(u => 
+    u.username.toLowerCase().includes(q) || 
+    u.id.toString() === q
+  );
+  renderUsersTable(filtered);
+});
 
 // Delegate click for user actions
 document.getElementById('admin-users-table')?.addEventListener('click', e => {
@@ -118,6 +160,24 @@ document.querySelectorAll('input[name="bcRecipients"]').forEach(r => {
   });
 });
 
+document.getElementById('bcUserSearch')?.addEventListener('input', e => {
+  const q = e.target.value.toLowerCase().trim();
+  const sel = document.getElementById('bcUserCheckboxList');
+  if (!sel) return;
+  const esc = window.Common.escapeHtml;
+  
+  // We need to keep checked state, so we just toggle display
+  sel.querySelectorAll('.form-check').forEach(div => {
+    const lbl = div.querySelector('label').textContent.toLowerCase();
+    const chk = div.querySelector('input');
+    if (lbl.includes(q) || chk.value === q || !q) {
+      div.style.display = '';
+    } else {
+      div.style.display = 'none';
+    }
+  });
+});
+
 document.getElementById('bcSendBtn')?.addEventListener('click', async () => {
   const title = document.getElementById('bcTitle').value.trim();
   const body = document.getElementById('bcBody').value.trim();
@@ -130,9 +190,8 @@ document.getElementById('bcSendBtn')?.addEventListener('click', async () => {
 
   let recipients = 'all';
   if (document.getElementById('bcSelect').checked) {
-    const sel = document.getElementById('bcUserSelect');
-    recipients = Array.from(sel.selectedOptions).map(o => parseInt(o.value, 10));
-    if (!recipients.length) { window.Common.showToast('Выберите получателей', true); return; }
+    recipients = Array.from(document.querySelectorAll('.bc-user-chk:checked')).map(o => parseInt(o.value, 10));
+    if (!recipients.length) { window.Common.showToast('Выберите хотя бы одного получателя', true); return; }
   }
 
   const btn = document.getElementById('bcSendBtn');

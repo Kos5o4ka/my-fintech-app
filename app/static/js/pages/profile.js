@@ -62,6 +62,24 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch { btn.disabled = false; btn.textContent = 'Удалить аватар'; }
   });
 
+  // ── Tinkoff Token ────────────────────────────────────────────────────
+  document.getElementById('tinkoffTokenForm')?.addEventListener('submit', async e => {
+    e.preventDefault();
+    const btn = document.getElementById('saveTinkoffTokenBtn');
+    btn.disabled = true; btn.textContent = 'Сохранение…';
+    try {
+      const token = document.getElementById('tinkoffToken').value.trim();
+      const res = await window.Common.csrfFetch('/api/profile/tinkoff_token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token })
+      });
+      const data = await res.json();
+      if (res.ok) { window.Common.showToast(data.message); }
+      else { window.Common.showSystemMessage(data.message, true); }
+    } finally { btn.disabled = false; btn.textContent = 'Сохранить токен'; }
+  });
+
   // ── Hero quick stats ─────────────────────────────────────────────────
   fetch('/api/profile/stats').then(r => r.json()).then(d => {
     const bc = document.getElementById('hsBondCount');
@@ -258,6 +276,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let _settingsOferta = 14;
 
   function initSettings() {
+    loadSiteNotifs(1);
     fetch('/api/profile/settings').then(r => r.json()).then(d => {
       if (d.status !== 'success') return;
       _settingsTheme = d.theme || 'system';
@@ -332,6 +351,63 @@ document.addEventListener('DOMContentLoaded', () => {
     } finally { btn.disabled = false; btn.textContent = 'Сохранить настройки'; }
   });
 
+  // ── Site notifications ──────────────────────────────────────────────────
+  window._siteNotifsPage = 1;
+  window.loadSiteNotifs = async function(page = 1) {
+    window._siteNotifsPage = page;
+    const listEl = document.getElementById('siteNotifsList');
+    const pagEl = document.getElementById('siteNotifsPagination');
+    if (!listEl) return;
+    listEl.innerHTML = '<div class="text-center text-muted py-3">Загрузка…</div>';
+    try {
+      const res = await fetch(`/api/notifications?page=${page}`);
+      const data = await res.json();
+      if (!data.notifications || !data.notifications.length) {
+        listEl.innerHTML = '<div class="text-center text-muted py-3">Нет системных сообщений.</div>';
+        if (pagEl) pagEl.style.display = 'none';
+        return;
+      }
+      listEl.innerHTML = data.notifications.map(n => `
+        <div class="p-3 border-bottom \${!n.is_read ? 'bg-light' : ''}">
+          <div class="d-flex justify-content-between mb-1">
+            <strong style="color:var(--text-primary)">\${window.Common.escapeHtml(n.title)}</strong>
+            <small class="text-muted">\${n.created_at}</small>
+          </div>
+          <div style="font-size:0.85rem;color:var(--text-secondary);white-space:pre-wrap">\${window.Common.escapeHtml(n.body)}</div>
+        </div>
+      `).join('');
+      if (data.pages > 1 || page > 1) {
+        if (pagEl) pagEl.style.display = 'flex';
+        const pageInfo = document.getElementById('siteNotifsPageInfo');
+        if (pageInfo) pageInfo.textContent = `Стр. \${data.page}`;
+        const prevBtn = document.getElementById('siteNotifsPrevBtn');
+        const nextBtn = document.getElementById('siteNotifsNextBtn');
+        if (prevBtn) prevBtn.disabled = data.page <= 1;
+        if (nextBtn) nextBtn.disabled = data.notifications.length < 20; // heuristic if pages not returned
+      } else {
+        if (pagEl) pagEl.style.display = 'none';
+      }
+    } catch (e) {
+      listEl.innerHTML = '<div class="text-center text-danger py-3">Ошибка загрузки.</div>';
+    }
+  };
+
+  document.getElementById('siteNotifsPrevBtn')?.addEventListener('click', () => loadSiteNotifs(window._siteNotifsPage - 1));
+  document.getElementById('siteNotifsNextBtn')?.addEventListener('click', () => loadSiteNotifs(window._siteNotifsPage + 1));
+  document.getElementById('markAllSiteNotifsReadBtn')?.addEventListener('click', async () => {
+    try {
+      await window.Common.csrfFetch('/api/notifications/read', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({all: true})
+      });
+      loadSiteNotifs(1);
+      // force reload base badge
+      const badge = document.getElementById('siteNotifBadge');
+      if (badge) badge.style.display = 'none';
+    } catch {}
+  });
+
   // ── Activity feed ──────────────────────────────────────────────────────
   window.loadActivity = async function (page, category) {
     if (category !== undefined) window._activityCategory = category;
@@ -364,7 +440,17 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="activity-label">${window.Common.escapeHtml(e.label)}</div>
             <div class="activity-meta">
               ${window.Common.escapeHtml(e.created_at)}${e.ip_address && e.ip_address !== '—' ? ' · ' + window.Common.escapeHtml(e.ip_address) : ''}
-              ${e.details ? ' · <span class="activity-detail">' + window.Common.escapeHtml(typeof e.details === 'string' ? e.details : JSON.stringify(e.details)) + '</span>' : ''}
+              ${(function(d){
+                if (!d) return '';
+                let text = d;
+                try {
+                  const obj = typeof d === 'string' ? JSON.parse(d) : d;
+                  if (typeof obj === 'object' && obj !== null) {
+                    text = Object.entries(obj).map(x => x[0] + ': ' + (typeof x[1] === 'object' ? JSON.stringify(x[1]) : x[1])).join(', ');
+                  }
+                } catch(e) {}
+                return ' &middot; <span class="activity-detail">' + window.Common.escapeHtml(text) + '</span>';
+              })(e.details)}
             </div>
           </div>
         </div>

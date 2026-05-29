@@ -50,7 +50,10 @@
             <div class="card shadow-sm">
               <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
                 <span>Список пользователей</span>
-                <button class="btn btn-outline-secondary btn-sm" id="refreshUsersBtn">Обновить</button>
+                <div class="d-flex gap-2">
+                  <input type="text" id="adminUserSearch" class="form-control form-control-sm" placeholder="Поиск (логин, ID)…" style="max-width: 200px;">
+                  <button class="btn btn-outline-secondary btn-sm" id="refreshUsersBtn">Обновить</button>
+                </div>
               </div>
               <div class="card-body p-0">
                 <div class="table-responsive">
@@ -87,8 +90,10 @@
                     <label class="form-check-label" for="bcSelect">Выбрать…</label>
                   </div>
                   <div id="bcUserSelectWrap" style="display:none" class="mt-2">
-                    <select id="bcUserSelect" class="form-select" multiple size="5"></select>
-                    <small class="text-muted">Зажмите Ctrl для множественного выбора</small>
+                    <input type="text" id="bcUserSearch" class="form-control form-control-sm mb-2" placeholder="Поиск пользователя...">
+                    <div id="bcUserCheckboxList" class="border rounded p-2" style="max-height: 200px; overflow-y: auto; background: var(--bg-primary);">
+                      <!-- Checkboxes will be injected here -->
+                    </div>
                   </div>
                 </div>
                 <div class="mb-3">

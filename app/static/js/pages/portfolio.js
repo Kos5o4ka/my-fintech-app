@@ -815,6 +815,59 @@ async function fetchChartAnalytics() {
     });
 })();
 
+// ── Watchlist search autocomplete ─────────────────────────────────────────────
+(function setupWatchlistSearch() {
+    const isinInput = document.getElementById('watchlistIsinInput');
+    const dropdown  = document.getElementById('watchlistIsinDropdown');
+    if (!isinInput || !dropdown) return;
+    let debounceTimer = null;
+
+    isinInput.addEventListener('input', () => {
+        clearTimeout(debounceTimer);
+        const q = isinInput.value.trim();
+        if (q.length < 2) { dropdown.style.display = 'none'; return; }
+        debounceTimer = setTimeout(async () => {
+            try {
+                const res = await fetch(`/api/search_bond?q=${encodeURIComponent(q)}`);
+                if (!res.ok) return;
+                renderDropdown(await res.json());
+            } catch (_) {}
+        }, 300);
+    });
+
+    function renderDropdown(results) {
+        dropdown.innerHTML = '';
+        if (!results || !results.length) { dropdown.style.display = 'none'; return; }
+        const esc = window.Common.escapeHtml;
+        results.forEach(item => {
+            const div = document.createElement('div');
+            div.className = 'isin-dropdown-item';
+            div.style.cssText = 'padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--border-subtle);';
+            div.innerHTML = `<span class="fw-semibold">${esc(item.isin)}</span>
+                             <span class="text-muted ms-2 small">${esc(item.name)}</span>`;
+            div.addEventListener('mousedown', e => {
+                e.preventDefault();
+                isinInput.value = item.isin;
+                dropdown.style.display = 'none';
+                addWatchlistDirect();
+            });
+            div.addEventListener('mouseenter', () => div.style.background = 'var(--surface-2)');
+            div.addEventListener('mouseleave', () => div.style.background = 'transparent');
+            dropdown.appendChild(div);
+        });
+        dropdown.style.display = 'block';
+    }
+
+    document.addEventListener('click', e => {
+        if (!isinInput.contains(e.target) && !dropdown.contains(e.target))
+            dropdown.style.display = 'none';
+    });
+
+    isinInput.addEventListener('keydown', e => {
+        if (e.key === 'Escape') dropdown.style.display = 'none';
+    });
+})();
+
 // ── Allocation pie chart ──────────────────────────────────────────────────────
 let allocationChartExpanded = false;
 function renderAllocationChart() {
@@ -1046,8 +1099,9 @@ async function fetchWatchlist() {
     }).join('');
 }
 
-async function promptAddWatchlist() {
-    const isin = prompt('Введите ISIN облигации:');
+async function addWatchlistDirect() {
+    const inputEl = document.getElementById('watchlistIsinInput');
+    const isin = inputEl ? inputEl.value : null;
     if (!isin) return;
     const res = await window.Common.csrfFetch('/api/watchlist', {
         method: 'POST',
@@ -1057,6 +1111,7 @@ async function promptAddWatchlist() {
     const data = await res.json();
     if (res.ok) {
         window.Common.showToast(data.message);
+        if (inputEl) inputEl.value = '';
         watchlistLoaded = false;
         fetchWatchlist();
     } else {
@@ -1151,3 +1206,30 @@ async function addScreenerToWatchlist(isin) {
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 loadDashboard();
+
+// ── Tinkoff Sync ──────────────────────────────────────────────────────────────
+async function syncTinkoff() {
+    const btn = document.getElementById('tinkoffSyncBtn');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Синхр...`;
+    }
+    try {
+        const res = await window.Common.csrfFetch('/api/portfolio/tinkoff_sync', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) {
+            window.Common.showToast(data.message || 'Синхронизация завершена');
+            historyLoaded = false;
+            await loadDashboard();
+        } else {
+            window.Common.showSystemMessage(data.message || 'Ошибка синхронизации', true);
+        }
+    } catch (err) {
+        window.Common.showSystemMessage('Сбой сети при синхронизации', true);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="margin-right:.3rem"><path d="M21 12a9 9 0 11-9-9c2.52 0 4.93 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /></svg>Синхр.`;
+        }
+    }
+}

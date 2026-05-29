@@ -95,6 +95,19 @@
         </div>
       </div>
     </div>
+    </div>
+    <div class="pf-card" id="coupon-calendar-wrap">
+      <div style="padding:.75rem 1rem;border-bottom:1px solid var(--card-border);font-size:.78rem;font-weight:600;color:var(--text-secondary)">
+        Предстоящие купоны
+      </div>
+      <div style="padding:.5rem; max-height:180px; overflow-y:auto;">
+        <ul class="list-group list-group-flush" id="coupon-calendar-list" style="border-radius:var(--radius);overflow:hidden;border:1px solid var(--card-border)">
+          <li class="list-group-item text-center py-2" style="font-size:.82rem;color:var(--text-tertiary)">
+            Загрузка…
+          </li>
+        </ul>
+      </div>
+    </div>
   </div>
 
   {# ── Main card with tabs ───────────────────────────────────────── #}
@@ -298,4 +311,30 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/pages/analytics.min.js') }}?v={{ static_ver }}" defer></script>
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+    try {
+        const response = await fetch('/api/portfolio/calendar');
+        if (!response.ok) return;
+        const events = await response.json();
+        const list = document.getElementById('coupon-calendar-list');
+        if (!list) return;
+        list.innerHTML = '';
+        if (events.length === 0) {
+            list.innerHTML = '<li class="list-group-item text-center text-muted py-3">Нет предстоящих купонов.</li>';
+            return;
+        }
+        events.forEach(e => {
+            const safeName = e.name.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            const safeDate = e.date.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            list.innerHTML += `<li class="list-group-item d-flex justify-content-between align-items-center">
+                <div><b>${safeName}</b><br><small class="text-muted">${safeDate}</small></div>
+                <span class="badge bg-success font-monospace">+ ${parseFloat(e.total_payout).toFixed(2)} ₽</span>
+            </li>`;
+        });
+    } catch (e) {
+        console.error('Failed to load coupon calendar', e);
+    }
+});
+</script>
 {% endblock %}

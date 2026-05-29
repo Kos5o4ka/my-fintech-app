@@ -169,6 +169,17 @@
               Выйти из аккаунта
             </button>
           </div>
+
+          <div class="card p-3">
+            <div class="prf-section-label d-flex justify-content-between align-items-center">
+              Т-Банк API
+            </div>
+            <p class="small text-muted mb-2">Введите Read-Only токен для синхронизации портфеля.</p>
+            <form id="tinkoffTokenForm">
+              <input type="password" id="tinkoffToken" class="form-control form-control-sm mb-2" placeholder="t.*" autocomplete="off" value="{% if current_user.tinkoff_token %}********{% endif %}">
+              <button type="submit" class="btn btn-primary btn-sm w-100" id="saveTinkoffTokenBtn">Сохранить токен</button>
+            </form>
+          </div>
         </div>
 
       </div>
@@ -262,6 +273,26 @@
                 <span class="toggle-track"></span>
               </label>
             </div>
+            
+            {# Дополнительные настройки уведомлений #}
+            <div id="notifSettingsBlock" class="mt-3 p-3 mb-3" style="background:var(--surface-1);border-radius:var(--radius-sm);{% if not current_user.telegram_notifications %}opacity:0.5;pointer-events:none;{% endif %}">
+              <div style="font-size:.85rem;font-weight:600;margin-bottom:.5rem">Время уведомлений</div>
+              <div class="d-flex align-items-center gap-2 mb-2">
+                <input type="time" id="settingsNotifTime" class="form-control" style="max-width:140px"
+                       value="{{ current_user.notif_time or '09:00' }}">
+              </div>
+              <div id="settingsTzNote" style="font-size:.75rem;color:var(--text-tertiary);margin-bottom:1.25rem">
+                Часовой пояс: <span id="settingsTzName">{{ current_user.notif_timezone or 'Europe/Moscow' }}</span>
+              </div>
+              <div style="font-size:.85rem;font-weight:600;margin-bottom:.5rem">Уведомления об офертах</div>
+              <div class="d-flex gap-2 flex-wrap" id="ofertaSelector">
+                <button class="btn btn-sm oferta-opt" data-days="7">За 7 дней</button>
+                <button class="btn btn-sm oferta-opt" data-days="14">За 14 дней</button>
+                <button class="btn btn-sm oferta-opt" data-days="30">За 30 дней</button>
+                <button class="btn btn-sm oferta-opt" data-days="0">Не присылать</button>
+              </div>
+            </div>
+            
             <div class="notif-row">
               <div class="notif-info">
                 <div class="notif-title">Двухфакторная аутентификация</div>
@@ -286,6 +317,25 @@
         </div>
       </div>
 
+      {# ── Уведомления на сайте ─────────────────────────────────────────── #}
+      <div class="prf-section-label mt-4">Уведомления на сайте</div>
+      <div class="card mb-4">
+        <div class="card-body p-4">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div style="font-size: .85rem; font-weight: 600; color: var(--text-secondary)">Список системных сообщений</div>
+            <button id="markAllSiteNotifsReadBtn" class="btn btn-sm btn-outline-secondary">Прочитать все</button>
+          </div>
+          <div id="siteNotifsList" style="max-height: 400px; overflow-y: auto;">
+            <div class="text-center text-muted py-3">Загрузка…</div>
+          </div>
+          <div id="siteNotifsPagination" class="mt-3 text-center flex-wrap gap-2 justify-content-center" style="display:none">
+            <button id="siteNotifsPrevBtn" class="btn btn-sm btn-outline-secondary me-2">← Назад</button>
+            <span id="siteNotifsPageInfo" class="small text-muted me-2 mt-1">Стр. 1</span>
+            <button id="siteNotifsNextBtn" class="btn btn-sm btn-outline-secondary">Вперед →</button>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -306,33 +356,28 @@
         </div>
       </div>
 
-      {# ── Notification settings ───────────────────────────────────── #}
-      <div class="prf-section-label">Уведомления</div>
-      <div class="card mb-4">
-        <div class="card-body p-4">
-          <div style="font-size:.85rem;font-weight:600;margin-bottom:.5rem">Время уведомлений в Telegram</div>
-          <div class="d-flex align-items-center gap-2 mb-2">
-            <input type="time" id="settingsNotifTime" class="form-control" style="max-width:140px"
-                   value="{{ current_user.notif_time or '09:00' }}">
-          </div>
-          <div id="settingsTzNote" style="font-size:.75rem;color:var(--text-tertiary);margin-bottom:1.25rem">
-            Часовой пояс: <span id="settingsTzName">{{ current_user.notif_timezone or 'Europe/Moscow' }}</span>
-          </div>
-
-          <div style="font-size:.85rem;font-weight:600;margin-bottom:.5rem">Уведомления об офертах</div>
-          <div class="d-flex gap-2 flex-wrap" id="ofertaSelector">
-            <button class="btn btn-sm oferta-opt" data-days="7">За 7 дней</button>
-            <button class="btn btn-sm oferta-opt" data-days="14">За 14 дней</button>
-            <button class="btn btn-sm oferta-opt" data-days="30">За 30 дней</button>
-            <button class="btn btn-sm oferta-opt" data-days="0">Не присылать</button>
-          </div>
-        </div>
-      </div>
-
       <button id="saveSettingsBtn" class="btn btn-primary w-100">Сохранить настройки</button>
 
     </div>
   </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const notifCheck = document.getElementById("tgNotifCheck");
+      const notifSettings = document.getElementById("notifSettingsBlock");
+      if (notifCheck && notifSettings) {
+        notifCheck.addEventListener("change", (e) => {
+          if (e.target.checked) {
+            notifSettings.style.opacity = "1";
+            notifSettings.style.pointerEvents = "auto";
+          } else {
+            notifSettings.style.opacity = "0.5";
+            notifSettings.style.pointerEvents = "none";
+          }
+        });
+      }
+    });
+  </script>
 
   {# ── Panel 4: Activity Feed ───────────────────────────────────── #}
   <div class="prf-panel" id="prf-panel-4">

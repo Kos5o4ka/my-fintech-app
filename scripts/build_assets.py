@@ -52,7 +52,7 @@ def write_minified(path: Path, minified: str):
 
 
 def main():
-    cwd = Path(__file__).resolve().parent
+    cwd = Path(__file__).resolve().parent.parent / "app"
     for src in JS_FILES:
         path = cwd / src
         if not path.exists():

@@ -568,6 +568,12 @@ def build_portfolio_entry(bond: BondPortfolio, rates: Optional[dict] = None) -> 
         bond.isin, last_p, facevalue, moex_data.get("ytm", 0.0), bond.amount
     )
 
+    # Расчет YTM по цене покупки
+    nkd = moex_data.get("nkd", 0.0)
+    ytm_calculated = calc_bond_ytm(bond.isin, buy_p, facevalue, nkd, bond.purchase_date)
+    if ytm_calculated is None:
+        ytm_calculated = moex_data.get("ytm", 0.0)
+
     return {
         "id": bond.id,
         "isin": bond.isin,
@@ -580,7 +586,7 @@ def build_portfolio_entry(bond: BondPortfolio, rates: Optional[dict] = None) -> 
         "current_value_rub": round(current_value_rub, 2),
         "purchase_date": bond.purchase_date.strftime("%Y-%m-%d"),
         "nkd": moex_data.get("nkd", 0.0),
-        "ytm": moex_data.get("ytm", 0.0),
+        "ytm": ytm_calculated,
         "pnl": round(pnl, 2),
         "pnl_rub": round(pnl_rub, 2),
         "pnl_pct": round(pnl_pct, 2),
@@ -934,7 +940,70 @@ def calc_sharpe_ratio(
         "rf_annual_pct": round(rf_annual * 100, 2),
         "rf_source": "MOEX КБД",
         "rf_maturity_yrs": round(avg_years, 1),
+        "rf_maturity_yrs": round(avg_years, 1),
     }
+
+
+def calc_bond_ytm(isin: str, buy_price_rub: float, facevalue: float, nkd: float, purchase_date) -> float | None:
+    """Рассчитывает YTM (в процентах) на основе цены покупки."""
+    import datetime
+    from app.services.moex_service import get_coupon_calendar_cached
+
+    if buy_price_rub <= 0:
+        return None
+
+    coupons = get_coupon_calendar_cached(isin)
+    if not coupons:
+        return None
+
+    if isinstance(purchase_date, datetime.datetime):
+        purchase_date = purchase_date.date()
+
+    dirty_price = buy_price_rub + nkd
+    cfs = []
+
+    # Сортируем купоны по дате
+    coupons_sorted = sorted(coupons, key=lambda x: x["date"])
+
+    for i, c in enumerate(coupons_sorted):
+        c_date_str = c.get("date") or c.get("coupondate") or ""
+        if not c_date_str:
+            continue
+        try:
+            c_date = datetime.datetime.strptime(c_date_str[:10], "%Y-%m-%d").date()
+        except ValueError:
+            continue
+
+        t = (c_date - purchase_date).days / 365.25
+        if t <= 0:
+            continue
+
+        val = float(c.get("value") or 0.0)
+        if i == len(coupons_sorted) - 1:
+            val += facevalue
+
+        cfs.append((t, val))
+
+    if not cfs:
+        return None
+
+    def f(y):
+        return sum(cf / ((1 + y) ** t) for t, cf in cfs) - dirty_price
+
+    def df(y):
+        return sum(-t * cf / ((1 + y) ** (t + 1)) for t, cf in cfs)
+
+    y = 0.10
+    for _ in range(100):
+        val = f(y)
+        der = df(y)
+        if abs(val) < 1e-4:
+            return round(y * 100, 2)
+        if der == 0:
+            break
+        y = y - val / der
+
+    return round(y * 100, 2)
 
 
 def calc_bond_duration(

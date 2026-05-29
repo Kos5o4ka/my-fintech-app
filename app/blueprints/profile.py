@@ -48,6 +48,10 @@ _ACTION_LABELS = {
     "import_fail": ("⚠️", "Ошибка импорта"),
     "alert_triggered": ("🔔", "Сработал алёрт"),
     "portfolio_reset": ("♻️", "Сброс портфеля"),
+    # Наследие старых версий (Legacy logs)
+    "portfolio_import": ("📥", "Импорт отчёта (legacy)"),
+    "portfolio_add_bond": ("📈", "Добавлена позиция (legacy)"),
+    "admin_broadcast": ("📢", "Админ рассылка"),
 }
 
 
@@ -155,6 +159,23 @@ def telegram_notifications():
     return jsonify({"status": "success", "message": f"Telegram-уведомления {state}."})
 
 
+# ── Tinkoff Token ──────────────────────────────────────────────────────────────
+
+
+@profile_bp.route("/api/profile/tinkoff_token", methods=["POST"])
+@login_required
+def save_tinkoff_token():
+    from app.extensions import db
+    data = request.get_json(silent=True) or {}
+    token = data.get("token", "").strip()
+    
+    current_user.tinkoff_token = token if token else None
+    db.session.commit()
+    
+    msg = "Токен сохранён." if token else "Токен удалён."
+    return jsonify({"status": "success", "message": msg})
+
+
 # ── Settings ─────────────────────────────────────────────────────────────────
 
 
@@ -250,6 +271,35 @@ def profile_activity():
     entries = []
     for log in entries_raw:
         icon, label = _ACTION_LABELS.get(log.action, ("🔔", log.action))
+        
+        details_str = log.details or ""
+        if isinstance(details_str, str) and details_str.startswith("{") and details_str.endswith("}"):
+            import json
+            try:
+                d = json.loads(details_str)
+                if isinstance(d, dict):
+                    if d.get("method") == "2fa_telegram":
+                        details_str = "Метод: Telegram 2FA"
+                    elif "username" in d:
+                        details_str = f"Логин: {d['username']}"
+                    elif "error" in d:
+                        details_str = f"Ошибка: {d['error']}"
+                    else:
+                        parts = [f"{k}: {v}" for k, v in d.items()]
+                        details_str = ", ".join(parts)
+            except Exception:
+                pass
+        elif isinstance(details_str, dict):
+            d = details_str
+            if d.get("method") == "2fa_telegram":
+                details_str = "Метод: Telegram 2FA"
+            elif "username" in d:
+                details_str = f"Логин: {d['username']}"
+            elif "error" in d:
+                details_str = f"Ошибка: {d['error']}"
+            else:
+                details_str = ", ".join([f"{k}: {v}" for k, v in d.items()])
+
         entries.append(
             {
                 "id": log.id,
@@ -260,7 +310,7 @@ def profile_activity():
                 "created_at": log.created_at.strftime("%Y-%m-%d %H:%M")
                 if log.created_at
                 else "—",
-                "details": log.details or "",
+                "details": details_str,
             }
         )
 

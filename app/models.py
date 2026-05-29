@@ -24,6 +24,8 @@ class User(db.Model, UserMixin):
     telegram_notifications = db.Column(db.Boolean, default=False)
     telegram_username = db.Column(db.String(64), nullable=True)
     two_fa_enabled = db.Column(db.Boolean, default=True)
+    # Tinkoff API
+    tinkoff_token = db.Column(db.String(255), nullable=True)
     # Stage 12 — Settings
     theme = db.Column(db.String(10), nullable=False, default="system")
     notif_time = db.Column(db.String(5), nullable=False, default="09:00")

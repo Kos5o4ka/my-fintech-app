@@ -24,6 +24,14 @@
       </h4>
     </div>
     <div class="pf-actions">
+      {% if current_user.tinkoff_token %}
+      <button class="btn btn-sm btn-outline-primary me-2" onclick="syncTinkoff()" id="tinkoffSyncBtn" title="Синхронизация портфеля с Т-Банком">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="margin-right:.3rem">
+          <path d="M21 12a9 9 0 11-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+          <path d="M21 3v5h-5" />
+        </svg>Синхр.
+      </button>
+      {% endif %}
       <button class="btn btn-sm btn-primary" onclick="openDrawer()">
         <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="margin-right:.3rem">
           <line x1="7" y1="2" x2="7" y2="12"/><line x1="2" y1="7" x2="12" y2="7"/>
@@ -79,6 +87,19 @@
         <div id="allocationEmpty" class="position-absolute top-50 start-50 translate-middle text-center" style="display:none;width:90%">
           <small style="color:var(--text-tertiary)">Добавьте облигации,<br>чтобы увидеть диаграмму</small>
         </div>
+      </div>
+    </div>
+    </div>
+    <div class="pf-card" id="coupon-calendar-wrap">
+      <div style="padding:.75rem 1rem;border-bottom:1px solid var(--card-border);font-size:.78rem;font-weight:600;color:var(--text-secondary)">
+        Предстоящие купоны
+      </div>
+      <div style="padding:.5rem; max-height:180px; overflow-y:auto;">
+        <ul class="list-group list-group-flush" id="coupon-calendar-list" style="border-radius:var(--radius);overflow:hidden;border:1px solid var(--card-border)">
+          <li class="list-group-item text-center py-2" style="font-size:.82rem;color:var(--text-tertiary)">
+            Нет предстоящих купонов.
+          </li>
+        </ul>
       </div>
     </div>
   </div>
@@ -228,11 +249,15 @@
 
       {# ── Watchlist ─────────────────────────────────────────────── #}
       <div class="tab-pane fade" id="watchlist-pane" role="tabpanel">
-        <div class="pf-toolbar">
+        <div class="pf-toolbar" style="gap:.5rem">
           <span class="small" style="color:var(--text-tertiary)">Облигации под наблюдением — без добавления в портфель.</span>
-          <button class="btn btn-outline-success btn-sm ms-auto" onclick="promptAddWatchlist()">
-            + Добавить
-          </button>
+          <div class="ms-auto" style="display:flex; gap:.5rem; position:relative;">
+              <input type="text" id="watchlistIsinInput" class="form-control form-control-sm" placeholder="Введите ISIN или Название" style="width:200px" onkeydown="if(event.key === 'Enter') addWatchlistDirect()">
+              <div id="watchlistIsinDropdown" class="isin-dropdown" style="display:none;position:absolute;top:100%;left:0;width:100%;z-index:1000;margin-top:.25rem;background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--radius-md);box-shadow:var(--shadow-md);max-height:200px;overflow-y:auto"></div>
+              <button class="btn btn-outline-success btn-sm" onclick="addWatchlistDirect()">
+                + Добавить
+              </button>
+          </div>
         </div>
         <div class="pf-table-wrap">
           <table class="pf-table">
@@ -338,21 +363,6 @@
     </button>
   </div>
   <div class="drawer-body">
-
-    {# Coupon income preview (hidden, kept for coupon calendar below) #}
-    <div class="mb-4" id="coupon-calendar-wrap">
-      <div style="font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-tertiary);margin-bottom:.65rem">
-        Предстоящие купоны
-      </div>
-      <ul class="list-group list-group-flush" id="coupon-calendar-list"
-          style="border-radius:var(--radius);overflow:hidden;border:1px solid var(--card-border)">
-        <li class="list-group-item text-center py-2" style="font-size:.82rem;color:var(--text-tertiary)">
-          Нет предстоящих купонов.
-        </li>
-      </ul>
-    </div>
-
-    <div style="height:1px;background:var(--border-subtle);margin-bottom:1.25rem"></div>
 
     <form id="addBondForm">
       <div class="mb-3 position-relative">

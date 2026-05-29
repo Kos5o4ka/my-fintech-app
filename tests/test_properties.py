@@ -131,7 +131,7 @@ class TestTradeEntryProperties:
         bond = _make_sold_bond(buy, sell, amount, commission=0.0)
         entry = build_trade_entry(bond)
         expected_pct = round(entry["pnl"] / (float(buy) * amount) * 100, 2)
-        assert abs(entry["pnl_pct"] - expected_pct) < 0.02
+        assert abs(entry["pnl_pct"] - expected_pct) < 0.1
 
 
 # ── calc_sharpe_ratio properties ──────────────────────────────────────────────

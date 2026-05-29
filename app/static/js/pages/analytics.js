@@ -169,7 +169,7 @@ async function loadTax() {
             const esc = window.Common.escapeHtml;
             tbody.innerHTML = trades.map(t => {
                 const pnlCls = t.pnl >= 0 ? 'text-success' : 'text-danger';
-                return `<tr>
+                let rowHtml = `<tr>
                     <td data-label="Название">${esc(t.name)}</td>
                     <td data-label="ISIN"><code style="font-size:.78rem">${esc(t.isin)}</code></td>
                     <td data-label="Кол-во">${t.amount}</td>
@@ -178,8 +178,27 @@ async function loadTax() {
                     <td data-label="Комиссия">${(t.commission || 0).toFixed(2)}</td>
                     <td data-label="Купоны">${(t.coupons || 0).toFixed(2)}</td>
                     <td data-label="P&L ₽" class="${pnlCls}">${t.pnl >= 0 ? '+' : ''}${(t.pnl || 0).toFixed(2)}</td>
-                    <td data-label="Дата продажи">${esc(t.sell_date || '—')}</td>
+                    <td data-label="Дата продажи">${esc(t.sell_date || '—')}
+                    ${t.sub_trades ? `<button class="btn btn-sm btn-link p-0 ms-1" onclick="toggleSubTrades('sub-${t.id}')">▾</button>` : ''}
+                    </td>
                 </tr>`;
+                
+                if (t.sub_trades) {
+                    const subRows = t.sub_trades.map(st => {
+                        const subPnlCls = st.pnl >= 0 ? 'text-success' : 'text-danger';
+                        return `<tr>
+                            <td colspan="2"></td>
+                            <td class="text-muted small">${st.amount} шт.</td>
+                            <td colspan="2"></td>
+                            <td class="text-muted small">${(st.commission || 0).toFixed(2)} ₽</td>
+                            <td></td>
+                            <td class="${subPnlCls} small">${st.pnl >= 0 ? '+' : ''}${(st.pnl || 0).toFixed(2)} ₽</td>
+                            <td class="text-muted small">${esc(st.time || '')}</td>
+                        </tr>`;
+                    }).join('');
+                    rowHtml += `<tr id="sub-${t.id}" style="display:none;background:var(--surface-0)"><td colspan="9" style="padding:0"><table class="table table-sm table-borderless mb-0" style="font-size:0.85rem"><tbody>${subRows}</tbody></table></td></tr>`;
+                }
+                return rowHtml;
             }).join('');
         }
         if (tableWrap) tableWrap.style.display = 'block';
@@ -188,6 +207,11 @@ async function loadTax() {
         if (loadEl)  loadEl.style.display = 'none';
         if (emptyEl) emptyEl.style.display = 'block';
     }
+}
+
+function toggleSubTrades(id) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = el.style.display === 'none' ? 'table-row' : 'none';
 }
 
 // ── Compare two bonds ─────────────────────────────────────────────────────────
