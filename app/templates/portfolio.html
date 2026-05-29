@@ -182,7 +182,15 @@
 
       {# ── Trade history ──────────────────────────────────────────── #}
       <div class="tab-pane fade" id="history-pane" role="tabpanel">
-        <div class="pf-toolbar">
+        <div class="pf-toolbar" style="flex-wrap:wrap;gap:.4rem">
+          <div class="btn-group btn-group-sm me-1" id="historyTypeBtns" role="group" aria-label="Тип сделки">
+            <button type="button" class="btn btn-outline-secondary btn-sm active"
+                    onclick="setHistoryType('',this)">Все</button>
+            <button type="button" class="btn btn-outline-success btn-sm"
+                    onclick="setHistoryType('buy',this)">Покупки</button>
+            <button type="button" class="btn btn-outline-danger btn-sm"
+                    onclick="setHistoryType('sell',this)">Продажи</button>
+          </div>
           <span class="small fw-semibold" style="color:var(--text-tertiary)">Период:</span>
           <input type="date" id="historyDateFrom" class="form-control form-control-sm"
                  style="width:148px" onchange="applyHistoryFilter()" aria-label="Дата от">
@@ -521,6 +529,30 @@
   </div>
 </div>
 {% endblock %}
+
+{# ── Notes modal ──────────────────────────────────────────────────── #}
+<div class="modal fade" id="notesModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:420px">
+    <div class="modal-content">
+      <div class="modal-header" style="background:var(--slate-800);color:#fff">
+        <h5 class="modal-title" style="font-size:.9rem" id="notesModalTitle">Заметка</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+      </div>
+      <div class="modal-body py-3">
+        <textarea id="notesModalText" class="form-control form-control-sm"
+                  rows="5" maxlength="1000"
+                  placeholder="Ваши наблюдения, стратегия, напоминания…"
+                  style="resize:vertical"></textarea>
+      </div>
+      <div class="modal-footer border-0 pt-0 gap-2">
+        <button type="button" class="btn btn-sm px-3"
+                style="background:var(--surface-2);border:1px solid var(--border-default);color:var(--text-primary)"
+                data-bs-dismiss="modal">Отмена</button>
+        <button type="button" id="notesModalSaveBtn" class="btn btn-primary btn-sm px-4">Сохранить</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/pages/portfolio-page.min.js') }}?v={{ static_ver }}" defer></script>

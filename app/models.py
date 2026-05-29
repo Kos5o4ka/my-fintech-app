@@ -23,6 +23,7 @@ class User(db.Model, UserMixin):
     telegram_chat_id = db.Column(db.String(20), nullable=True, unique=True)
     telegram_notifications = db.Column(db.Boolean, default=False)
     telegram_username = db.Column(db.String(64), nullable=True)
+    two_fa_enabled = db.Column(db.Boolean, default=True)
     bonds = db.relationship(
         "BondPortfolio", backref="user", lazy=True, cascade="all, delete-orphan"
     )

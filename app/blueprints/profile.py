@@ -151,6 +151,55 @@ _ACTION_LABELS = {
 }
 
 
+@profile_bp.route("/api/profile/2fa/send-otp", methods=["POST"])
+@login_required
+def send_2fa_otp():
+    """Отправляет OTP-код в Telegram для подтверждения отключения 2FA."""
+    if not current_user.telegram_chat_id:
+        return jsonify({"status": "error", "message": "Telegram не привязан."}), 400
+    from app.services.telegram_service import generate_otp
+    generate_otp(current_user.telegram_chat_id)
+    return jsonify({"status": "success", "message": "Код отправлен в Telegram."})
+
+
+@profile_bp.route("/api/profile/2fa/disable", methods=["POST"])
+@login_required
+def disable_2fa():
+    """Отключает 2FA. Требует OTP из Telegram или пароль."""
+    from werkzeug.security import check_password_hash
+    from app.extensions import db
+    data = request.get_json(silent=True) or {}
+    method = data.get("method")
+
+    if method == "otp":
+        if not current_user.telegram_chat_id:
+            return jsonify({"status": "error", "message": "Telegram не привязан."}), 400
+        from app.services.telegram_service import verify_otp
+        if not verify_otp(current_user.telegram_chat_id, str(data.get("code", "")).strip()):
+            return jsonify({"status": "error", "message": "Неверный или просроченный код."}), 400
+    elif method == "password":
+        if not check_password_hash(current_user.password_hash, data.get("password", "")):
+            return jsonify({"status": "error", "message": "Неверный пароль."}), 400
+    else:
+        return jsonify({"status": "error", "message": "Укажите метод: otp или password."}), 400
+
+    current_user.two_fa_enabled = False
+    db.session.commit()
+    return jsonify({"status": "success", "message": "2FA отключена. При входе код больше не требуется."})
+
+
+@profile_bp.route("/api/profile/2fa/enable", methods=["POST"])
+@login_required
+def enable_2fa():
+    """Включает 2FA (не требует подтверждения)."""
+    from app.extensions import db
+    if not current_user.telegram_chat_id:
+        return jsonify({"status": "error", "message": "Для 2FA нужно привязать Telegram."}), 400
+    current_user.two_fa_enabled = True
+    db.session.commit()
+    return jsonify({"status": "success", "message": "2FA включена. Код будет приходить при каждом входе."})
+
+
 @profile_bp.route("/api/profile/activity", methods=["GET"])
 @login_required
 def profile_activity():

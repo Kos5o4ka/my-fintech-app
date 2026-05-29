@@ -4,6 +4,7 @@ let allocationChartInstance = null;
 let marketChartInstance = null;
 let chartModal = null;
 let sellModal = null;
+let _notesModal = null;
 let currentBondIsin = null;
 let currentBondLabels = [];
 let currentBondPrices = [];
@@ -193,6 +194,106 @@ async function fetchActivePortfolio() {
     renderAllocationChart();
 }
 
+// ── Bond row helpers ──────────────────────────────────────────────────────────
+function _renderBondRow(bond, esc, isSubRow) {
+    const pnl = bond.pnl ?? 0;
+    const pnlPct = bond.pnl_pct ?? 0;
+    const pnlClass = pnl >= 0 ? 'text-success' : 'text-danger';
+    const sign = pnl >= 0 ? '+' : '';
+    const noteClass = bond.notes ? ' note-filled' : '';
+    const noteTip = bond.notes ? 'Редактировать заметку' : 'Добавить заметку';
+    const subStyle = isSubRow ? ' style="background:var(--surface-0);font-size:.88rem"' : '';
+    const namePrefix = isSubRow ? `<span style="color:var(--text-tertiary);margin-right:.3rem">•</span>` : '';
+    const dateSuffix = isSubRow ? ` <small style="color:var(--text-tertiary)">${esc(bond.purchase_date || '')}</small>` : '';
+    return `
+        <tr data-name="${esc(bond.name)}" data-isin="${esc(bond.isin)}"${subStyle}>
+            <td data-label="Название">${namePrefix}<b>${esc(bond.name)}</b>${dateSuffix}</td>
+            <td data-label="ISIN"><b class="isin-link" onclick="openBondChart(this.dataset.isin)"
+                    data-isin="${esc(bond.isin)}">${esc(bond.isin)}</b></td>
+            <td data-label="Кол-во">${bond.amount} шт.</td>
+            <td data-label="Цена покупки">${bond.buy_price.toFixed(2)} ₽</td>
+            <td data-label="НКД" class="text-primary"><b>${(bond.nkd || 0).toFixed(2)} ₽</b></td>
+            <td data-label="YTM" class="text-info"><b>${(bond.ytm || 0).toFixed(2)} %</b></td>
+            <td data-label="P&L" class="${pnlClass}" title="Нереализованная прибыль/убыток">
+                <b>${sign}${pnl.toFixed(2)} ₽</b><br>
+                <small>${sign}${pnlPct.toFixed(2)}%</small>
+            </td>
+            <td style="white-space:nowrap">
+                <button
+                    onclick="sellTrigger(parseInt(this.dataset.id), this.dataset.name, parseFloat(this.dataset.price), parseFloat(this.dataset.buyPrice), parseInt(this.dataset.amount))"
+                    data-id="${bond.id}"
+                    data-name="${esc(bond.name)}"
+                    data-price="${bond.last_price || bond.buy_price}"
+                    data-buy-price="${bond.buy_price}"
+                    data-amount="${bond.amount}"
+                    class="btn btn-sm btn-outline-success">Продать</button>
+                <button
+                    data-note-btn="${bond.id}"
+                    title="${esc(noteTip)}"
+                    onclick="openNotesModal(${bond.id}, ${JSON.stringify(bond.notes || '')})"
+                    class="btn btn-sm btn-outline-secondary ms-1${noteClass}"
+                    aria-label="Заметка">📝</button>
+            </td>
+        </tr>`;
+}
+
+function _renderMergedGroup(bonds, esc) {
+    const totalAmount = bonds.reduce((s, b) => s + b.amount, 0);
+    const totalCost   = bonds.reduce((s, b) => s + b.buy_price * b.amount, 0);
+    const avgBuyPrice = totalCost / totalAmount;
+    const totalPnl    = bonds.reduce((s, b) => s + (b.pnl || 0), 0);
+    const avgPnlPct   = avgBuyPrice > 0 ? (totalPnl / (avgBuyPrice * totalAmount)) * 100 : 0;
+    const first = bonds[0];
+    const gid   = 'bg_' + first.isin.replace(/[^A-Z0-9]/gi, '');
+    const pnlClass = totalPnl >= 0 ? 'text-success' : 'text-danger';
+    const sign = totalPnl >= 0 ? '+' : '';
+
+    const subRows = bonds.map(b => _renderBondRow(b, esc, true)).join('');
+
+    return `
+        <tr class="bond-group-merged" data-name="${esc(first.name)}" data-isin="${esc(first.isin)}">
+            <td data-label="Название"><b>${esc(first.name)}</b></td>
+            <td data-label="ISIN">
+                <b class="isin-link" onclick="openBondChart(this.dataset.isin)"
+                        data-isin="${esc(first.isin)}">${esc(first.isin)}</b>
+            </td>
+            <td data-label="Кол-во">
+                ${totalAmount} шт.
+                <button class="btn btn-sm btn-outline-secondary ms-1"
+                        onclick="toggleBondGroup('${gid}')"
+                        style="font-size:.7rem;padding:.1rem .35rem"
+                        title="${bonds.length} лота — нажмите для раскрытия">${bonds.length} лота ▾</button>
+            </td>
+            <td data-label="Цена покупки">
+                ${avgBuyPrice.toFixed(2)} ₽ <small style="color:var(--text-tertiary)">ср.</small>
+            </td>
+            <td data-label="НКД" class="text-primary"><b>${(first.nkd || 0).toFixed(2)} ₽</b></td>
+            <td data-label="YTM" class="text-info"><b>${(first.ytm || 0).toFixed(2)} %</b></td>
+            <td data-label="P&L" class="${pnlClass}" title="Суммарная нереализованная прибыль/убыток">
+                <b>${sign}${totalPnl.toFixed(2)} ₽</b><br>
+                <small>${sign}${avgPnlPct.toFixed(2)}%</small>
+            </td>
+            <td></td>
+        </tr>
+        <tr id="${gid}" class="bond-group-sub" style="display:none">
+            <td colspan="8" style="padding:0;border-top:none">
+                <table class="pf-table" style="margin:0;border-radius:0">
+                    <tbody>${subRows}</tbody>
+                </table>
+            </td>
+        </tr>`;
+}
+
+function toggleBondGroup(gid) {
+    const row = document.getElementById(gid);
+    if (!row) return;
+    const isOpen = row.style.display !== 'none';
+    row.style.display = isOpen ? 'none' : '';
+    // flip arrow on the trigger button inside the merged row
+    const btn = row.previousElementSibling?.querySelector(`[onclick*="${gid}"]`);
+    if (btn) btn.textContent = isOpen ? `${btn.textContent.replace('▴','▾')}` : btn.textContent.replace('▾','▴');
+}
+
 function renderBondRows() {
     const tbody = document.getElementById('bonds-table-body');
     tbody.innerHTML = '';
@@ -257,7 +358,7 @@ function renderBondRows() {
     }
 
     const esc = window.Common.escapeHtml;
-    
+
     function getLotLabel(count) {
         if (count % 10 === 1 && count % 100 !== 11) {
             return `${count} лот`;
@@ -426,7 +527,6 @@ window.setHistoryTxType = function(txType, btn) {
     fetchTradeHistory();
 };
 
-// ── Trade history ─────────────────────────────────────────────────────────────
 function loadHistoryIfNeeded() {
     if (!historyLoaded) {
         fetchTradeHistory();
@@ -436,7 +536,7 @@ function loadHistoryIfNeeded() {
 
 async function fetchTradeHistory(dateFrom = '', dateTo = '') {
     const loading = document.getElementById('history-loading');
-    const tbody = document.getElementById('history-table-body');
+    const tbody   = document.getElementById('history-table-body');
     if (loading) loading.style.display = 'block';
     tbody.innerHTML = _skeletonRows(9, 3);
 
@@ -445,7 +545,6 @@ async function fetchTradeHistory(dateFrom = '', dateTo = '') {
         if (dateFrom) params.set('date_from', dateFrom);
         if (dateTo) params.set('date_to', dateTo);
         params.set('tx_type', currentTxType);
-        
         const url = '/api/portfolio/history' + (params.toString() ? '?' + params.toString() : '');
         const response = await fetch(url);
         if (!response.ok) return;
@@ -482,9 +581,9 @@ async function fetchTradeHistory(dateFrom = '', dateTo = '') {
                 const sellPct = (t.sell_price / fv * 100).toFixed(2);
                 sellPriceStr = `${sellPct} %<br><small style="color:var(--text-tertiary)">${t.sell_price.toFixed(2)} ₽</small>`;
             }
-
             tbody.innerHTML += `
                 <tr>
+                    <td>${typeBadge}</td>
                     <td><b>${esc(t.name)}</b></td>
                     <td><small class="text-muted">${esc(t.isin)}</small></td>
                     <td>${typeBadge}</td>
@@ -503,7 +602,7 @@ async function fetchTradeHistory(dateFrom = '', dateTo = '') {
 
 function applyHistoryFilter() {
     const from = document.getElementById('historyDateFrom').value;
-    const to = document.getElementById('historyDateTo').value;
+    const to   = document.getElementById('historyDateTo').value;
     fetchTradeHistory(from, to);
 }
 
@@ -604,9 +703,9 @@ document.getElementById('addBondForm').addEventListener('submit', async (e) => {
     btn.disabled = true;
     btn.textContent = 'Загрузка…';
 
-    const isin = document.getElementById('bondIsin').value.trim();
-    const amount = document.getElementById('bondAmount').value;
-    const buy_price = document.getElementById('bondBuyPrice').value;
+    const isin          = document.getElementById('bondIsin').value.trim();
+    const amount        = document.getElementById('bondAmount').value;
+    const buy_price     = document.getElementById('bondBuyPrice').value;
     const purchase_date = document.getElementById('bondDate').value;
     const notes = document.getElementById('bondNotes')?.value || '';
 
@@ -658,7 +757,7 @@ async function fetchChartAnalytics() {
 // ── Bond search autocomplete (FEAT-4) ─────────────────────────────────────────
 (function setupBondSearch() {
     const isinInput = document.getElementById('bondIsin');
-    const dropdown = document.getElementById('isinDropdown');
+    const dropdown  = document.getElementById('isinDropdown');
     let debounceTimer = null;
 
     isinInput.addEventListener('input', () => {
@@ -717,7 +816,7 @@ async function fetchChartAnalytics() {
 // ── Allocation pie chart ──────────────────────────────────────────────────────
 let allocationChartExpanded = false;
 function renderAllocationChart() {
-    const canvas = document.getElementById('allocationChart');
+    const canvas  = document.getElementById('allocationChart');
     const emptyEl = document.getElementById('allocationEmpty');
     if (!canvas) return;
 
@@ -790,8 +889,8 @@ function showIncome(period, btn) {
         document.querySelectorAll('#incomeGroup .btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
     }
-    const val = incomeData[period];
-    const el = document.getElementById('incomeValue');
+    const val  = incomeData[period];
+    const el   = document.getElementById('incomeValue');
     const hint = document.getElementById('incomeHint');
     if (el) el.textContent = val != null
         ? val.toLocaleString('ru-RU', { minimumFractionDigits: 2 }) + ' ₽'
@@ -819,7 +918,7 @@ function sellTrigger(bondId, name, sellPrice, buyPrice, amount) {
     if (hintEl) hintEl.textContent = `Доступно: ${amount} шт.`;
 
     function updatePnlPreview() {
-        const sp = parseFloat(priceEl?.value) || 0;
+        const sp   = parseFloat(priceEl?.value) || 0;
         const comm = parseFloat(commEl?.value) || 0;
         const qty = parseFloat(amountEl?.value) || amount || 1;
         const pnl = (sp - (buyPrice || sp)) * qty - comm;
@@ -838,7 +937,7 @@ function sellTrigger(bondId, name, sellPrice, buyPrice, amount) {
 
     if (!sellModal) sellModal = new bootstrap.Modal(document.getElementById('sellModal'));
 
-    const btn = document.getElementById('sellModalConfirmBtn');
+    const btn    = document.getElementById('sellModalConfirmBtn');
     const newBtn = btn.cloneNode(true);
     btn.parentNode.replaceChild(newBtn, btn);
 
@@ -975,19 +1074,19 @@ async function removeFromWatchlist(isin) {
 
 // ── Screener ──────────────────────────────────────────────────────────────────
 async function runScreener() {
-    const tbody = document.getElementById('screener-table-body');
+    const tbody   = document.getElementById('screener-table-body');
     const loading = document.getElementById('screener-loading');
     loading.style.display = 'block';
     tbody.innerHTML = '';
 
     const params = new URLSearchParams();
-    const minYtm    = document.getElementById('screenerMinYtm')?.value;
-    const maxYtm    = document.getElementById('screenerMaxYtm')?.value;
-    const matFrom   = document.getElementById('screenerMatFrom')?.value;
-    const matTo     = document.getElementById('screenerMatTo')?.value;
-    const issType   = document.getElementById('screenerIssuerType')?.value;
-    const minDur    = document.getElementById('screenerMinDuration')?.value;
-    const maxDur    = document.getElementById('screenerMaxDuration')?.value;
+    const minYtm  = document.getElementById('screenerMinYtm')?.value;
+    const maxYtm  = document.getElementById('screenerMaxYtm')?.value;
+    const matFrom = document.getElementById('screenerMatFrom')?.value;
+    const matTo   = document.getElementById('screenerMatTo')?.value;
+    const issType = document.getElementById('screenerIssuerType')?.value;
+    const minDur  = document.getElementById('screenerMinDuration')?.value;
+    const maxDur  = document.getElementById('screenerMaxDuration')?.value;
     if (minYtm)  params.set('min_ytm', minYtm);
     if (maxYtm)  params.set('max_ytm', maxYtm);
     if (matFrom) params.set('maturity_from', matFrom);

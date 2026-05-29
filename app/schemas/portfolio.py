@@ -9,7 +9,7 @@ class AddBondRequest(BaseModel):
     amount: int = Field(..., gt=0)
     buy_price: float = Field(..., gt=0)
     purchase_date: Optional[str] = None
-    notes: Optional[str] = None
+    notes: Optional[str] = Field(None, max_length=1000)
 
     @field_validator("isin")
     @classmethod

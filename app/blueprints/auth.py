@@ -42,7 +42,7 @@ def api_login():
             {"status": "error", "message": "Неверный логин или пароль."}
         ), 401
 
-    if user.telegram_chat_id:
+    if user.telegram_chat_id and getattr(user, 'two_fa_enabled', True):
         from app.services.telegram_service import generate_otp, create_pending_2fa
 
         token = create_pending_2fa(user.id, user.telegram_chat_id)

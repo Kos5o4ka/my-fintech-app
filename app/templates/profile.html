@@ -263,9 +263,18 @@
                 <div class="notif-title">Двухфакторная аутентификация</div>
                 <div class="notif-desc">Код в Telegram при каждом входе</div>
               </div>
-              <span class="tg-linked-status-text">Включена</span>
+              <span id="twoFaStatusBadge" style="font-size:.75rem;font-weight:600;color:{% if current_user.two_fa_enabled %}var(--emerald-400){% else %}var(--text-tertiary){% endif %}">
+                {% if current_user.two_fa_enabled %}Включена{% else %}Отключена{% endif %}
+              </span>
             </div>
-            <button id="tgUnlinkBtn" class="btn btn-outline-danger w-100 mt-3 btn-logout">
+            <button id="toggle2faBtn"
+                    class="btn {% if current_user.two_fa_enabled %}btn-outline-warning{% else %}btn-outline-success{% endif %} w-100 mt-2"
+                    style="border-radius:var(--radius-sm);font-size:.83rem"
+                    data-2fa-enabled="{{ 'true' if current_user.two_fa_enabled else 'false' }}">
+              {% if current_user.two_fa_enabled %}Отключить 2FA{% else %}Включить 2FA{% endif %}
+            </button>
+            <button id="tgUnlinkBtn" class="btn btn-outline-danger w-100 mt-2"
+                    style="border-radius:var(--radius-sm);font-size:.83rem">
               Отвязать Telegram
             </button>
           </div>
@@ -301,6 +310,58 @@
 
 </div>
 
+{% endblock %}
+
+{% block modals %}
+{# ── Модалка отключения 2FA ─────────────────────────────────────────────── #}
+<div class="modal fade" id="disable2faModal" tabindex="-1" aria-labelledby="disable2faModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:400px">
+    <div class="modal-content" style="border-radius:var(--radius);background:var(--surface-1);border:1px solid var(--border-subtle)">
+      <div class="modal-header" style="border-bottom:1px solid var(--border-subtle)">
+        <h5 class="modal-title" id="disable2faModalLabel" style="font-size:1rem;font-weight:600">Отключить 2FA</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" style="padding:1.25rem">
+        <p style="font-size:.83rem;color:var(--text-tertiary);margin-bottom:1rem">
+          Подтвердите действие — введите код из Telegram или пароль.
+        </p>
+        <div style="display:flex;gap:.5rem;margin-bottom:1rem">
+          <button id="method2faOtp" class="btn btn-sm btn-primary" style="flex:1;border-radius:var(--radius-sm);font-size:.8rem">
+            📱 Код из Telegram
+          </button>
+          <button id="method2faPwd" class="btn btn-sm btn-outline-secondary" style="flex:1;border-radius:var(--radius-sm);font-size:.8rem">
+            🔑 Пароль
+          </button>
+        </div>
+        <div id="section2faOtp">
+          <button id="send2faOtpBtn" class="btn btn-outline-secondary btn-sm w-100 mb-3"
+                  style="border-radius:var(--radius-sm);font-size:.82rem">
+            Отправить код в Telegram
+          </button>
+          <div class="prf-field" style="margin-bottom:0">
+            <label for="input2faOtp" style="font-size:.78rem">Код из Telegram</label>
+            <input type="text" id="input2faOtp" class="form-control" placeholder="000000"
+                   maxlength="6" inputmode="numeric" autocomplete="one-time-code">
+          </div>
+        </div>
+        <div id="section2faPwd" style="display:none">
+          <div class="prf-field" style="margin-bottom:0">
+            <label for="input2faPwd" style="font-size:.78rem">Пароль</label>
+            <input type="password" id="input2faPwd" class="form-control" placeholder="Введите пароль"
+                   autocomplete="current-password">
+          </div>
+        </div>
+        <div id="error2fa" style="display:none;margin-top:.75rem;font-size:.82rem;color:var(--red-400)"></div>
+      </div>
+      <div class="modal-footer" style="border-top:1px solid var(--border-subtle);padding:.75rem 1.25rem">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal"
+                style="border-radius:var(--radius-sm)">Отмена</button>
+        <button type="button" id="confirm2faDisableBtn" class="btn btn-danger btn-sm"
+                style="border-radius:var(--radius-sm)">Отключить 2FA</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}

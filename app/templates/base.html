@@ -310,6 +310,7 @@
 {# Toast container #}
 <div id="toastContainer" class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index:1200;"></div>
 
+{% block modals %}{% endblock %}
 <script src="{{ url_for('static', filename='js/core/common.min.js') }}?v={{ static_ver }}" defer></script>
 <script src="{{ url_for('static', filename='js/core/sidebar.min.js') }}?v={{ static_ver }}" defer></script>
 {% block scripts %}{% endblock %}

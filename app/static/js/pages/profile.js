@@ -220,6 +220,104 @@ document.addEventListener('DOMContentLoaded', () => {
     } finally { btn.disabled = false; btn.textContent = 'Отвязать Telegram'; }
   });
 
+  // ── 2FA toggle ────────────────────────────────────────────────────────
+  const toggle2faBtn = document.getElementById('toggle2faBtn');
+  if (toggle2faBtn) {
+    toggle2faBtn.addEventListener('click', async () => {
+      const isEnabled = toggle2faBtn.dataset['2faEnabled'] === 'true';
+      if (!isEnabled) {
+        // Включаем без подтверждения
+        const res  = await window.Common.csrfFetch('/api/profile/2fa/enable', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) {
+          window.Common.showToast(data.message);
+          toggle2faBtn.dataset['2faEnabled'] = 'true';
+          toggle2faBtn.textContent = 'Отключить 2FA';
+          toggle2faBtn.className = 'btn btn-outline-warning w-100 mt-2';
+          const badge = document.getElementById('twoFaStatusBadge');
+          if (badge) { badge.textContent = 'Включена'; badge.style.color = 'var(--emerald-400)'; }
+        } else {
+          window.Common.showSystemMessage(data.message, true);
+        }
+      } else {
+        // Открываем модалку отключения
+        const modal = new bootstrap.Modal(document.getElementById('disable2faModal'));
+        document.getElementById('error2fa').style.display = 'none';
+        document.getElementById('input2faOtp').value = '';
+        document.getElementById('input2faPwd').value = '';
+        modal.show();
+      }
+    });
+  }
+
+  // Переключатель метода в модалке
+  let _2faMethod = 'otp';
+  document.getElementById('method2faOtp')?.addEventListener('click', () => {
+    _2faMethod = 'otp';
+    document.getElementById('section2faOtp').style.display = '';
+    document.getElementById('section2faPwd').style.display = 'none';
+    document.getElementById('method2faOtp').className = 'btn btn-sm btn-primary';
+    document.getElementById('method2faPwd').className = 'btn btn-sm btn-outline-secondary';
+    document.getElementById('method2faOtp').style.flex = '1';
+    document.getElementById('method2faPwd').style.flex = '1';
+  });
+  document.getElementById('method2faPwd')?.addEventListener('click', () => {
+    _2faMethod = 'password';
+    document.getElementById('section2faOtp').style.display = 'none';
+    document.getElementById('section2faPwd').style.display = '';
+    document.getElementById('method2faPwd').className = 'btn btn-sm btn-primary';
+    document.getElementById('method2faOtp').className = 'btn btn-sm btn-outline-secondary';
+    document.getElementById('method2faOtp').style.flex = '1';
+    document.getElementById('method2faPwd').style.flex = '1';
+  });
+
+  // Отправить OTP для отключения 2FA
+  document.getElementById('send2faOtpBtn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('send2faOtpBtn');
+    btn.disabled = true; btn.textContent = 'Отправляем…';
+    try {
+      const res  = await window.Common.csrfFetch('/api/profile/2fa/send-otp', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) { window.Common.showToast(data.message); btn.textContent = 'Отправить снова'; }
+      else { window.Common.showSystemMessage(data.message, true); btn.textContent = 'Отправить код в Telegram'; }
+    } finally { btn.disabled = false; }
+  });
+
+  // Подтвердить отключение 2FA
+  document.getElementById('confirm2faDisableBtn')?.addEventListener('click', async () => {
+    const errEl = document.getElementById('error2fa');
+    errEl.style.display = 'none';
+    const btn = document.getElementById('confirm2faDisableBtn');
+    btn.disabled = true; btn.textContent = 'Проверяем…';
+    try {
+      const body = _2faMethod === 'otp'
+        ? { method: 'otp',      code:     document.getElementById('input2faOtp').value.trim() }
+        : { method: 'password', password: document.getElementById('input2faPwd').value };
+      const res  = await window.Common.csrfFetch('/api/profile/2fa/disable', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        bootstrap.Modal.getInstance(document.getElementById('disable2faModal')).hide();
+        window.Common.showToast(data.message);
+        // Обновляем UI кнопки и бейджа
+        const tb = document.getElementById('toggle2faBtn');
+        if (tb) {
+          tb.dataset['2faEnabled'] = 'false';
+          tb.textContent = 'Включить 2FA';
+          tb.className = 'btn btn-outline-success w-100 mt-2';
+        }
+        const badge = document.getElementById('twoFaStatusBadge');
+        if (badge) { badge.textContent = 'Отключена'; badge.style.color = 'var(--text-tertiary)'; }
+      } else {
+        errEl.textContent = data.message;
+        errEl.style.display = 'block';
+      }
+    } finally { btn.disabled = false; btn.textContent = 'Отключить 2FA'; }
+  });
+
   // ── Activity feed ──────────────────────────────────────────────────────
   window.loadActivity = async function (page) {
     page = Math.max(1, page || 1);
