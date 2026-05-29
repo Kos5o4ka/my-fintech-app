@@ -141,42 +141,49 @@ docker compose up -d
 
 ```
 my-fintech-app/
-├── app.py                   # Фабрика приложения, APScheduler, Sentry
-├── config.py                # Dev / Test / Production конфиги
-├── models.py                # User, BondPortfolio, WatchlistItem, AuditLog
-├── extensions.py            # db, login_manager, cache, limiter, mail
-├── moex.py                  # MOEX ISS API: цены, купоны, история, RGBI
-├── constants.py             # Магические числа (TTL, NDFL_RATE, …)
+├── app/                     # Исходный код приложения
+│   ├── app.py               # Фабрика приложения, APScheduler, Sentry
+│   ├── config.py            # Dev / Test / Production конфиги
+│   ├── models.py            # User, BondPortfolio, WatchlistItem, AuditLog
+│   ├── extensions.py        # db, login_manager, cache, limiter, mail
+│   ├── constants.py         # Магические числа (TTL, NDFL_RATE, …)
+│   ├── moex/                # Клиенты MOEX API
+│   ├── cbr/                 # Клиенты CBR API
+│   │
+│   ├── blueprints/
+│   │   ├── auth.py          # Вход, 2FA, смена пароля, AuditLog
+│   │   ├── portfolio.py     # CRUD портфеля, скринер, экспорт, watchlist
+│   │   ├── profile.py       # Профиль, Telegram, activity feed
+│   │   ├── admin.py         # Управление пользователями
+│   │   ├── main.py          # Лендинг, дашборд, dashboard API
+│   │   └── telegram_bot.py  # Telegram webhook: /start, OTP
+│   │
+│   ├── services/
+│   │   ├── portfolio_service.py # P&L, YTM, Sharpe, Tax, купонный доход
+│   │   ├── moex_service.py      # Кэшированный доступ к MOEX
+│   │   ├── user_service.py      # Аватары (Pillow), telegram settings
+│   │   ├── telegram_service.py  # Bot API, OTP, deep-link
+│   │   └── import_service.py    # Разбор Excel и CSV отчётов брокеров
+│   │
+│   ├── schemas/
+│   │   ├── portfolio.py     # AddBondRequest, SellBondRequest, ScreenerRequest
+│   │   └── auth.py          # LoginRequest, ChangePasswordRequest
+│   │
+│   ├── templates/           # Jinja2: base, index, dashboard, portfolio, profile, admin
+│   └── static/
+│       ├── css/             # Исходники + *.min.css
+│       └── js/              # Исходники + *.min.js
 │
-├── blueprints/
-│   ├── auth.py              # Вход, 2FA, смена пароля, AuditLog
-│   ├── portfolio.py         # CRUD портфеля, скринер, экспорт, watchlist
-│   ├── profile.py           # Профиль, Telegram, activity feed
-│   ├── admin.py             # Управление пользователями
-│   ├── main.py              # Лендинг, дашборд, dashboard API
-│   └── telegram_bot.py      # Telegram webhook: /start, OTP
+├── scripts/                 # Вспомогательные скрипты
+│   ├── build_assets.py      # Минификация CSS/JS → *.min.*
+│   └── refactor_imports.py  # Скрипт рефакторинга импортов
 │
-├── services/
-│   ├── portfolio_service.py # P&L, YTM, Sharpe, Tax, купонный доход
-│   ├── moex_service.py      # Кэшированный доступ к MOEX
-│   ├── user_service.py      # Аватары (Pillow), telegram settings
-│   ├── telegram_service.py  # Bot API, OTP, deep-link
-│   └── import_service.py    # Разбор Excel и CSV отчётов брокеров
-│
-├── schemas/
-│   ├── portfolio.py         # AddBondRequest, SellBondRequest, ScreenerRequest
-│   └── auth.py              # LoginRequest, ChangePasswordRequest
-│
-├── templates/               # Jinja2: base, index, dashboard, portfolio, profile, admin
-├── static/
-│   ├── css/                 # Исходники + *.min.css (10 файлов)
-│   └── js/                  # Исходники + *.min.js (10 файлов)
-│
-├── migrations/              # Alembic-миграции (8 ревизий)
+├── migrations/              # Alembic-миграции (12 ревизий)
 ├── tests/
 │   ├── test_app.py          # 36 интеграционных тестов
 │   ├── test_properties.py   # 17 Hypothesis property-based тестов
-│   └── test_analytics_and_import.py # 48 тестов аналитики, импорта и новых фич
+│   ├── test_analytics_and_import.py # 48 тестов
+│   └── test_stage12.py      # 48 дополнительных тестов
 │
 ├── bruno/                   # API коллекция Bruno (43 запроса)
 │   ├── auth/                # login, verify_2fa, logout, change_password
@@ -230,7 +237,7 @@ python -m pytest tests/ --cov=. --cov-report=term-missing
 python -m pytest tests/test_properties.py -v
 ```
 
-**101 тест:** 36 интеграционных (core app), 48 тестов аналитики/импорта/новых фич и 17 Hypothesis property-based тестов.
+**149 тестов:** 36 интеграционных (core app), 48 тестов аналитики/импорта, 48 новых тестов Stage 12, и 17 Hypothesis property-based тестов.
 MOEX API мокируется через `@patch` — тесты не требуют сети, используется локальный кэш-заглушка для автомата Circuit Breaker.
 
 ---
@@ -242,7 +249,7 @@ MOEX API мокируется через `@patch` — тесты не требу
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Локальный запуск, code style, PR flow |
 | [`CHANGELOG.md`](CHANGELOG.md) | История версий (Keep a Changelog) |
 | [`docs/architecture.md`](docs/architecture.md) | C4 Level 2 диаграммы |
-| [`bruno/`](bruno/) | Bruno API коллекция — 42 запроса |
+| [`bruno/`](bruno/) | Bruno API коллекция — 51 запрос |
 | [`.env.production.example`](.env.production.example) | Все переменные окружения |
 
 ---

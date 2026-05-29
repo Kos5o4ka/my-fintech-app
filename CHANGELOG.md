@@ -35,6 +35,13 @@
 ## [Unreleased]
 
 ### Added
+- Ожидается добавление новых функций.
+
+---
+
+## [2.1.0] — 2026-05-29
+
+### Added
 - **Страница аналитики** `/analytics` — отдельный blueprint `analytics.py`; вкладки Tax / Sharpe / Charts / Compare / RGBI вынесены из portfolio
 - **Страница импорта** `/import` — отдельный blueprint `imports.py`; все парсеры брокерских XLSX, CSV-экспорт, дедупликация
 - **`normalize_bond_price()`** — авто-определение и конвертация процентных цен в рубли (сравнение гипотез % vs ₽ по номиналу)
@@ -229,7 +236,9 @@
 ---
 
 [2.2.0]: https://github.com/Kos5o4ka/my-fintech-app/compare/v2.1.0...v2.2.0
+[2.1.0]: https://github.com/Kos5o4ka/my-fintech-app/compare/v1.4.0...v2.1.0
 [Unreleased]: https://github.com/Kos5o4ka/my-fintech-app/compare/v2.2.0...HEAD
+[1.4.0]: https://github.com/Kos5o4ka/my-fintech-app/compare/v1.3.3...v1.4.0
 [1.3.3]: https://github.com/Kos5o4ka/my-fintech-app/compare/v1.3.0...v1.3.3
 [1.3.0]: https://github.com/Kos5o4ka/my-fintech-app/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/Kos5o4ka/my-fintech-app/compare/v1.1.0...v1.2.0
