@@ -7,6 +7,7 @@ JS_FILES = [
     "static/js/core/base.js",
     # Per-page bundles
     "static/js/pages/portfolio.js",
+    "static/js/pages/portfolio-extras.js",
     "static/js/pages/dashboard.js",
     "static/js/pages/profile.js",
     "static/js/pages/landing.js",

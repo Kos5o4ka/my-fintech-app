@@ -92,9 +92,20 @@
         <div class="card p-4 d-flex flex-column justify-content-between">
           <div>
             <div class="prf-section-label mb-3">Управление аватаром</div>
-            <form method="POST" action="/profile" enctype="multipart/form-data" class="mb-0">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-              <label class="upload-zone" for="avatarFileInput">
+            <div class="mb-0">
+              <label class="upload-zone upload-zone--avatar" for="avatarFileInput">
+                {% if current_user.avatar %}
+                <img id="avatarPreviewImg" src="{{ url_for('static', filename='avatars/' + current_user.avatar) }}"
+                     alt="Аватар" data-avatar class="upload-zone__preview">
+                <div class="upload-zone__overlay">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                  </svg>
+                  <div class="upload-zone-text" id="uploadZoneText" style="color:#fff">Сменить фото</div>
+                </div>
+                {% else %}
+                <img id="avatarPreviewImg" class="upload-zone__preview" style="display:none" alt="">
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"
                      stroke-linecap="round" stroke-linejoin="round">
                   <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
@@ -103,15 +114,16 @@
                 </svg>
                 <div class="upload-zone-text" id="uploadZoneText">Нажмите для загрузки</div>
                 <div class="upload-zone-sub">PNG, JPG, GIF, WEBP — до 5 МБ</div>
-                <input id="avatarFileInput" type="file" name="avatar" accept="image/*" class="d-none" required>
+                {% endif %}
+                <input id="avatarFileInput" type="file" name="avatar" accept="image/*" class="d-none">
               </label>
               <button type="submit" class="btn btn-primary w-100 mt-3">
                 Загрузить аватар
               </button>
-            </form>
-            {% if current_user.avatar %}
+            </div>
             <button type="button" id="deleteAvatarBtn"
-                    class="btn btn-outline-danger w-100 mt-2">
+                    class="btn btn-outline-danger w-100 mt-2"
+                    {% if not current_user.avatar %}style="display:none"{% endif %}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                    stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
@@ -119,7 +131,6 @@
               </svg>
               Удалить аватар
             </button>
-            {% endif %}
           </div>
         </div>
 

@@ -152,18 +152,29 @@
 
         {# Bell dropdown #}
         <div id="bellDropdown"
-             style="display:none;position:absolute;left:calc(100% + 8px);bottom:0;width:300px;background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--radius-lg);box-shadow:var(--shadow-xl);z-index:2000;overflow:hidden">
-          <div style="padding:.65rem 1rem;border-bottom:1px solid var(--border-subtle);display:flex;align-items:center;justify-content:space-between;gap:.5rem">
-            <span style="font-size:.82rem;font-weight:700">Ближайшие купоны</span>
-            <div style="display:flex;align-items:center;gap:.5rem">
-              <button id="bellMarkReadBtn"
-                      style="border:none;background:none;cursor:pointer;color:var(--text-tertiary);font-size:.72rem;font-weight:600;padding:2px 6px;border-radius:var(--radius-xs);line-height:1.4"
-                      title="Отметить как прочитанное">✓ Прочитано</button>
+             style="display:none;position:absolute;left:calc(100% + 8px);bottom:0;width:340px;background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--radius-lg);box-shadow:var(--shadow-xl);z-index:2000;overflow:hidden">
+          <div style="padding:.65rem 1rem .55rem;border-bottom:1px solid var(--border-subtle)">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
+              <span style="font-size:.8rem;font-weight:700;color:var(--text-primary)">Уведомления</span>
               <button id="bellCloseBtn"
-                      style="border:none;background:none;cursor:pointer;color:var(--text-tertiary);font-size:1rem;line-height:1;padding:0">×</button>
+                      style="border:none;background:none;cursor:pointer;color:var(--text-tertiary);font-size:1.1rem;line-height:1;padding:0 4px;border-radius:var(--radius-xs)"
+                      title="Закрыть">&times;</button>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:.5rem">
+              <div style="display:flex;gap:.35rem">
+                <button id="bellTabCoupons" class="bell-tab bell-tab--active">Купоны</button>
+                <button id="bellTabSystem" class="bell-tab">Системные <span id="bellSystemCount" style="display:none;background:#2563eb;color:#fff;font-size:.58rem;border-radius:20px;padding:1px 5px;margin-left:2px;vertical-align:1px">0</span></button>
+              </div>
+              <button id="bellMarkReadBtn"
+                      style="border:none;background:none;cursor:pointer;color:var(--accent);font-size:.72rem;font-weight:600;padding:2px 6px;border-radius:var(--radius-xs);line-height:1.4"
+                      title="Отметить все как прочитанные">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:2px"><polyline points="2 8.5 6 12.5 14 4.5"/></svg>Прочитано</button>
             </div>
           </div>
-          <div id="bellDropdownBody" style="max-height:360px;overflow-y:auto;padding:.5rem 0">
+          <div id="bellDropdownBody" style="max-height:360px;overflow-y:auto">
+            <div style="text-align:center;padding:1.5rem;color:var(--text-tertiary);font-size:.82rem">Загрузка…</div>
+          </div>
+          <div id="bellSystemBody" style="display:none;max-height:360px;overflow-y:auto">
             <div style="text-align:center;padding:1.5rem;color:var(--text-tertiary);font-size:.82rem">Загрузка…</div>
           </div>
         </div>
@@ -183,7 +194,7 @@
         {% endif %}
       </div>
       <div class="sidebar-user-info">
-        <div class="sidebar-user-name">{{ current_user.username }}</div>
+        <div class="sidebar-user-name" title="{{ current_user.username }}">{{ current_user.username }}</div>
         <div class="sidebar-user-role">{% if current_user.is_admin %}Admin{% else %}Investor{% endif %}</div>
       </div>
     </a>

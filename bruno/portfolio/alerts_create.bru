@@ -1,0 +1,31 @@
+meta {
+  name: Alerts — Create
+  type: http
+  seq: 41
+}
+
+post {
+  url: {{baseUrl}}/api/alerts
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  X-CSRFToken: {{csrfToken}}
+}
+
+body:json {
+  {
+    "isin": "RU000A105104",
+    "name": "ОФЗ 26238",
+    "target_price": 950.5,
+    "condition": ">="
+  }
+}
+
+docs {
+  ## Создать ценовой алёрт
+
+  `condition`: `>=` или `<=`. Сервис: `alerts_service.create_alert`.
+}

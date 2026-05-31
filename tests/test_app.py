@@ -565,7 +565,7 @@ class PortfolioTests(BaseTest):
         uid = self._make_user()
         self._set_logged_in(uid)
         r = self.client.post(
-            "/profile",
+            "/api/profile/avatar",
             data={"avatar": (io.BytesIO(b"fake content"), "file.exe")},
             content_type="multipart/form-data",
         )
@@ -931,14 +931,16 @@ class BrokerImportTests(BaseTest):
             self.assertEqual(len(txs), 1)
 
     def test_bond_price_healing_via_portfolio(self):
-        """Test that percentage prices <= 150 are healed to absolute currency based on MOEX face value."""
+        """Цены в БД хранятся в %, нормализация в рубли выполняется на чтение в API.
+
+        После рефакторинга stage 14 build_portfolio_entry не мутирует BondPortfolio:
+        исходные значения сохраняются как есть, а API возвращает рублёвый эквивалент.
+        """
         uid = self._make_user()
         self._set_logged_in(uid)
 
-        # Make a bond entry in database with a buy price in percent (e.g. 98.50)
         bond_id = self._make_bond(uid, isin="SU26238RMFS4", buy_price=98.50, amount=10)
 
-        # Add corresponding transaction in database
         with app.app_context():
             from app.models import Transaction
 
@@ -959,7 +961,7 @@ class BrokerImportTests(BaseTest):
             "secid": "SU26238RMFS4",
             "name": "ОФЗ 26238",
             "price": 990.0,
-            "facevalue": 1000.0,  # Nominal is 1000
+            "facevalue": 1000.0,
             "nkd": 5.5,
             "ytm": 8.5,
             "currency": "RUB",
@@ -968,7 +970,6 @@ class BrokerImportTests(BaseTest):
         with patch(
             "app.services.portfolio_service.get_bond_cached", return_value=mock_moex
         ):
-            # Fetch portfolio, which triggers build_portfolio_entry -> normalize_bond_price
             r = self.client.get("/api/portfolio")
             self.assertEqual(r.status_code, 200)
 
@@ -976,12 +977,11 @@ class BrokerImportTests(BaseTest):
             from app.models import BondPortfolio, Transaction
 
             bond = db.session.get(BondPortfolio, bond_id)
-            # The buy price should be healed: (98.50 / 100) * 1000 = 985.00
-            self.assertAlmostEqual(float(bond.buy_price), 985.00, places=2)
+            self.assertAlmostEqual(float(bond.buy_price), 98.50, places=2)
 
             txs = Transaction.query.filter_by(user_id=uid, tx_type="buy").all()
             for tx in txs:
-                self.assertAlmostEqual(float(tx.price), 985.00, places=2)
+                self.assertAlmostEqual(float(tx.price), 98.50, places=2)
 
     def test_delete_position_physical(self):
         """Test that physical deletion endpoint deletes active lot and its corresponding buy transaction."""

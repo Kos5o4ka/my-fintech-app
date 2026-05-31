@@ -34,3 +34,14 @@ static/avatars/*
 Thumbs.db
 
 # migrations/ — tracked in git so the server can run flask db upgrade
+
+# Local debug / ad-hoc scripts (not part of the app)
+/fix_*.py
+/test_moex*.py
+/test_report.py
+/plan_test.py
+/query_db.py
+/ru.json
+
+# Local report / document drafts
+*.docx

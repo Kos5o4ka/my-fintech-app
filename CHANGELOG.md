@@ -7,6 +7,126 @@
 
 ---
 
+## [2.5.0] — 2026-05-30
+
+### Performance — Stage 15: устранение узких мест и Redis-кэш расчётных метрик
+
+> Профилирование выявило 5 критических узких мест (см. `docs/adr/0002-performance-caching-strategy.md`). Все устранены.
+
+#### Backend
+- **Redis-кэш YTM и дюрации** (`services/risk_service.py`): TTL 1 ч, ключ `ytm:{isin}:{round(buy_price,2)}:{round(facevalue,2)}:{round(nkd,4)}:{pd_key}`. Защита от `OverflowError: complex exponentiation` (граница `y ≤ −0.99` / `y > 10`).
+- **Кэш `/api/portfolio` целиком в Redis** (5 мин, ключ `portfolio_full:{user_id}`), пагинация поверх кэша. `_bust_user_cache` инвалидирует и его.
+- **N+1 устранён в `query_transactions`** — `sold_bonds_map` собирается одним запросом; `build_transaction_entry` принимает опциональный словарь.
+- **`build_portfolio_list` теперь оборачивает каждую позицию в try/except** — одна битая бумага больше не валит весь портфель (был кейс с амортизацией Tinkoff).
+- **MOEX batch-prefetch** (`services/moex_service.prefetch_bonds_batch`): 1 HTTP-запрос на 10 ISIN-ов через `securities=` параметр вместо N. Вызывается из `build_portfolio_list`.
+- **Параллельная загрузка купонных календарей** (`services/calendar_service._load_calendars_parallel`): `ThreadPoolExecutor(max_workers=8)`.
+- **Объединённый endpoint `/api/dashboard/full`** — portfolio + income + calendar + realized_pnl одним запросом (вместо 4-5 параллельных). Клиент с fallback на старые эндпоинты.
+- **Retry для ЦБ РФ G-Curve** (`app/cbr.py`): `tenacity` 3 попытки, exponential backoff 1-4 с.
+- **APScheduler price_update**: 15 → 30 мин (нагрузка на MOEX ÷ 2).
+- **`DEFAULT_PAGE_SIZE`**: 50 → 10 (`app/constants.py`).
+
+#### Купонная аналитика (T-Invest-style)
+- **`get_coupon_calendar` cap**: 12 → **60** будущих купонов.
+- **`get_calendar_events(user_id, limit, days)`** — новый API: `limit` до 1000, `days` — горизонт фильтра.
+- **`/api/portfolio/calendar?limit=&days=`** — расширен.
+- **`calc_coupons_received(active_bonds, period_from, period_to)`** в `portfolio_service.py` — расчёт фактически полученных купонов из истории MOEX, фильтр от `purchase_date`.
+- **`/api/portfolio/coupons_received?period=...`** — endpoint полученных купонов по периоду (1w / 1m / 3m / 6m / 1y / all).
+- **`/api/portfolio/yield?period=&mode=all|coupons`** — доходность за период: `coupons` (только купоны) или `all` (купоны + realized + unrealized PnL).
+
+#### Tinkoff sync — баг-фиксы
+- **SSL bypass**: `session.verify = False` + `urllib3.disable_warnings` (self-signed cert в цепочке на сервере; пользователь подтвердил).
+- **Healing amortized bond prices** (`heal_amortized_buy_price`): T-Invest отдаёт `averagePositionPrice` относительно исходного номинала, MOEX — относительно текущего амортизированного. Умножение на 10/100 для попадания в диапазон 60-200 % от номинала.
+- **Кнопка «Синхронизировать»**: была локальной — поднята до `window.syncTinkoff`.
+- **Ложный тост «Сбой сети»** после успешного sync: `loadDashboard()` вынесен из try/catch с собственным error handler-ом и флагом `syncOk`.
+
+#### Frontend
+- **Lazy-load `portfolio-extras.js`** (watchlist + screener) через stub-функции на `window` — критический путь портфеля разгружен.
+- **Per-page selector 10/20/50/100** в портфеле + пагинация footer (`bondsPerPage` в localStorage).
+- **Debounce поиска облигаций** 350 мс + минимум 3 символа.
+- **Кастомные модалки подтверждения** (`window.Common.askConfirmation`) вместо браузерного `confirm()` — для удаления аватара, отвязки Telegram.
+- **Аналитика — главный блок «Доходность»** с переключателями периода (1w/1m/3m/6m/1y/all) и режима (Все / Только купоны). Sharpe Ratio ужат в компактный нижний блок.
+- **Карточка «Полученные купоны»** в аналитике.
+- **Модалка предстоящих купонов** грузит до 1000 событий, client-side фильтр 30/90/365/Все, пересчёт итога.
+- **History toolbar портфеля**: `flex-wrap:nowrap; overflow-x:auto`, фильтр дат в одну строку; убран дублирующийся `<td>${typeBadge}</td>` (было 10 ячеек на 9 заголовков).
+- **RGBI benchmark** (`analytics.js`): поддержка обоих форматов ответа (`{labels, data}` и массив объектов). На бэке (`app/moex.get_rgbi_history`) — пагинация через `start=`, fallback без фильтра, **не кэшировать пустые ответы**.
+
+#### Infra
+- **Gunicorn**: 4 worker × 2 thread → **2 × 4** (`gthread`) — RAM −200 МБ, конкуренция I/O не пострадала.
+- **Host services**: остановлены `postgresql@14-main`, `packagekit`, `multipathd` (PostgreSQL поднят в Docker, остальные не используются). `vm.swappiness`: 60 → 10.
+
+#### Docs
+- `docs/adr/0002-performance-caching-strategy.md` — ADR с замерами «было / стало», TTL-стратегией, защитой от race conditions при инвалидации.
+- `docs/architecture.md` — обновлены диаграмма данных и слой Redis (новые ключи).
+
+---
+
+## [2.4.0] — 2026-05-30
+
+### Refactor — Stage 14: разделение god-service + чистка слоёв
+- **`portfolio_service.py` уменьшен с 1172 → 584 строк** (−50 %). Логика разнесена по тематическим модулям:
+  - `services/watchlist_service.py` — CRUD списка наблюдения
+  - `services/alerts_service.py` — ценовые алёрты
+  - `services/calendar_service.py` — купонный календарь + ближайшие выплаты
+  - `services/tax_service.py` — НДФЛ ст. 214.1 НК РФ, ЛДВ ст. 219.1, FIFO-учёт
+  - `services/risk_service.py` — Sharpe Ratio, YTM (Ньютон), дюрация Маколея/модиф., HHI-диверсификация
+  - `services/health_service.py` — health-probe (DB/Cache/MOEX) + счётчик визитов
+- **Backward compatibility**: `portfolio_service.py` оставлен как фасад с re-export'ами — все существующие импорты в blueprints/tests работают без изменений
+- **Доменные исключения** (`app/exceptions.py`): `DomainError`, `NotFoundError`, `DomainValidationError`, `AccessDeniedError`, `ConflictError`, `ExternalServiceError`, `AuthError` с предопределёнными HTTP-кодами и методом `to_dict()`
+- **Layer hygiene**: устранены все прямые обращения `db.session.*` из blueprints (`main.py`, `profile.py`, `telegram_bot.py` → service-слой); проверка `grep -rln "db.session" app/blueprints/` пустая
+- **T-Invest token lifecycle** вынесен из `profile.py` blueprint в `tinkoff_service.link_user_token / unlink_user_token`
+- **Telegram webhook flows** вынесены из blueprint в `telegram_service.link_chat_to_user / unlink_chat / refresh_username_by_chat` — blueprint стал тонким HTTP-парсером
+
+### Added
+- **Интеграция T-Bank API**: добавлено поле `tinkoff_token` в `User`, возможность сохранения токена в профиле и кнопка «Синхронизировать» на главной странице портфеля (заглушка в `tinkoff_service.py`).
+- **Виджет «Предстоящие купоны»**: перенесен на главную страницу портфеля и вкладку аналитики, удален из модалки добавления облигации.
+- **Налоговый отчет**: группировка одинаковых сделок в один день по одной цене; детали сделок (комиссии и точное время) открываются в выпадающем списке.
+- **Админ-панель**: добавлен удобный поиск пользователей по списку при рассылке уведомлений (фильтрация по логину и ID).
+- **Логирование**: добавлено логирование действий `log_action` при добавлении, продаже и удалении облигаций.
+
+### Changed
+- **Избранное (Watchlist)**: полный редизайн вкладки, добавление происходит через встроенное поле ввода (inline), а не через модальное окно. Окно с настройками уведомлений теперь неактивно, если сами уведомления выключены.
+- **Подтягивание цены**: исправлено и перепроверено автоматическое подтягивание цены в форму при успешном поиске облигации.
+
+### Fixed
+- Исправлена ошибка 500 (Internal Server Error) при сбросе портфеля (использовалась неверная функция проверки пароля, заменена на `check_password_hash`).
+- Исправлено отображение JSON в логах активности (Activity feed), методы (например, `2fa_telegram`) теперь парсятся и отображаются корректно. Окно Activity теперь правильно реагирует на события добавления/удаления облигации.
+
+### Tests
+- **+27 тестов** (`tests/test_refactor_stage14.py`): watchlist/alerts/calendar/tax/risk сервисы, telegram webhook flows (link/unlink/help/empty/wrong-secret), domain exceptions, health service
+- **Coverage**: 62 % → **67 %**
+  - `blueprints/telegram_bot.py`: 17 % → **90 %**
+  - `blueprints/main.py`: 46 % → **81 %**
+  - все новые модули ≥ 69 %
+- **Всего тестов**: 165 → **192**
+
+### Docs
+- `docs/adr/0001-service-layer-split.md` — Architecture Decision Record с обоснованием расщепления, рассмотренными альтернативами и последствиями
+- `docs/architecture.md` — обновлён состав Services Layer в C4-диаграмме
+
+---
+
+## [2.3.0] — 2026-05-29
+
+### Added — Stage 13: T-Invest API integration
+- **Полноценная интеграция с T-Invest REST API** (`invest-public-api.tbank.ru/rest`): импорт облигационного портфеля одним кликом
+- **`app/services/tinkoff_service.py`**: `TInvestClient` (тонкая обёртка над requests с retry на 429), конвертеры `MoneyValue/Quotation/Timestamp → Decimal/datetime`, `sync_tinkoff_portfolio()` с upsert в `BondPortfolio` по `(user_id, isin, is_sold=False)`, обогащение через `InstrumentsService/GetInstrumentBy` батчами по 5 c паузой 200 мс (соблюдение лимита 200 RPM)
+- **Шифрование токена**: Fernet (AES-CBC + HMAC) с ключом, производным из `SECRET_KEY` через PBKDF2-HMAC-SHA256 (200k итераций). Plain-токен **никогда** не возвращается во фронтенд
+- **Эндпоинты**: `GET/POST /api/profile/tinkoff_token` (статус / сохранение с валидацией через `GetAccounts`), `GET /api/profile/tinkoff/accounts` (список счетов), `POST /api/portfolio/tinkoff_sync` (синхронизация с опциональным `account_id` и `sandbox`)
+- **Pydantic-схема `TinkoffTokenIn/TinkoffSyncIn`** (`app/schemas/tinkoff.py`): валидация формата токена (`t.`-префикс)
+- **Маппинг ошибок API**: 401/40003 → `TInvestAuthError` (HTTP 401 для UX обновления токена), 429/50002 → один retry, далее `TInvestRateLimitError`
+- **Конвертация цены**: `averagePositionPrice` (руб./шт.) → `%` от номинала через `nominal` инструмента (MOEX-конвенция: всё хранится в `%`)
+- **Аудит**: `import_ok/import_fail` с `source: "tinkoff"` и summary; `settings_update` при привязке/удалении токена
+- **Миграция `stage13_tinkoff_integration`**: идемпотентная, расширяет `users.tinkoff_token` до TEXT (Fernet-токен > 255 байт), добавляет `tinkoff_last_sync_at`, `tinkoff_account_id`
+- **Bruno**: `profile/tinkoff_token_save.bru`, `tinkoff_token_status.bru`, `tinkoff_accounts.bru`, `portfolio/tinkoff_sync.bru`
+- **16 новых тестов** (`tests/test_stage13_tinkoff.py`): конвертеры MoneyValue/Quotation/Timestamp, шифрование roundtrip, HTTP-клиент с мокнутым `requests.Session`, end-to-end sync (BBG-FIGI → ISIN → BondPortfolio), валидация токена в эндпоинте, удаление привязки
+- **Зависимость**: `cryptography>=42.0,<46` (для Fernet)
+
+### Security
+- Plain-токен T-Invest хранится в БД **только в зашифрованном виде**, не возвращается в API-ответах и не логируется
+- Перед сохранением токен проходит верификацию через `GetAccounts` — невалидный токен не попадает в БД
+
+---
+
 ## [2.2.0] — 2026-05-29
 
 ### Added
@@ -35,19 +155,13 @@
 ## [Unreleased]
 
 ### Added
-- **Интеграция T-Bank API**: добавлено поле `tinkoff_token` в `User`, возможность сохранения токена в профиле и кнопка «Синхронизировать» на главной странице портфеля (заглушка в `tinkoff_service.py`).
-- **Виджет «Предстоящие купоны»**: перенесен на главную страницу портфеля и вкладку аналитики, удален из модалки добавления облигации.
-- **Налоговый отчет**: группировка одинаковых сделок в один день по одной цене; детали сделок (комиссии и точное время) открываются в выпадающем списке.
-- **Админ-панель**: добавлен удобный поиск пользователей по списку при рассылке уведомлений (фильтрация по логину и ID).
-- **Логирование**: добавлено логирование действий `log_action` при добавлении, продаже и удалении облигаций.
+- N/A
 
 ### Changed
-- **Избранное (Watchlist)**: полный редизайн вкладки, добавление происходит через встроенное поле ввода (inline), а не через модальное окно. Окно с настройками уведомлений теперь неактивно, если сами уведомления выключены.
-- **Подтягивание цены**: исправлено и перепроверено автоматическое подтягивание цены в форму при успешном поиске облигации.
+- N/A
 
 ### Fixed
-- Исправлена ошибка 500 (Internal Server Error) при сбросе портфеля (использовалась неверная функция проверки пароля, заменена на `check_password_hash`).
-- Исправлено отображение JSON в логах активности (Activity feed), методы (например, `2fa_telegram`) теперь парсятся и отображаются корректно. Окно Activity теперь правильно реагирует на события добавления/удаления облигации.
+- N/A
 
 ---
 
@@ -249,7 +363,10 @@
 
 [2.2.0]: https://github.com/Kos5o4ka/my-fintech-app/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/Kos5o4ka/my-fintech-app/compare/v1.4.0...v2.1.0
-[Unreleased]: https://github.com/Kos5o4ka/my-fintech-app/compare/v2.2.0...HEAD
+[Unreleased]: https://github.com/Kos5o4ka/my-fintech-app/compare/v2.5.0...HEAD
+[2.5.0]: https://github.com/Kos5o4ka/my-fintech-app/compare/v2.4.0...v2.5.0
+[2.4.0]: https://github.com/Kos5o4ka/my-fintech-app/compare/v2.3.0...v2.4.0
+[2.3.0]: https://github.com/Kos5o4ka/my-fintech-app/compare/v2.2.0...v2.3.0
 [1.4.0]: https://github.com/Kos5o4ka/my-fintech-app/compare/v1.3.3...v1.4.0
 [1.3.3]: https://github.com/Kos5o4ka/my-fintech-app/compare/v1.3.0...v1.3.3
 [1.3.0]: https://github.com/Kos5o4ka/my-fintech-app/compare/v1.2.0...v1.3.0

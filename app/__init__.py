@@ -63,6 +63,7 @@ def create_app(config_class=None) -> Flask:
 
     # ── Инициализация расширений ──────────────────────────────────────────────
     db.init_app(app)
+    from app import models  # Ensure all models are registered
     login_manager.init_app(app)
     login_manager.login_view = "main.index_page"
     login_manager.login_message = "Пожалуйста, войдите для доступа к этой странице."
@@ -114,6 +115,7 @@ def create_app(config_class=None) -> Flask:
     from app.blueprints.telegram_bot import telegram_bp
     from app.blueprints.analytics import analytics_bp
     from app.blueprints.imports import imports_bp
+    from app.blueprints.tinvest import tinvest_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(auth_bp)
@@ -123,6 +125,7 @@ def create_app(config_class=None) -> Flask:
     app.register_blueprint(telegram_bp)
     app.register_blueprint(analytics_bp)
     app.register_blueprint(imports_bp)
+    app.register_blueprint(tinvest_bp)
 
     csrf.exempt(telegram_bp)
 
@@ -306,7 +309,7 @@ def create_app(config_class=None) -> Flask:
             scheduler.add_job(
                 _update_bond_prices,
                 "interval",
-                minutes=15,
+                minutes=30,
                 id="price_update",
                 max_instances=1,
                 misfire_grace_time=60,
@@ -325,7 +328,7 @@ def create_app(config_class=None) -> Flask:
             scheduler.start()
             atexit.register(lambda: scheduler.shutdown(wait=False))
             logger.info(
-                "APScheduler started (pid=%d): price_update every 15 min", os.getpid()
+                "APScheduler started (pid=%d): price_update every 30 min", os.getpid()
             )
         except Exception as _sched_err:
             logger.warning("Could not start APScheduler: %s", _sched_err)
@@ -372,7 +375,7 @@ def _update_bond_prices(app) -> None:
 
             # 2) Bulk UPDATE — один SQL вместо N отдельных UPDATE
             mappings = [
-                {"id": bond.id, "last_price": seen[bond.isin]["price"]}
+                {"id": bond.id, "last_price": seen[bond.isin].get("price_pct", seen[bond.isin]["price"])}
                 for bond in active
                 if seen.get(bond.isin)
             ]

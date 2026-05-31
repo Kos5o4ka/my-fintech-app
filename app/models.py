@@ -24,8 +24,10 @@ class User(db.Model, UserMixin):
     telegram_notifications = db.Column(db.Boolean, default=False)
     telegram_username = db.Column(db.String(64), nullable=True)
     two_fa_enabled = db.Column(db.Boolean, default=True)
-    # Tinkoff API
-    tinkoff_token = db.Column(db.String(255), nullable=True)
+    # T-Invest API (encrypted Fernet token)
+    tinkoff_token = db.Column(db.Text, nullable=True)
+    tinkoff_account_id = db.Column(db.String(50), nullable=True)
+    tinkoff_last_sync_at = db.Column(db.DateTime, nullable=True)
     # Stage 12 — Settings
     theme = db.Column(db.String(10), nullable=False, default="system")
     notif_time = db.Column(db.String(5), nullable=False, default="09:00")
@@ -39,6 +41,9 @@ class User(db.Model, UserMixin):
     )
     transactions = db.relationship(
         "Transaction", backref="user", lazy=True, cascade="all, delete-orphan"
+    )
+    broker_accounts = db.relationship(
+        "BrokerAccount", backref="user", lazy=True, cascade="all, delete-orphan"
     )
     price_alerts = db.relationship(
         "PriceAlert", backref="user", lazy=True, cascade="all, delete-orphan"
@@ -164,3 +169,66 @@ class PriceAlert(db.Model):
     condition = db.Column(db.String(5), nullable=False)  # '>=' или '<='
     is_triggered = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class BrokerAccount(db.Model):
+    __tablename__ = "broker_accounts"
+    id = db.Column(db.String(50), primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    name = db.Column(db.String(255), nullable=True)
+    type = db.Column(db.String(50), nullable=True)  # ACCOUNT_TYPE_TINKOFF etc
+    status = db.Column(db.String(50), nullable=True)
+    last_synced_at = db.Column(db.DateTime, nullable=True)
+
+    operations = db.relationship(
+        "BrokerOperation", backref="account", lazy=True, cascade="all, delete-orphan"
+    )
+    positions = db.relationship(
+        "BrokerPosition", backref="account", lazy=True, cascade="all, delete-orphan"
+    )
+
+
+class BrokerOperation(db.Model):
+    __tablename__ = "broker_operations"
+    __table_args__ = (
+        db.Index("ix_broker_op_account_id", "account_id"),
+        db.Index("ix_broker_op_date", "date"),
+    )
+    id = db.Column(db.String(100), primary_key=True)  # T-Invest operation id
+    account_id = db.Column(
+        db.String(50), db.ForeignKey("broker_accounts.id"), nullable=False
+    )
+    figi = db.Column(db.String(30), nullable=True)
+    isin = db.Column(db.String(20), nullable=True)
+    ticker = db.Column(db.String(50), nullable=True)
+    name = db.Column(db.String(255), nullable=True)
+    instrument_type = db.Column(db.String(50), nullable=True)
+    type = db.Column(db.String(50), nullable=False)  # BUY, SELL, COUPON, etc.
+    date = db.Column(db.DateTime, nullable=False)
+    quantity = db.Column(db.Numeric(20, 6), nullable=False)
+    price = db.Column(db.Numeric(20, 6), nullable=False)
+    payment = db.Column(db.Numeric(20, 6), nullable=False)
+    commission = db.Column(db.Numeric(20, 6), nullable=True)
+    nkd = db.Column(db.Numeric(20, 6), nullable=True)
+    currency = db.Column(db.String(10), nullable=False, default="RUB")
+
+
+class BrokerPosition(db.Model):
+    __tablename__ = "broker_positions"
+    __table_args__ = (
+        db.Index("ix_broker_pos_account_id", "account_id"),
+    )
+    id = db.Column(db.Integer, primary_key=True)
+    account_id = db.Column(
+        db.String(50), db.ForeignKey("broker_accounts.id"), nullable=False
+    )
+    figi = db.Column(db.String(30), nullable=True)
+    isin = db.Column(db.String(20), nullable=True)
+    ticker = db.Column(db.String(50), nullable=True)
+    name = db.Column(db.String(255), nullable=True)
+    instrument_type = db.Column(db.String(50), nullable=True)
+    quantity = db.Column(db.Numeric(20, 6), nullable=False)
+    average_price = db.Column(db.Numeric(20, 6), nullable=False)
+    current_price = db.Column(db.Numeric(20, 6), nullable=False)
+    expected_yield = db.Column(db.Numeric(20, 6), nullable=True)
+    currency = db.Column(db.String(10), nullable=False, default="RUB")

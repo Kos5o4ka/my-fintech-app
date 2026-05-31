@@ -1,0 +1,26 @@
+meta {
+  name: Portfolio — Diversification (HHI)
+  type: http
+  seq: 50
+}
+
+get {
+  url: {{baseUrl}}/api/portfolio/diversification
+  auth: none
+}
+
+docs {
+  ## HHI-диверсификация
+
+  Возвращает индекс Херфиндаля-Хиршмана по трём разрезам:
+  - `assets` — по отдельным выпускам
+  - `currencies` — по валютам
+  - `issuers` — ОФЗ vs корпоративные
+
+  Статусы:
+  - HHI < 1500 → «Отличная диверсификация» (success)
+  - 1500–2500 → «Умеренная концентрация» (warning)
+  - HHI > 2500 → «Высокая концентрация» (danger)
+
+  Сервис: `risk_service.calc_portfolio_diversification`.
+}

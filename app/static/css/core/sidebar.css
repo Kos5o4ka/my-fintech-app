@@ -374,3 +374,28 @@
   .app-sidebar { display: none; }
   .app-bottom-bar { display: flex; }
 }
+
+/* Bell dropdown tab buttons */
+.bell-tab {
+  border: 1px solid var(--border-default);
+  cursor: pointer;
+  font-size: .75rem;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: var(--radius-sm, 6px);
+  line-height: 1.5;
+  background: var(--surface-1, #f8fafc);
+  color: var(--text-secondary);
+  transition: background .15s, color .15s, border-color .15s, box-shadow .15s;
+}
+.bell-tab:hover {
+  background: var(--surface-2, #f1f5f9);
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+.bell-tab.bell-tab--active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  box-shadow: 0 1px 3px rgba(var(--accent-rgb, 37,99,235), .25);
+}

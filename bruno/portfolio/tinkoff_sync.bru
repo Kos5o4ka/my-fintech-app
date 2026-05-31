@@ -1,0 +1,51 @@
+meta {
+  name: T-Invest — Sync portfolio
+  type: http
+  seq: 30
+}
+
+post {
+  url: {{baseUrl}}/api/portfolio/tinkoff_sync
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  X-CSRFToken: {{csrfToken}}
+}
+
+body:json {
+  {
+    "account_id": null,
+    "sandbox": false
+  }
+}
+
+docs {
+  ## T-Invest: импорт портфеля
+
+  Синхронизирует облигационный портфель с T-Invest:
+    1. `UsersService/GetAccounts` — берём открытые счета (или `account_id`, если задан).
+    2. `OperationsService/GetPortfolio` — позиции по каждому счёту.
+    3. `InstrumentsService/GetInstrumentBy` (батчами по 5 с паузой 200 мс) — обогащение по FIGI.
+    4. Конвертация `averagePositionPrice`/`currentPrice` (руб./шт.) в % от номинала.
+    5. Upsert в `bond_portfolio` по (user_id, isin, is_sold=false).
+
+  **Ответ:**
+  ```json
+  {
+    "status": "success",
+    "summary": {
+      "accounts": 1,
+      "positions_total": 12,
+      "bonds_imported": 3,
+      "bonds_updated": 2,
+      "bonds_skipped": 0,
+      "errors": []
+    }
+  }
+  ```
+
+  При `code: "auth"` — токен истёк, пользователь должен выпустить новый.
+}

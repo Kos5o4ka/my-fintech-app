@@ -2,10 +2,103 @@ window._activityPage = 1;
 window._activityLoaded = false;
 window._activityCategory = '';
 
-document.getElementById('avatarFileInput')?.addEventListener('change', function () {
-  document.getElementById('uploadZoneText').textContent =
-    this.files[0] ? this.files[0].name : 'Нажмите для загрузки';
-});
+// ── Avatar upload: preview + AJAX ────────────────────────────────
+(function() {
+  var fileInput = document.getElementById('avatarFileInput');
+  var uploadZone = document.querySelector('.upload-zone');
+  var uploadText = document.getElementById('uploadZoneText');
+  var uploadBtn = document.querySelector('button[type="submit"].btn-primary');
+  var previewImg = document.getElementById('avatarPreviewImg');
+
+  if (!fileInput) return;
+
+  fileInput.addEventListener('change', function() {
+    var file = this.files[0];
+    if (!file) return;
+    uploadText.textContent = file.name;
+
+    // Show inline preview
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      if (previewImg) {
+        previewImg.src = e.target.result;
+        previewImg.style.display = 'block';
+        previewImg.classList.add('upload-zone__preview');
+      }
+      if (uploadZone && !uploadZone.querySelector('.upload-zone__overlay')) {
+        var overlay = document.createElement('div');
+        overlay.className = 'upload-zone__overlay';
+        overlay.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>';
+        uploadZone.appendChild(overlay);
+        uploadZone.classList.add('upload-zone--avatar');
+      }
+    };
+    reader.readAsDataURL(file);
+  });
+
+  if (uploadBtn) {
+    uploadBtn.addEventListener('click', async function(e) {
+      e.preventDefault();
+      var file = fileInput.files[0];
+      if (!file) { window.Common.showToast('Выберите файл'); return; }
+
+      uploadBtn.disabled = true;
+      uploadBtn.textContent = 'Загрузка…';
+
+      var fd = new FormData();
+      fd.append('avatar', file);
+
+      try {
+        var res = await window.Common.csrfFetch('/api/profile/avatar', { method: 'POST', body: fd });
+        var data = await res.json();
+        if (res.ok) {
+          window.Common.showToast(data.message || 'Аватар обновлён');
+          // Update all avatar elements on page without reload
+          var newUrl = data.avatar_url + '?t=' + Date.now();
+          document.querySelectorAll('img[data-avatar], .prf-avatar img, .sidebar-avatar img').forEach(function(img) {
+            img.src = newUrl;
+            img.style.display = 'block';
+          });
+          // Update sidebar fallback initials → real image
+          var sidebarAvatar = document.querySelector('.sidebar-avatar');
+          if (sidebarAvatar && !sidebarAvatar.querySelector('img')) {
+            var img = document.createElement('img');
+            img.src = newUrl;
+            img.alt = '';
+            img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:50%';
+            sidebarAvatar.innerHTML = '';
+            sidebarAvatar.appendChild(img);
+          }
+          // Update profile header avatar
+          var prfAvatar = document.querySelector('.prf-avatar');
+          if (prfAvatar) {
+            var existing = prfAvatar.querySelector('img');
+            if (existing) { existing.src = newUrl; }
+            else {
+              var img2 = document.createElement('img');
+              img2.src = newUrl;
+              img2.alt = '';
+              prfAvatar.innerHTML = '';
+              prfAvatar.appendChild(img2);
+            }
+          }
+          // Show delete button if hidden
+          var delBtn = document.getElementById('deleteAvatarBtn');
+          if (delBtn) delBtn.style.display = '';
+          fileInput.value = '';
+          if (uploadText) uploadText.textContent = 'Сменить фото';
+        } else {
+          window.Common.showSystemMessage(data.message || 'Ошибка загрузки', true);
+        }
+      } catch(err) {
+        window.Common.showSystemMessage('Ошибка соединения', true);
+      } finally {
+        uploadBtn.disabled = false;
+        uploadBtn.textContent = 'Загрузить аватар';
+      }
+    });
+  }
+})();
 
 document.addEventListener('DOMContentLoaded', () => {
   // ── Logout ───────────────────────────────────────────────────────────
@@ -50,16 +143,17 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ── Удаление аватара ─────────────────────────────────────────────────
-  document.getElementById('deleteAvatarBtn')?.addEventListener('click', async () => {
-    if (!confirm('Удалить аватар? Вместо него будут показаны ваши инициалы.')) return;
-    const btn = document.getElementById('deleteAvatarBtn');
-    btn.disabled = true; btn.textContent = 'Удаляем…';
-    try {
-      const res = await window.Common.csrfFetch('/api/profile/avatar', { method: 'DELETE' });
-      const data = await res.json();
-      if (res.ok) { window.Common.showToast(data.message); setTimeout(() => location.reload(), 900); }
-      else { window.Common.showSystemMessage(data.message, true); btn.disabled = false; btn.textContent = 'Удалить аватар'; }
-    } catch { btn.disabled = false; btn.textContent = 'Удалить аватар'; }
+  document.getElementById('deleteAvatarBtn')?.addEventListener('click', () => {
+    window.Common.askConfirmation('Удалить аватар? Вместо него будут показаны ваши инициалы.', async () => {
+      const btn = document.getElementById('deleteAvatarBtn');
+      btn.disabled = true; btn.textContent = 'Удаляем…';
+      try {
+        const res = await window.Common.csrfFetch('/api/profile/avatar', { method: 'DELETE' });
+        const data = await res.json();
+        if (res.ok) { window.Common.showToast(data.message); setTimeout(() => location.reload(), 900); }
+        else { window.Common.showSystemMessage(data.message, true); btn.disabled = false; btn.textContent = 'Удалить аватар'; }
+      } catch { btn.disabled = false; btn.textContent = 'Удалить аватар'; }
+    });
   });
 
   // ── Tinkoff Token ────────────────────────────────────────────────────
@@ -180,16 +274,17 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch { this.checked = !this.checked; }
   });
 
-  document.getElementById('tgUnlinkBtn')?.addEventListener('click', async () => {
-    if (!confirm('Отвязать Telegram? Уведомления и 2FA будут отключены.')) return;
-    const btn = document.getElementById('tgUnlinkBtn');
-    btn.disabled = true; btn.textContent = 'Отвязываем…';
-    try {
-      const res  = await window.Common.csrfFetch('/api/profile/telegram/unlink', { method: 'POST' });
-      const data = await res.json();
-      if (res.ok) { window.Common.showToast(data.message); await loadTelegramStatus(); }
-      else { window.Common.showSystemMessage(data.message, true); }
-    } finally { btn.disabled = false; btn.textContent = 'Отвязать Telegram'; }
+  document.getElementById('tgUnlinkBtn')?.addEventListener('click', () => {
+    window.Common.askConfirmation('Отвязать Telegram? Уведомления и 2FA будут отключены.', async () => {
+      const btn = document.getElementById('tgUnlinkBtn');
+      btn.disabled = true; btn.textContent = 'Отвязываем…';
+      try {
+        const res  = await window.Common.csrfFetch('/api/profile/telegram/unlink', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) { window.Common.showToast(data.message); await loadTelegramStatus(); }
+        else { window.Common.showSystemMessage(data.message, true); }
+      } finally { btn.disabled = false; btn.textContent = 'Отвязать Telegram'; }
+    });
   });
 
   // ── 2FA toggle ────────────────────────────────────────────────────────
@@ -276,7 +371,6 @@ document.addEventListener('DOMContentLoaded', () => {
   let _settingsOferta = 14;
 
   function initSettings() {
-    loadSiteNotifs(1);
     fetch('/api/profile/settings').then(r => r.json()).then(d => {
       if (d.status !== 'success') return;
       _settingsTheme = d.theme || 'system';
@@ -368,22 +462,23 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
       listEl.innerHTML = data.notifications.map(n => `
-        <div class="p-3 border-bottom \${!n.is_read ? 'bg-light' : ''}">
-          <div class="d-flex justify-content-between mb-1">
-            <strong style="color:var(--text-primary)">\${window.Common.escapeHtml(n.title)}</strong>
-            <small class="text-muted">\${n.created_at}</small>
+        <div class="site-notif-item${!n.is_read ? ' site-notif-unread' : ''}">
+          <div class="site-notif-header">
+            <div class="site-notif-dot-wrap">${!n.is_read ? '<span class="site-notif-dot"></span>' : ''}<strong class="site-notif-title">${window.Common.escapeHtml(n.title)}</strong></div>
+            <small class="site-notif-date">${n.created_at}</small>
           </div>
-          <div style="font-size:0.85rem;color:var(--text-secondary);white-space:pre-wrap">\${window.Common.escapeHtml(n.body)}</div>
+          <div class="site-notif-body">${window.Common.escapeHtml(n.body)}</div>
         </div>
       `).join('');
-      if (data.pages > 1 || page > 1) {
+      var totalPages = Math.ceil((data.total || data.notifications.length) / 20);
+      if (totalPages > 1) {
         if (pagEl) pagEl.style.display = 'flex';
         const pageInfo = document.getElementById('siteNotifsPageInfo');
-        if (pageInfo) pageInfo.textContent = `Стр. \${data.page}`;
+        if (pageInfo) pageInfo.textContent = `Стр. ${page} из ${totalPages}`;
         const prevBtn = document.getElementById('siteNotifsPrevBtn');
         const nextBtn = document.getElementById('siteNotifsNextBtn');
-        if (prevBtn) prevBtn.disabled = data.page <= 1;
-        if (nextBtn) nextBtn.disabled = data.notifications.length < 20; // heuristic if pages not returned
+        if (prevBtn) prevBtn.disabled = page <= 1;
+        if (nextBtn) nextBtn.disabled = page >= totalPages;
       } else {
         if (pagEl) pagEl.style.display = 'none';
       }
@@ -486,7 +581,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function switchTab(idx) {
     document.querySelectorAll('.prf-tab').forEach((t, i) => t.classList.toggle('active', i === idx));
     document.querySelectorAll('.prf-panel').forEach((p, i) => p.classList.toggle('active', i === idx));
-    if (idx === 2) loadTelegramStatus();
+    if (idx === 2) { loadTelegramStatus(); window.loadSiteNotifs(1); }
     if (idx === 3) initSettings();
     if (idx === 4 && !window._activityLoaded) window.loadActivity(1);
   }

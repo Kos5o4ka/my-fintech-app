@@ -65,17 +65,24 @@ def profile_stats():
     return jsonify(stats)
 
 
-@profile_bp.route("/profile", methods=["GET", "POST"])
+@profile_bp.route("/profile", methods=["GET"])
 @login_required
 def profile_page():
-    if request.method == "POST":
-        if "avatar" not in request.files:
-            return jsonify({"status": "error", "message": "Нет файла."}), 400
-        try:
-            save_avatar(current_user, request.files["avatar"])
-        except ValueError as exc:
-            return jsonify({"status": "error", "message": str(exc)}), 400
     return render_template("profile.html", csrf_token=generate_csrf())
+
+
+@profile_bp.route("/api/profile/avatar", methods=["POST"])
+@login_required
+def upload_avatar():
+    if "avatar" not in request.files:
+        return jsonify({"status": "error", "message": "Нет файла."}), 400
+    try:
+        filename = save_avatar(current_user, request.files["avatar"])
+        from flask import url_for
+        avatar_url = url_for("static", filename=f"avatars/{filename}")
+        return jsonify({"status": "success", "message": "Аватар обновлён.", "avatar_url": avatar_url})
+    except ValueError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
 
 
 @profile_bp.route("/api/profile/avatar", methods=["DELETE"])
@@ -159,21 +166,70 @@ def telegram_notifications():
     return jsonify({"status": "success", "message": f"Telegram-уведомления {state}."})
 
 
-# ── Tinkoff Token ──────────────────────────────────────────────────────────────
+# ── T-Invest Token ────────────────────────────────────────────────────────────
+
+
+@profile_bp.route("/api/profile/tinkoff_token", methods=["GET"])
+@login_required
+def tinkoff_token_status():
+    """Статус привязки токена. Сам токен наружу не отдаём."""
+    return jsonify({
+        "status": "success",
+        "linked": bool(current_user.tinkoff_token),
+        "last_sync_at": current_user.tinkoff_last_sync_at.isoformat()
+        if current_user.tinkoff_last_sync_at else None,
+        "account_id": current_user.tinkoff_account_id,
+    })
 
 
 @profile_bp.route("/api/profile/tinkoff_token", methods=["POST"])
 @login_required
 def save_tinkoff_token():
-    from app.extensions import db
+    """Принимаем plain-токен, валидируем у Т-Банка, шифруем и сохраняем."""
+    from pydantic import ValidationError
+    from app.schemas.tinkoff import TinkoffTokenIn
+    from app.services.tinkoff_service import (
+        TInvestAuthError, TInvestError, link_user_token, unlink_user_token,
+    )
+    from app.services.audit_service import log_action
+
     data = request.get_json(silent=True) or {}
-    token = data.get("token", "").strip()
-    
-    current_user.tinkoff_token = token if token else None
-    db.session.commit()
-    
-    msg = "Токен сохранён." if token else "Токен удалён."
-    return jsonify({"status": "success", "message": msg})
+
+    if not (data.get("token") or "").strip():
+        unlink_user_token(current_user)
+        log_action("settings_update", user_id=current_user.id, category="account",
+                   details={"tinkoff_token": "removed"})
+        return jsonify({"status": "success", "message": "Токен T-Invest удалён."})
+
+    try:
+        payload = TinkoffTokenIn(**data)
+    except ValidationError as exc:
+        return jsonify({"status": "error", "message": exc.errors()[0]["msg"]}), 400
+
+    try:
+        count = link_user_token(current_user, payload.token, sandbox=payload.sandbox)
+    except TInvestAuthError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
+    except TInvestError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 502
+
+    log_action("settings_update", user_id=current_user.id, category="account",
+               details={"tinkoff_token": "linked", "accounts": count})
+    return jsonify({
+        "status": "success",
+        "message": f"Токен сохранён, найдено счетов: {count}.",
+        "accounts_count": count,
+    })
+
+
+@profile_bp.route("/api/profile/tinkoff/accounts", methods=["GET"])
+@login_required
+def tinkoff_accounts():
+    from app.services.tinkoff_service import list_accounts_for_user
+    sandbox = request.args.get("sandbox", "0") in ("1", "true", "yes")
+    result = list_accounts_for_user(current_user, sandbox=sandbox)
+    code = 200 if result["status"] == "success" else 400
+    return jsonify(result), code
 
 
 # ── Settings ─────────────────────────────────────────────────────────────────

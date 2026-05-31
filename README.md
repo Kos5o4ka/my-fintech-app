@@ -185,12 +185,12 @@ my-fintech-app/
 │   ├── test_analytics_and_import.py # 48 тестов
 │   └── test_stage12.py      # 48 дополнительных тестов
 │
-├── bruno/                   # API коллекция Bruno (43 запроса)
-│   ├── auth/                # login, verify_2fa, logout, change_password
-│   ├── portfolio/           # 26 эндпоинтов: CRUD, export, screener, …
-│   ├── profile/             # 7 эндпоинтов: stats, telegram, activity, delete_avatar
-│   ├── admin/               # get_users, add_user, delete_user
-│   └── misc/                # health, init
+├── bruno/                   # API коллекция Bruno (58 запросов)
+│   ├── auth/                # login, verify_2fa, logout, change_password (4)
+│   ├── portfolio/           # CRUD, alerts, screener, benchmark, import, export (31)
+│   ├── profile/             # stats, telegram integration, settings, notifications (17)
+│   ├── admin/               # get_users, add_user, delete_user, broadcast (4)
+│   └── misc/                # health, init (2)
 │
 ├── docs/
 │   └── architecture.md      # C4 Level 2 диаграммы (Mermaid)
@@ -249,7 +249,7 @@ MOEX API мокируется через `@patch` — тесты не требу
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Локальный запуск, code style, PR flow |
 | [`CHANGELOG.md`](CHANGELOG.md) | История версий (Keep a Changelog) |
 | [`docs/architecture.md`](docs/architecture.md) | C4 Level 2 диаграммы |
-| [`bruno/`](bruno/) | Bruno API коллекция — 51 запрос |
+| [`bruno/`](bruno/) | Bruno API коллекция — 58 запросов |
 | [`.env.production.example`](.env.production.example) | Все переменные окружения |
 
 ---

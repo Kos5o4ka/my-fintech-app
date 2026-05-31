@@ -1,0 +1,17 @@
+meta {
+  name: Alerts — List
+  type: http
+  seq: 40
+}
+
+get {
+  url: {{baseUrl}}/api/alerts
+  auth: none
+}
+
+docs {
+  ## Список ценовых алёртов
+
+  Возвращает массив алёртов пользователя, отсортированный по дате создания (desc).
+  Сервис: `app/services/alerts_service.py::list_alerts`.
+}

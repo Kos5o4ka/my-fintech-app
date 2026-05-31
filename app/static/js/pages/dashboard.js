@@ -153,12 +153,29 @@ async function loadDonutChart() {
 // ── Main dashboard load ───────────────────────────────────────────────────────
 async function loadDashboard() {
   try {
-    const [portfolio, income, coupons, history] = await Promise.all([
-      fetch('/api/portfolio').then(r => r.ok ? r.json() : {}),
-      fetch('/api/portfolio/income').then(r => r.ok ? r.json() : {}),
-      fetch('/api/portfolio/calendar').then(r => r.ok ? r.json() : []),
-      fetch('/api/portfolio/history').then(r => r.ok ? r.json() : {}),
-    ]);
+    // Один запрос вместо 4 параллельных. Fallback на старые эндпоинты при ошибке.
+    let data;
+    try {
+      const r = await fetch('/api/dashboard/full');
+      data = r.ok ? await r.json() : null;
+    } catch (_) { data = null; }
+
+    let portfolio, income, coupons, realizedPnl;
+    if (data && data.status === 'success') {
+      portfolio = data.portfolio || {};
+      income = data.income || {};
+      coupons = data.coupons || [];
+      realizedPnl = data.realized_pnl || 0;
+    } else {
+      const [p, inc, co, hist] = await Promise.all([
+        fetch('/api/portfolio').then(r => r.ok ? r.json() : {}),
+        fetch('/api/portfolio/income').then(r => r.ok ? r.json() : {}),
+        fetch('/api/portfolio/calendar').then(r => r.ok ? r.json() : []),
+        fetch('/api/portfolio/history').then(r => r.ok ? r.json() : {}),
+      ]);
+      portfolio = p; income = inc; coupons = co;
+      realizedPnl = (hist.trades || []).reduce((s, t) => s + (t.pnl || 0), 0);
+    }
 
     const bonds = portfolio.bonds || [];
     const cu = window.Common.countUp;
@@ -183,8 +200,7 @@ async function loadDashboard() {
 
     // P&L
     const unrealized = bonds.reduce((s, b) => s + (b.pnl || 0), 0);
-    const realized   = (history.trades || []).reduce((s, t) => s + (t.pnl || 0), 0);
-    const totalPnl   = unrealized + realized;
+    const totalPnl   = unrealized + realizedPnl;
     const pnlEl = document.getElementById('d-total-pnl');
     const pnlSign = totalPnl >= 0 ? '+' : '';
     pnlEl.style.color = totalPnl >= 0 ? 'var(--text-success)' : 'var(--text-danger)';

@@ -30,14 +30,14 @@ graph TB
             Admin["blueprints/admin.py\n──────────────\n/admin\n/api/admin/*"]
             TGBot["blueprints/telegram_bot.py\n──────────────\n/api/telegram/webhook"]
 
-            Services["⚙️ Services Layer\n──────────────\nportfolio_service.py\nmoex_service.py\nuser_service.py\ntelegram_service.py\naudit_service.py\nnotification_service.py\nimport_service.py\nadmin_service.py\nauth_service.py"]
+            Services["⚙️ Services Layer (stage14)\n──────────────\nportfolio_service.py — CRUD + view builders\nwatchlist_service.py — список наблюдения\nalerts_service.py — ценовые алёрты\ncalendar_service.py — купонный календарь\ntax_service.py — НДФЛ ст.214.1, ЛДВ, FIFO\nrisk_service.py — Sharpe, YTM, дюрация, HHI\nhealth_service.py — health-probe + визиты\ntinkoff_service.py — T-Invest REST + шифрование\nmoex_service.py | user_service.py\ntelegram_service.py | audit_service.py\nnotification_service.py | import_service.py\nadmin_service.py | auth_service.py"]
 
-            Scheduler["⏰ APScheduler\n──────────────\nЦены каждые 15 мин\nКупоны ежедн. 09:00"]
+            Scheduler["⏰ APScheduler\n──────────────\nЦены каждые 30 мин (stage15)\nКупоны ежедн. 09:00"]
         end
 
         DB[("🗄️ PostgreSQL 16\n(SQLite в dev)\n──────────────\nUser\nBondPortfolio\nWatchlist\nTransaction\nAuditLog")]
 
-        Redis[("⚡ Redis 7\n──────────────\nCache (MOEX 15м)\nCache (stats 15м)\nOTP tokens (5м)\nLink tokens (10м)")]
+        Redis[("⚡ Redis 7\n──────────────\nCache (MOEX 15м)\nCache (stats 15м)\nytm:* / duration:* (1ч, stage15)\nportfolio_full:{uid} (5м, stage15)\nOTP tokens (5м)\nLink tokens (10м)")]
 
         Static["📁 Static Files\nstatic/css/*.min.css\nstatic/js/*.min.js\nstatic/avatars/"]
     end
@@ -129,6 +129,9 @@ erDiagram
         string notif_time
         string notif_timezone
         int oferta_advance_days
+        string tinkoff_token
+        string tinkoff_account_id
+        datetime tinkoff_last_sync_at
     }
 
     BOND_PORTFOLIO {
@@ -148,6 +151,8 @@ erDiagram
         string currency
         datetime updated_at
         text notes
+        string buy_deal_no
+        string sell_deal_no
     }
 
     WATCHLIST_ITEM {
@@ -200,6 +205,9 @@ erDiagram
         float commission
         string currency
         date tx_date
+        float nkd
+        int portfolio_id FK
+        string deal_no
     }
 
     USER ||--o{ BOND_PORTFOLIO : "has"
@@ -272,6 +280,45 @@ sequenceDiagram
     end
 
     Portfolio->>DB: bulk_update_mappings(last_price, updated_at)
+```
+
+---
+
+## Поток синхронизации с T-Invest (Tinkoff Sync)
+
+```mermaid
+sequenceDiagram
+    actor User as Пользователь (Browser)
+    participant Flask as Flask API (blueprints/portfolio.py)
+    participant TinkoffService as tinkoff_service.py
+    participant TinkoffAPI as T-Invest API
+    participant MOEX as MOEX ISS API
+    participant DB as Database (PostgreSQL)
+
+    User->>Flask: POST /api/portfolio/tinkoff_sync
+    Flask->>TinkoffService: sync_tinkoff_portfolio(user_id)
+    TinkoffService->>DB: Get encrypted token
+    DB-->>TinkoffService: Fernet encrypted token
+    TinkoffService->>TinkoffService: Decrypt token using SECRET_KEY
+    
+    TinkoffService->>TinkoffAPI: GET /rest/.../InstrumentsService/GetPortfolio (account_id)
+    TinkoffAPI-->>TinkoffService: Portfolio positions (ISIN, amount, averagePositionPrice)
+    
+    loop Батчами по 5 инструментов (пауза 200 мс)
+        TinkoffService->>TinkoffAPI: GET /GetInstrumentBy {id_type: ISIN, id: ISIN}
+        TinkoffAPI-->>TinkoffService: Instrument details (nominal, currency, secid)
+    end
+
+    loop Для каждого импортированного ISIN
+        TinkoffService->>MOEX: prefetch_bonds_batch / get_bond_cached(isin)
+        MOEX-->>TinkoffService: actual MOEX price (last_price)
+        
+        TinkoffService->>TinkoffService: heal_amortized_buy_price() (normalize price)
+        TinkoffService->>DB: Upsert BondPortfolio & Transaction
+    end
+
+    TinkoffService->>Flask: Sync success
+    Flask-->>User: {status: "success", synced_count: X}
 ```
 
 ---

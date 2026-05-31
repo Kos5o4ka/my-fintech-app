@@ -6,8 +6,27 @@ import time
 from defusedxml import ElementTree as ET  # nosec B405
 
 import requests
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 logger = logging.getLogger(__name__)
+
+
+@retry(
+    retry=retry_if_exception_type(requests.RequestException),
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=4),
+    reraise=True,
+)
+def _fetch_cbr_xml() -> bytes:
+    """HTTP-запрос к ЦБ РФ с retry (3 попытки, экспоненциальная задержка 1-4с)."""
+    resp = requests.get(_CBR_URL, timeout=8)
+    resp.raise_for_status()
+    return resp.content
 
 # Коды валют, которые поддерживаем
 _SUPPORTED = {"USD", "EUR", "GBP", "CNY", "CHF"}
@@ -34,9 +53,8 @@ def get_rates(currencies: set[str] | None = None) -> dict[str, float]:
         return {c: _cache[c] for c in wanted if c in _cache}
 
     try:
-        resp = requests.get(_CBR_URL, timeout=8)
-        resp.raise_for_status()
-        root = ET.fromstring(resp.content)
+        content = _fetch_cbr_xml()
+        root = ET.fromstring(content)
         new: dict[str, float] = {}
         for valute in root.findall("Valute"):
             char_code = valute.findtext("CharCode", "").strip().upper()

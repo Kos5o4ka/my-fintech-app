@@ -355,13 +355,21 @@ async function loadBenchmark(range) {
         const r = await fetch(`/api/portfolio/benchmark?range=${range}`);
         const data = await r.json();
         if (loadEl) loadEl.style.display = 'none';
-        const rgbi = (data.rgbi || []).filter(d => d.close || d.value);
-        if (!rgbi.length) {
+        // Сервер возвращает {rgbi: {labels: [...], data: [...]}}, но раньше
+        // ожидался массив объектов — поддержим оба формата.
+        let labels = [], values = [];
+        if (data.rgbi && Array.isArray(data.rgbi.labels) && Array.isArray(data.rgbi.data)) {
+            labels = data.rgbi.labels;
+            values = data.rgbi.data.map(v => parseFloat(v));
+        } else if (Array.isArray(data.rgbi)) {
+            const rows = data.rgbi.filter(d => d.close || d.value);
+            labels = rows.map(d => d.date || d.tradedate || '');
+            values = rows.map(d => parseFloat(d.close || d.value || 0));
+        }
+        if (!labels.length) {
             if (emptyEl) emptyEl.style.display = 'block';
             return;
         }
-        const labels = rgbi.map(d => d.date || d.tradedate || '');
-        const values = rgbi.map(d => parseFloat(d.close || d.value || 0));
 
         const first = values[0], last = values[values.length - 1];
         const chg = last - first;
@@ -425,12 +433,182 @@ async function loadBenchmark(range) {
 }
 
 // ── Setup listeners on load ───────────────────────────────────────────────────
+// ── Upcoming coupons (mini-list + modal с фильтром по периоду) ───────────────
+let _couponsAllCache = null;  // все ближайшие купоны (горизонт 1 год)
+async function _loadCouponsAll() {
+    if (_couponsAllCache) return _couponsAllCache;
+    try {
+        // Лимит большой, чтобы показать все ближайшие; days=0 = без ограничения по горизонту.
+        const r = await fetch('/api/portfolio/calendar?limit=1000');
+        _couponsAllCache = r.ok ? await r.json() : [];
+    } catch (_) { _couponsAllCache = []; }
+    return _couponsAllCache;
+}
+
+async function renderCouponsMini() {
+    const list = document.getElementById('coupon-calendar-list-mini');
+    if (!list) return;
+    const events = await _loadCouponsAll();
+    if (!events || !events.length) {
+        list.innerHTML = '<li class="list-group-item text-center py-2" style="font-size:.82rem;color:var(--text-tertiary)">Нет предстоящих купонов.</li>';
+        return;
+    }
+    const esc = window.Common.escapeHtml;
+    list.innerHTML = events.slice(0, 5).map(e => `
+        <li class="list-group-item d-flex justify-content-between align-items-center" style="padding:.45rem .75rem">
+            <div style="min-width:0;flex:1">
+                <div class="fw-semibold text-truncate" style="font-size:.78rem">${esc(e.name)}</div>
+                <div class="text-muted" style="font-size:.7rem">${esc(e.date)}</div>
+            </div>
+            <span class="badge bg-success font-monospace ms-2" style="font-size:.7rem">+${parseFloat(e.total_payout).toFixed(2)}₽</span>
+        </li>`).join('');
+}
+
+let _couponsModalDays = 90;
+async function renderCouponsModal() {
+    const loadEl = document.getElementById('couponsModalLoading');
+    const emptyEl = document.getElementById('couponsModalEmpty');
+    const listEl = document.getElementById('couponsModalList');
+    const sumEl = document.getElementById('couponsModalSummary');
+    if (!listEl) return;
+    if (loadEl) loadEl.style.display = 'block';
+    if (emptyEl) emptyEl.style.display = 'none';
+    listEl.style.display = 'none';
+    listEl.innerHTML = '';
+
+    const all = await _loadCouponsAll();
+    if (loadEl) loadEl.style.display = 'none';
+
+    // Фильтр по выбранному периоду (на клиенте, чтоб не дёргать сервер при смене таба)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let events = all || [];
+    if (_couponsModalDays > 0) {
+        const horizon = new Date(today.getTime() + _couponsModalDays * 86400000);
+        events = events.filter(e => {
+            const d = new Date(e.date);
+            return d >= today && d <= horizon;
+        });
+    }
+
+    if (!events.length) {
+        if (emptyEl) emptyEl.style.display = 'block';
+        if (sumEl) sumEl.textContent = '';
+        return;
+    }
+    const esc = window.Common.escapeHtml;
+    const total = events.reduce((s, e) => s + (parseFloat(e.total_payout) || 0), 0);
+    const fmtRub = v => v.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    listEl.innerHTML = events.map(e => `
+        <li class="list-group-item d-flex justify-content-between align-items-center" style="padding:.7rem 1rem">
+            <div style="min-width:0;flex:1">
+                <div class="fw-semibold" style="font-size:.88rem">${esc(e.name)}</div>
+                <div class="text-muted small">${esc(e.isin || '')} · ${esc(e.date)}</div>
+            </div>
+            <span class="badge bg-success font-monospace ms-2" style="font-size:.85rem;padding:.4rem .6rem">+${fmtRub(parseFloat(e.total_payout))} ₽</span>
+        </li>`).join('');
+    listEl.style.display = 'block';
+    if (sumEl) sumEl.textContent = `Всего ${events.length} выплат · итого +${fmtRub(total)} ₽`;
+}
+
+// ── Yield card ───────────────────────────────────────────────────────────────
+let _yieldPeriod = '1m';
+let _yieldMode = 'all';
+
+const _fmtRub = v => v.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+async function loadYield() {
+    const valEl = document.getElementById('yieldValue');
+    const cEl = document.getElementById('yieldCoupons');
+    const rEl = document.getElementById('yieldRealized');
+    const uEl = document.getElementById('yieldUnrealized');
+    if (!valEl) return;
+    valEl.textContent = '…';
+    try {
+        const r = await fetch(`/api/portfolio/yield?period=${_yieldPeriod}&mode=${_yieldMode}`);
+        if (!r.ok) { valEl.textContent = '—'; return; }
+        const d = await r.json();
+        const t = parseFloat(d.total) || 0;
+        const sign = t >= 0 ? '+' : '−';
+        valEl.textContent = `${sign}${_fmtRub(Math.abs(t))} ₽`;
+        valEl.style.color = t >= 0 ? 'var(--emerald-500, #10b981)' : '#ef4444';
+        if (cEl) cEl.textContent = `+${_fmtRub(parseFloat(d.coupons) || 0)} ₽`;
+        if (rEl) {
+            const v = parseFloat(d.realized_pnl) || 0;
+            rEl.textContent = `${v >= 0 ? '+' : '−'}${_fmtRub(Math.abs(v))} ₽`;
+            rEl.style.color = v >= 0 ? 'var(--emerald-500, #10b981)' : '#ef4444';
+        }
+        if (uEl) {
+            const v = parseFloat(d.unrealized_pnl) || 0;
+            uEl.textContent = `${v >= 0 ? '+' : '−'}${_fmtRub(Math.abs(v))} ₽`;
+            uEl.style.color = v >= 0 ? 'var(--emerald-500, #10b981)' : '#ef4444';
+        }
+        // Когда выбран mode=coupons — скрываем realized/unrealized строку из подсказки.
+        const bd = document.getElementById('yieldBreakdown');
+        if (bd) {
+            const showAll = _yieldMode === 'all';
+            bd.querySelectorAll('span').forEach((s, idx) => {
+                if (idx === 0) return; // купоны всегда видны
+                s.style.display = showAll ? '' : 'none';
+            });
+        }
+    } catch (_) {
+        valEl.textContent = '—';
+    }
+}
+
+async function loadCouponsReceived() {
+    const el = document.getElementById('couponsReceivedValue');
+    if (!el) return;
+    try {
+        const r = await fetch('/api/portfolio/coupons_received?period=all');
+        if (!r.ok) { el.textContent = '—'; return; }
+        const d = await r.json();
+        const v = parseFloat(d.total) || 0;
+        el.textContent = `+${_fmtRub(v)} ₽`;
+        el.style.color = 'var(--emerald-500, #10b981)';
+    } catch (_) { el.textContent = '—'; }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     // Initial fetch
     fetchActivePortfolio();
     fetchChartAnalytics();
     fetchSharpeRatio();
     loadTax();
+    renderCouponsMini();
+    loadYield();
+    loadCouponsReceived();
+
+    // Yield period buttons
+    document.querySelectorAll('#yieldPeriodBtns button').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('#yieldPeriodBtns button').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            _yieldPeriod = btn.dataset.period;
+            loadYield();
+        });
+    });
+    document.querySelectorAll('#yieldModeBtns button').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('#yieldModeBtns button').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            _yieldMode = btn.dataset.mode;
+            loadYield();
+        });
+    });
+
+    const modalEl = document.getElementById('couponsModal');
+    if (modalEl) modalEl.addEventListener('show.bs.modal', renderCouponsModal);
+
+    document.querySelectorAll('#couponsPeriodBtns button').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('#couponsPeriodBtns button').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            _couponsModalDays = parseInt(btn.dataset.days, 10) || 0;
+            renderCouponsModal();
+        });
+    });
 
     // Tax year change listener
     document.getElementById('taxYearSelect')?.addEventListener('change', () => {

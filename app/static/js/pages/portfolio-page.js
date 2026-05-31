@@ -36,10 +36,8 @@ window.closeDrawer = function() {
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
 
 function filterBondsTable(q) {
-  const rows = document.querySelectorAll('#bonds-table-body tr[data-name]');
-  const s = q.toLowerCase();
-  rows.forEach(r => {
-    const show = !s || r.dataset.name?.toLowerCase().includes(s) || r.dataset.isin?.toLowerCase().includes(s);
-    r.style.display = show ? '' : 'none';
-  });
+  if (window.renderBondRows) {
+    window.bondsPage = 1;
+    window.renderBondRows();
+  }
 }

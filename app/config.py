@@ -11,6 +11,10 @@ class Config:
     SECRET_KEY = (
         os.environ.get("SECRET_KEY") or "dev-insecure-please-set-SECRET_KEY-env-var"
     )
+    # T-Invest Token Encryption Key (32 bytes hex = 64 characters)
+    ENCRYPTION_KEY = (
+        os.environ.get("ENCRYPTION_KEY") or "0000000000000000000000000000000000000000000000000000000000000000"
+    )
     SQLALCHEMY_DATABASE_URI = (
         os.environ.get("DATABASE_URL") or "sqlite:///local_fintech.db"
     )
@@ -83,6 +87,11 @@ class ProductionConfig(Config):
         if not key or key == "change-me-before-production":
             raise RuntimeError(
                 "SECRET_KEY environment variable must be set to a strong random value in production."
+            )
+        enc_key = os.environ.get("ENCRYPTION_KEY", "")
+        if not enc_key or len(enc_key) != 64:
+            raise RuntimeError(
+                "ENCRYPTION_KEY environment variable must be a 64-character hex string (32 bytes) for AES-256 encryption."
             )
 
 

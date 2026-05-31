@@ -1,0 +1,29 @@
+meta {
+  name: Portfolio — Reset
+  type: http
+  seq: 60
+}
+
+delete {
+  url: {{baseUrl}}/api/portfolio/reset
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+  X-CSRFToken: {{csrfToken}}
+}
+
+body:json {
+  {
+    "password": "your_password_here"
+  }
+}
+
+docs {
+  ## Полный сброс портфеля
+
+  Удаляет все BondPortfolio и Transaction пользователя. Требует подтверждения паролем (HTTP 403 при несовпадении).
+  Аудит: `portfolio_reset` в category=portfolio.
+}

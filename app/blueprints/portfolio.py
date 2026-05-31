@@ -12,6 +12,7 @@ from pydantic import ValidationError
 from werkzeug.security import check_password_hash
 
 from app.extensions import cache
+from app.models import BondPortfolio
 from app.moex import (
     get_moex_bond,
     get_bond_history_all,
@@ -27,7 +28,9 @@ from app.services.portfolio_service import (
     build_portfolio_list,
     calc_portfolio_ytm,
     calc_coupon_income,
+    calc_coupons_received,
     get_active_bonds,
+    get_sold_bonds_in_range,
     get_bond_by_id,
     delete_position,
     reset_portfolio,
@@ -73,6 +76,7 @@ def _etag(payload: dict) -> str:
 def _bust_user_cache(user_id: int) -> None:
     current_year = date.today().year
     for key in [
+        f"portfolio_full:{user_id}",
         f"portfolio_income:{user_id}",
         f"portfolio_stats:{user_id}",
         f"portfolio_calendar:{user_id}",
@@ -96,17 +100,57 @@ def portfolio_page() -> str:
 @login_required
 def portfolio_report():
     from app.services.portfolio_service import build_portfolio_list, calc_portfolio_ytm
-    from app.services.analytics_service import get_tax_report, get_portfolio_sharpe_ratio
+    from app.services.tax_service import calc_tax_report
+    from app.services.risk_service import calc_sharpe_ratio
     
     active_bonds = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=False).all()
     all_bonds, total_val = build_portfolio_list(active_bonds)
+    
+    # Add T-Invest synced bonds
+    from app.models import BrokerAccount, BrokerPosition
+    accounts = BrokerAccount.query.filter_by(user_id=current_user.id).all()
+    tinvest_total = 0.0
+    for acc in accounts:
+        positions = BrokerPosition.query.filter_by(account_id=acc.id).all()
+        for p in positions:
+            cost = float(p.average_price * p.quantity)
+            cur_val = float(p.current_price * p.quantity)
+            pnl = cur_val - cost
+            pnl_pct = (pnl / cost * 100) if cost > 0 else 0
+            
+            # Use average_price as ruble value, calculate approximate percentage for buy_price
+            fv = 1000.0
+            
+            all_bonds.append({
+                "isin": p.ticker or p.figi,
+                "name": p.name or p.ticker or p.figi,
+                "amount": float(p.quantity),
+                "buy_price": (float(p.average_price) / fv) * 100, # Mock %
+                "buy_price_rub_calc": float(p.average_price),
+                "last_price": (float(p.current_price) / fv) * 100, # Mock %
+                "last_price_rub": float(p.current_price),
+                "current_value": cur_val,
+                "current_value_rub": cur_val,
+                "facevalue": fv,
+                "nkd": 0.0,
+                "ytm": float(p.expected_yield or 0.0),
+                "pnl": pnl,
+                "pnl_pct": pnl_pct,
+                "currency": p.currency,
+                "is_tinvest": True
+            })
+            tinvest_total += cur_val
+            
+    total_val += tinvest_total
+    
     ytm = calc_portfolio_ytm(all_bonds, total_val)
     
-    sold_count = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=True).count()
+    sold_bonds = BondPortfolio.query.filter_by(user_id=current_user.id, is_sold=True).all()
+    sold_count = len(sold_bonds)
     
     year = datetime.now().year
-    tax = get_tax_report(current_user.id, year)
-    sharpe = get_portfolio_sharpe_ratio(current_user.id)
+    tax = calc_tax_report(sold_bonds, active_bonds, year)
+    sharpe = calc_sharpe_ratio(sold_bonds)
     
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
     
@@ -155,12 +199,37 @@ def reset_portfolio_route():
 @portfolio_bp.route("/api/portfolio/tinkoff_sync", methods=["POST"])
 @login_required
 def tinkoff_sync_route():
+    from pydantic import ValidationError
+    from app.schemas.tinkoff import TinkoffSyncIn
     from app.services.tinkoff_service import sync_tinkoff_portfolio
-    result = sync_tinkoff_portfolio(current_user)
+
+    data = request.get_json(silent=True) or {}
+    try:
+        payload = TinkoffSyncIn(**data)
+    except ValidationError as exc:
+        return jsonify({"status": "error", "message": exc.errors()[0]["msg"]}), 400
+
+    result = sync_tinkoff_portfolio(
+        current_user, account_id=payload.account_id, sandbox=payload.sandbox
+    )
     if result["status"] == "success":
+        log_action(
+            "import_ok",
+            user_id=current_user.id,
+            category="portfolio",
+            details={"source": "tinkoff", **result.get("summary", {})},
+        )
+        _bust_user_cache(current_user.id)
         return jsonify(result)
-    else:
-        return jsonify(result), 400
+
+    log_action(
+        "import_fail",
+        user_id=current_user.id,
+        category="portfolio",
+        details={"source": "tinkoff", "error": result.get("message")},
+    )
+    code = 401 if result.get("code") == "auth" else 400
+    return jsonify(result), code
 
 
 @portfolio_bp.route("/api/portfolio", methods=["GET"])
@@ -171,30 +240,52 @@ def get_portfolio():
         request.args.get("per_page", DEFAULT_PAGE_SIZE, type=int), MAX_PAGE_SIZE
     )
 
-    active = get_active_bonds(current_user.id)
-    total_count = len(active)
-    all_bonds, total_val = build_portfolio_list(active)
-    flush_portfolio_prices()
-
-    ytm = calc_portfolio_ytm(all_bonds, total_val)
-
-    valid_dur_bonds = [
-        b
-        for b in all_bonds
-        if b.get("modified_duration") is not None and b["modified_duration"] > 0
-    ]
-    total_valid_dur_val = sum(b["current_value_rub"] for b in valid_dur_bonds)
-    if total_valid_dur_val > 0:
-        avg_dur = (
-            sum(
-                b["modified_duration"] * b["current_value_rub"] for b in valid_dur_bonds
-            )
-            / total_valid_dur_val
-        )
-        portfolio_duration = round(avg_dur, 2)
+    # Полный список позиций кэшируем единожды на пользователя (TTL 5 мин).
+    # Пагинация и ETag считаются поверх кэша, поэтому ключ не зависит от page.
+    cache_key = f"portfolio_full:{current_user.id}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        all_bonds = cached["bonds"]
+        total_val = cached["total_value"]
+        ytm = cached["portfolio_ytm"]
+        portfolio_duration = cached["portfolio_duration"]
     else:
-        portfolio_duration = 0.0
+        active = get_active_bonds(current_user.id)
+        all_bonds, total_val = build_portfolio_list(active)
+        flush_portfolio_prices()
 
+        ytm = calc_portfolio_ytm(all_bonds, total_val)
+
+        valid_dur_bonds = [
+            b
+            for b in all_bonds
+            if b.get("modified_duration") is not None and b["modified_duration"] > 0
+        ]
+        total_valid_dur_val = sum(b["current_value_rub"] for b in valid_dur_bonds)
+        if total_valid_dur_val > 0:
+            avg_dur = (
+                sum(
+                    b["modified_duration"] * b["current_value_rub"]
+                    for b in valid_dur_bonds
+                )
+                / total_valid_dur_val
+            )
+            portfolio_duration = round(avg_dur, 2)
+        else:
+            portfolio_duration = 0.0
+
+        cache.set(
+            cache_key,
+            {
+                "bonds": all_bonds,
+                "total_value": total_val,
+                "portfolio_ytm": ytm,
+                "portfolio_duration": portfolio_duration,
+            },
+            timeout=300,
+        )
+
+    total_count = len(all_bonds)
     paginated_bonds = all_bonds[(page - 1) * per_page : page * per_page]
 
     payload = {
@@ -482,7 +573,21 @@ def get_bond_chart_data(isin: str):
 @portfolio_bp.route("/api/portfolio/calendar", methods=["GET"])
 @login_required
 def get_portfolio_calendar():
-    return jsonify(get_coupon_calendar_events(current_user.id))
+    # limit: сколько максимум выплат отдать (default 10 для обратной совместимости
+    # с dashboard, аналитика передаёт 500). days: ограничение по горизонту в днях.
+    try:
+        limit = max(1, min(int(request.args.get("limit", 10)), 1000))
+    except (TypeError, ValueError):
+        limit = 10
+    days_raw = request.args.get("days")
+    days: Optional[int] = None
+    if days_raw:
+        try:
+            d = int(days_raw)
+            days = d if d > 0 else None
+        except (TypeError, ValueError):
+            days = None
+    return jsonify(get_coupon_calendar_events(current_user.id, limit=limit, days=days))
 
 
 @portfolio_bp.route("/api/portfolio/income", methods=["GET"])
@@ -498,10 +603,188 @@ def portfolio_income():
     return jsonify(result)
 
 
+_YIELD_PERIOD_DAYS = {
+    "1w": 7,
+    "1m": 30,
+    "3m": 90,
+    "6m": 180,
+    "1y": 365,
+    "all": None,
+}
+
+
+@portfolio_bp.route("/api/portfolio/coupons_received", methods=["GET"])
+@login_required
+def portfolio_coupons_received():
+    """Полученные купоны по активным позициям. ?period=1w|1m|3m|6m|1y|all"""
+    period = request.args.get("period", "all")
+    days = _YIELD_PERIOD_DAYS.get(period)
+    period_from = (date.today() - timedelta(days=days)) if days else None
+    cache_key = f"portfolio_coupons_received:{current_user.id}:{period}"
+    cached = cache.get(cache_key)
+    if cached:
+        return jsonify(cached)
+    active = get_active_bonds(current_user.id)
+    result = calc_coupons_received(active, period_from=period_from)
+    result["period"] = period
+    cache.set(cache_key, result, timeout=1800)
+    return jsonify(result)
+
+
+@portfolio_bp.route("/api/portfolio/yield", methods=["GET"])
+@login_required
+def portfolio_yield():
+    """Доходность портфеля за период.
+
+    ?period=1w|1m|3m|6m|1y|all
+    ?mode=all   — купоны + realized PnL (закрытые сделки в периоде) + unrealized
+    ?mode=coupons — только полученные купоны за период
+    """
+    period = request.args.get("period", "1m")
+    mode = request.args.get("mode", "all")
+    days = _YIELD_PERIOD_DAYS.get(period)
+    today = date.today()
+    period_from = (today - timedelta(days=days)) if days else None
+
+    active = get_active_bonds(current_user.id)
+    coupons_dict = calc_coupons_received(active, period_from=period_from)
+    coupons = coupons_dict["total"]
+
+    if mode == "coupons":
+        return jsonify({
+            "period": period,
+            "mode": mode,
+            "coupons": coupons,
+            "realized_pnl": 0.0,
+            "unrealized_pnl": 0.0,
+            "total": coupons,
+        })
+
+    # mode=all: realized PnL по закрытым в периоде + текущий unrealized
+    realized = 0.0
+    try:
+        if period_from is not None:
+            sold = get_sold_bonds_in_range(current_user.id, period_from, today)
+        else:
+            from app.services.portfolio_service import get_sold_bonds
+            sold = get_sold_bonds(current_user.id)
+        for b in sold:
+            buy_p = float(b.buy_price)
+            sell_p = float(b.sell_price) if b.sell_price else buy_p
+            comm = float(b.broker_commission) if b.broker_commission else 0.0
+            realized += (sell_p - buy_p) * b.amount - comm
+    except Exception as exc:
+        logger.warning("realized calc failed in yield endpoint: %s", exc)
+
+    # Текущий unrealized PnL — сумма pnl по активным позициям (использует кэш).
+    pf_key = f"portfolio_full:{current_user.id}"
+    pf_cached = cache.get(pf_key)
+    unrealized = 0.0
+    if pf_cached and pf_cached.get("bonds"):
+        for b in pf_cached["bonds"]:
+            try:
+                unrealized += float(b.get("pnl_rub") or b.get("pnl") or 0.0)
+            except (TypeError, ValueError):
+                pass
+
+    return jsonify({
+        "period": period,
+        "mode": mode,
+        "coupons": round(coupons, 2),
+        "realized_pnl": round(realized, 2),
+        "unrealized_pnl": round(unrealized, 2),
+        "total": round(coupons + realized + unrealized, 2),
+    })
+
+
 @portfolio_bp.route("/api/portfolio/allocation", methods=["GET"])
 @login_required
 def portfolio_allocation():
     return jsonify(get_allocation(current_user.id))
+
+
+@portfolio_bp.route("/api/dashboard/full", methods=["GET"])
+@login_required
+def dashboard_full():
+    """Объединённый эндпоинт для главной страницы: portfolio + income + calendar + realized PnL.
+
+    Заменяет 4 параллельных fetch на один. Использует уже существующие кэши
+    (portfolio_full, portfolio_income, portfolio_calendar) и переиспользует
+    данные между шагами (build_portfolio_list вызывается один раз).
+    """
+    user_id = current_user.id
+
+    # 1) Portfolio (из Redis-кэша или пересчёт через build_portfolio_list)
+    pf_key = f"portfolio_full:{user_id}"
+    pf_cached = cache.get(pf_key)
+    if pf_cached is not None:
+        all_bonds = pf_cached["bonds"]
+        total_val = pf_cached["total_value"]
+        ytm = pf_cached["portfolio_ytm"]
+        portfolio_duration = pf_cached["portfolio_duration"]
+    else:
+        active = get_active_bonds(user_id)
+        all_bonds, total_val = build_portfolio_list(active)
+        flush_portfolio_prices()
+        ytm = calc_portfolio_ytm(all_bonds, total_val)
+        valid_dur_bonds = [
+            b for b in all_bonds
+            if b.get("modified_duration") and b["modified_duration"] > 0
+        ]
+        total_valid_dur_val = sum(b["current_value_rub"] for b in valid_dur_bonds)
+        if total_valid_dur_val > 0:
+            avg_dur = sum(
+                b["modified_duration"] * b["current_value_rub"] for b in valid_dur_bonds
+            ) / total_valid_dur_val
+            portfolio_duration = round(avg_dur, 2)
+        else:
+            portfolio_duration = 0.0
+        cache.set(
+            pf_key,
+            {
+                "bonds": all_bonds,
+                "total_value": total_val,
+                "portfolio_ytm": ytm,
+                "portfolio_duration": portfolio_duration,
+            },
+            timeout=300,
+        )
+
+    # 2) Income (Redis-кэш 30 мин)
+    inc_key = f"portfolio_income:{user_id}"
+    income = cache.get(inc_key)
+    if income is None:
+        active = get_active_bonds(user_id)
+        income = calc_coupon_income(active)
+        cache.set(inc_key, income, timeout=INCOME_TTL)
+
+    # 3) Coupon calendar — лёгкий вызов, использует свой in-process кэш.
+    coupons = get_coupon_calendar_events(user_id)
+
+    # 4) Realized PnL из истории закрытых сделок (за всё время).
+    realized_pnl = 0.0
+    try:
+        sold = BondPortfolio.query.filter_by(user_id=user_id, is_sold=True).all()
+        for b in sold:
+            buy_p = float(b.buy_price)
+            sell_p = float(b.sell_price) if b.sell_price else buy_p
+            comm = float(b.broker_commission) if b.broker_commission else 0.0
+            realized_pnl += (sell_p - buy_p) * b.amount - comm
+    except Exception as exc:
+        logger.warning("realized_pnl calc failed: %s", exc)
+
+    return jsonify({
+        "status": "success",
+        "portfolio": {
+            "bonds": all_bonds,
+            "total_value": round(total_val, 2),
+            "portfolio_ytm": ytm,
+            "portfolio_duration": portfolio_duration,
+        },
+        "income": income,
+        "coupons": coupons,
+        "realized_pnl": round(realized_pnl, 2),
+    })
 
 
 @portfolio_bp.route("/api/watchlist", methods=["GET"])

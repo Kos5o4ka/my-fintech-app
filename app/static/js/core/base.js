@@ -35,20 +35,69 @@
 (function () {
   var _bellLoaded = false;
   var _currentBellCount = 0;
+  var _currentTab = 'coupons'; // 'coupons' | 'system'
+  var _siteNotifsLoaded = false;
+  var _unreadSiteCount = 0;
+
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function setTab(tab) {
+    _currentTab = tab;
+    var body = document.getElementById('bellDropdownBody');
+    var sysBody = document.getElementById('bellSystemBody');
+    var tabC = document.getElementById('bellTabCoupons');
+    var tabS = document.getElementById('bellTabSystem');
+    if (!body || !sysBody) return;
+    var isCoupon = (tab === 'coupons');
+    body.style.display = isCoupon ? 'block' : 'none';
+    sysBody.style.display = isCoupon ? 'none' : 'block';
+    if (tabC) { tabC.classList.toggle('bell-tab--active', isCoupon); }
+    if (tabS) { tabS.classList.toggle('bell-tab--active', !isCoupon); }
+    if (!isCoupon && !_siteNotifsLoaded) loadSiteNotifs();
+  }
 
   window.markBellRead = function () {
     var badge = document.getElementById('bellBadge');
     if (badge) badge.style.display = 'none';
     localStorage.setItem('bellReadCount', String(_currentBellCount));
+    if (_currentTab === 'system') {
+      markSiteNotifsRead();
+    }
     var dd = document.getElementById('bellDropdown');
     if (dd) dd.style.display = 'none';
   };
+
+  function markSiteNotifsRead() {
+    if (_unreadSiteCount === 0) return;
+    if (!window.Common || typeof window.Common.csrfFetch !== 'function') return;
+    _unreadSiteCount = 0;
+    var badge = document.getElementById('siteNotifBadge');
+    if (badge) badge.style.display = 'none';
+    var cnt = document.getElementById('bellSystemCount');
+    if (cnt) cnt.style.display = 'none';
+    // Remove unread highlight dots in the rendered list
+    var sysBody = document.getElementById('bellSystemBody');
+    if (sysBody) {
+      sysBody.querySelectorAll('span[style*="border-radius:50%"]').forEach(function(dot) { dot.remove(); });
+      sysBody.querySelectorAll('[style*="rgba(37,99,235"]').forEach(function(el) { el.style.background = ''; });
+    }
+    window.Common.csrfFetch('/api/notifications/read', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({all: true})
+    }).catch(function() {});
+  }
 
   function renderBellBody(data) {
     var body = document.getElementById('bellDropdownBody');
     if (!body) return;
     if (!data.events || data.events.length === 0) {
-      body.innerHTML = '<div style="text-align:center;padding:1.5rem;color:var(--text-tertiary);font-size:.82rem">Нет ближайших купонов (7 дней)</div>';
+      body.innerHTML = '<div style="text-align:center;padding:2rem 1rem;color:var(--text-tertiary);font-size:.82rem;line-height:1.5">'
+        + '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.35;margin-bottom:.5rem"><path d="M12 2a1 1 0 00-1 1v1a6 6 0 00-5 5.92V13l-1.5 3h15L18 13V9.92A6 6 0 0013 4V3a1 1 0 00-1-1z"/><path d="M9 17a3 3 0 006 0"/></svg>'
+        + '<div>Нет ближайших купонов (7 дней)</div>'
+        + '</div>';
       return;
     }
     var html = '';
@@ -58,12 +107,50 @@
       html += '<div style="padding:.6rem 1rem;border-bottom:1px solid var(--border-subtle);display:flex;align-items:center;gap:.65rem">'
         + '<div style="width:36px;height:36px;border-radius:var(--radius-sm);background:rgba(var(--accent-rgb),.1);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.9rem">💰</div>'
         + '<div style="flex:1;min-width:0">'
-        + '<div style="font-size:.8rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + (e.name || e.isin) + '</div>'
-        + '<div style="font-size:.72rem;color:var(--text-tertiary)">' + daysLabel + ' · ' + e.coupon_date + couponTotal + '</div>'
+        + '<div style="font-size:.8rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(e.name || e.isin) + '</div>'
+        + '<div style="font-size:.72rem;color:var(--text-tertiary)">' + daysLabel + ' · ' + esc(e.coupon_date) + couponTotal + '</div>'
         + '</div>'
         + '</div>';
     });
     body.innerHTML = html;
+  }
+
+  function loadSiteNotifs() {
+    var sysBody = document.getElementById('bellSystemBody');
+    if (!sysBody) return;
+    sysBody.innerHTML = '<div style="text-align:center;padding:1.5rem;color:var(--text-tertiary);font-size:.82rem">Загрузка…</div>';
+    fetch('/api/notifications?page=1')
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        _siteNotifsLoaded = true;
+        var notifs = d.notifications || [];
+        if (!notifs.length) {
+          sysBody.innerHTML = '<div style="text-align:center;padding:2rem 1rem;color:var(--text-tertiary);font-size:.82rem;line-height:1.5">'
+            + '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" style="opacity:.35;margin-bottom:.5rem"><circle cx="12" cy="12" r="10"/><polyline points="16 8 10.5 13.5 8 11"/></svg>'
+            + '<div>Нет системных уведомлений</div>'
+            + '</div>';
+          return;
+        }
+        var html = '';
+        notifs.forEach(function(n) {
+          var unreadBg = n.is_read ? '' : 'background:rgba(37,99,235,.06);';
+          var dot = n.is_read ? '' : '<span style="width:6px;height:6px;border-radius:50%;background:#2563eb;flex-shrink:0;margin-top:4px"></span>';
+          html += '<div style="padding:.65rem 1rem;border-bottom:1px solid var(--border-subtle);' + unreadBg + 'display:flex;gap:.5rem;align-items:flex-start">'
+            + dot
+            + '<div style="flex:1;min-width:0">'
+            + '<div style="font-size:.8rem;font-weight:700;margin-bottom:2px">' + esc(n.title) + '</div>'
+            + '<div style="font-size:.75rem;color:var(--text-secondary);white-space:pre-wrap;word-break:break-word">' + esc(n.body) + '</div>'
+            + '<div style="font-size:.68rem;color:var(--text-tertiary);margin-top:3px">' + esc(n.created_at) + '</div>'
+            + '</div>'
+            + '</div>';
+        });
+        sysBody.innerHTML = html;
+        if (_unreadSiteCount > 0) setTimeout(markSiteNotifsRead, 0);
+      })
+      .catch(function(err) {
+        console.error('[bellSystem] loadSiteNotifs error:', err);
+        sysBody.innerHTML = '<div style="text-align:center;padding:1.5rem;color:var(--text-tertiary);font-size:.82rem">Ошибка загрузки</div>';
+      });
   }
 
   function loadBellData() {
@@ -113,14 +200,16 @@
     if (!isOpen) {
       positionBellDropdown();
       if (!_bellLoaded) loadBellData();
-      // Авто-скрываем badge при открытии — пользователь видит уведомления
       var badge = document.getElementById('bellBadge');
       if (badge) badge.style.display = 'none';
       localStorage.setItem('bellReadCount', String(_currentBellCount));
+      // Switch to system tab if there are unread notifs, else restore current tab state
+      var targetTab = (_unreadSiteCount > 0) ? 'system' : _currentTab;
+      setTab(targetTab);
     }
   };
 
-  // Close on outside click — checks both button and teleported dropdown
+  // Close on outside click
   document.addEventListener('click', function (e) {
     var btn = document.getElementById('bellBtn');
     var dd = document.getElementById('bellDropdown');
@@ -139,7 +228,13 @@
     }
     loadBellData();
 
-    // Bell button — replaces CSP-blocked onclick="toggleBellDropdown(event)"
+    // Tab buttons
+    var tabC = document.getElementById('bellTabCoupons');
+    var tabS = document.getElementById('bellTabSystem');
+    if (tabC) tabC.addEventListener('click', function(e) { e.stopPropagation(); setTab('coupons'); });
+    if (tabS) tabS.addEventListener('click', function(e) { e.stopPropagation(); setTab('system'); });
+
+    // Bell button
     var bellBtn = document.getElementById('bellBtn');
     if (bellBtn) {
       bellBtn.addEventListener('click', function(e) {
@@ -147,7 +242,7 @@
       });
     }
 
-    // Mark-read button — replaces CSP-blocked onclick="window.markBellRead()"
+    // Mark-read button
     var bellMarkReadBtn = document.getElementById('bellMarkReadBtn');
     if (bellMarkReadBtn) {
       bellMarkReadBtn.addEventListener('click', function() {
@@ -155,7 +250,7 @@
       });
     }
 
-    // Close bell dropdown — replaces CSP-blocked onclick
+    // Close button
     var bellCloseBtn = document.getElementById('bellCloseBtn');
     if (bellCloseBtn) {
       bellCloseBtn.addEventListener('click', function() {
@@ -169,13 +264,16 @@
       fetch('/api/notifications/unread_count')
         .then(function(r) { return r.json(); })
         .then(function(d) {
+          _unreadSiteCount = d.count || 0;
           var badge = document.getElementById('siteNotifBadge');
-          if (!badge) return;
-          if (d.count > 0) {
-            badge.textContent = d.count > 9 ? '9+' : d.count;
-            badge.style.display = 'inline-flex';
+          var cnt = document.getElementById('bellSystemCount');
+          if (_unreadSiteCount > 0) {
+            var label = _unreadSiteCount > 9 ? '9+' : String(_unreadSiteCount);
+            if (badge) { badge.textContent = label; badge.style.display = 'inline-flex'; }
+            if (cnt) { cnt.textContent = label; cnt.style.display = 'inline'; }
           } else {
-            badge.style.display = 'none';
+            if (badge) badge.style.display = 'none';
+            if (cnt) cnt.style.display = 'none';
           }
         })
         .catch(function() {});

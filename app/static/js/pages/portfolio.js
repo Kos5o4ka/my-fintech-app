@@ -15,9 +15,28 @@ let incomeData = {};
 let currentPreviewPrice = null;
 
 // Table sort state
-let bondsData = [];
-let sortKey = null;
-let sortDir = 1; // 1 = ascending, -1 = descending
+var allBondsData = [];
+var bondsData = [];
+var sortKey = null;
+var sortDir = 1; // 1 = ascending, -1 = descending
+
+// T-Invest accounts state
+var tinvestAccounts = [];
+var tinvestTotalValue = 0;
+var manualTotalValue = 0;
+var manualYtm = 0;
+
+// Pagination state
+var bondsPerPage = parseInt(localStorage.getItem('bondsPerPage') || '10', 10);
+var bondsPage = 1;
+var bondsTotal = 0;
+
+window.bondsData = bondsData;
+window.sortKey = sortKey;
+window.sortDir = sortDir;
+window.bondsPerPage = bondsPerPage;
+window.bondsPage = bondsPage;
+window.bondsTotal = bondsTotal;
 
 function getCurrencySymbol(cur) {
     switch (cur) {
@@ -123,30 +142,15 @@ async function loadDashboard() {
 }
 
 // ── Coupon calendar ───────────────────────────────────────────────────────────
-async function fetchCouponCalendar() {
-    const response = await fetch('/api/portfolio/calendar');
-    if (!response.ok) return;
-    const events = await response.json();
-    const list = document.getElementById('coupon-calendar-list');
-    list.innerHTML = '';
-    if (events.length === 0) {
-        list.innerHTML = '<li class="list-group-item text-center text-muted py-3">Нет предстоящих купонов.</li>';
-        return;
-    }
-    const esc = window.Common.escapeHtml;
-    events.forEach(e => {
-        list.innerHTML += `
-            <li class="list-group-item d-flex justify-content-between align-items-center">
-                <div><b>${esc(e.name)}</b><br><small class="text-muted">${esc(e.date)}</small></div>
-                <span class="badge bg-success font-monospace">+ ${parseFloat(e.total_payout).toFixed(2)} ₽</span>
-            </li>`;
-    });
-}
+// Виджет ближайших купонов вынесен на страницу Аналитики; здесь просто no-op.
+async function fetchCouponCalendar() { /* moved to analytics modal */ }
 
 // ── Table sort ────────────────────────────────────────────────────────────────
 function sortTable(key) {
     if (sortKey === key) sortDir = -sortDir;
     else { sortKey = key; sortDir = 1; }
+    bondsPage = 1;
+    window.bondsPage = 1;
     renderBondRows();
     _updateSortIndicators();
 }
@@ -177,23 +181,169 @@ async function fetchActivePortfolio() {
     const tbody = document.getElementById('bonds-table-body');
     tbody.innerHTML = _skeletonRows();
 
-    const response = await fetch('/api/portfolio');
-    if (response.status === 401) { window.location.href = '/'; return; }
-    const data = await response.json();
+    let manualData = null;
+    let tinvestData = null;
 
-    document.getElementById('total-portfolio-value').innerText =
-        data.total_value.toLocaleString('ru-RU', { minimumFractionDigits: 2 });
+    try {
+        const url = `/api/portfolio?page=1&per_page=1000`;
+        const res = await fetch(url);
+        if (res.status === 401) { window.location.href = '/'; return; }
+        if (res.ok) manualData = await res.json();
+    } catch (e) { console.error("Manual portfolio error:", e); }
 
-    const ytmEl = document.getElementById('portfolio-ytm');
-    if (ytmEl) ytmEl.textContent = data.portfolio_ytm ? data.portfolio_ytm.toFixed(2) + ' %' : '—';
+    try {
+        const t_res = await fetch('/api/tinvest/portfolio');
+        if (t_res.ok) tinvestData = await t_res.json();
+    } catch (e) { console.error("T-Invest portfolio error:", e); }
 
-    const countEl = document.getElementById('portfolio-count');
-    if (countEl) countEl.textContent = (data.bonds || []).length;
+    allBondsData = [];
+    tinvestAccounts = [];
+    
+    // Add manual bonds
+    if (manualData && manualData.bonds) {
+        manualTotalValue = manualData.total_value || 0;
+        manualYtm = manualData.portfolio_ytm || 0;
+        manualData.bonds.forEach(b => {
+            b._account = 'manual';
+            allBondsData.push(b);
+        });
+    }
 
-    bondsData = data.bonds || [];
-    renderBondRows();
+    // Add T-Invest bonds
+    if (tinvestData && tinvestData.status === 'success' && tinvestData.data) {
+        tinvestTotalValue = tinvestData.data.total_value || 0;
+        tinvestAccounts = tinvestData.data.portfolios || [];
+        
+        // Update Account Select
+        const sel = document.getElementById('portfolioAccountSelect');
+        if (sel) {
+            // Keep the first 2 options (All, Manual)
+            sel.innerHTML = `<option value="all">Все счета (Агрегированно)</option><option value="manual">Ручной портфель</option>`;
+            tinvestAccounts.forEach(acc => {
+                sel.innerHTML += `<option value="${acc.account_id}">Т-Инвест: ${acc.name || acc.account_id}</option>`;
+            });
+        }
+
+        tinvestAccounts.forEach(acc => {
+            acc.positions.forEach(p => {
+                const cost = p.average_price * p.quantity;
+                const pnl = p.current_value - cost;
+                const pnl_pct = cost > 0 ? (pnl / cost) * 100 : 0;
+                // Try to infer facevalue based on current price percentage if not available, default to 1000
+                // Tinkoff returns prices in currency (RUB). We'll assume a facevalue of 1000 for calculation.
+                // However, wait, if we know current_value = current_price * quantity
+                // We should store buy_price_rub_calc and facevalue so renderBondRows works.
+                const fv = 1000; 
+                allBondsData.push({
+                    _account: acc.account_id,
+                    id: p.figi, // Mock ID
+                    isin: p.ticker || p.figi,
+                    name: p.name || p.ticker,
+                    amount: p.quantity,
+                    buy_price: (p.average_price / fv) * 100, // Approximate %
+                    buy_price_rub_calc: p.average_price,
+                    last_price: (p.current_price / fv) * 100, // Approximate %
+                    last_price_rub: p.current_price,
+                    current_value_rub: p.current_value,
+                    facevalue: fv,
+                    nkd: 0,
+                    ytm: p.xirr || p.expected_yield,
+                    pnl: pnl,
+                    pnl_pct: pnl_pct,
+                    currency: p.currency,
+                    is_tinvest: true // Mark to disable sell/edit buttons
+                });
+            });
+        });
+    }
+
+    applyAccountFilter();
     renderAllocationChart();
 }
+
+function applyAccountFilter() {
+    const sel = document.getElementById('portfolioAccountSelect');
+    const acc = sel ? sel.value : 'all';
+    
+    if (acc === 'all') {
+        bondsData = [...allBondsData];
+    } else {
+        bondsData = allBondsData.filter(b => b._account === acc);
+    }
+    
+    // Update stats
+    let totalVal = 0;
+    if (acc === 'all') totalVal = manualTotalValue + tinvestTotalValue;
+    else if (acc === 'manual') totalVal = manualTotalValue;
+    else {
+        const found = tinvestAccounts.find(a => a.account_id === acc);
+        if (found) totalVal = found.total_value;
+    }
+    
+    const totalEl = document.getElementById('total-portfolio-value');
+    if (totalEl) totalEl.innerText = totalVal.toLocaleString('ru-RU', { minimumFractionDigits: 2 });
+    
+    // For specific accounts we could calculate weighted YTM, but fallback to manual for now
+    const ytmEl = document.getElementById('portfolio-ytm');
+    if (ytmEl) ytmEl.textContent = acc === 'manual' ? (manualYtm ? manualYtm.toFixed(2) + ' %' : '—') : '—';
+    
+    bondsPage = 1;
+    renderBondRows();
+}
+
+
+function renderBondsPagination() {
+    const wrap = document.getElementById('bondsPagination');
+    if (!wrap) return;
+    const totalPages = Math.max(1, Math.ceil(bondsTotal / bondsPerPage));
+    if (bondsTotal <= bondsPerPage) {
+        wrap.style.setProperty('display', 'none', 'important');
+        return;
+    }
+    wrap.style.setProperty('display', 'flex', 'important');
+    const from = (bondsPage - 1) * bondsPerPage + 1;
+    const to = Math.min(bondsPage * bondsPerPage, bondsTotal);
+    const info = document.getElementById('bondsPaginationInfo');
+    if (info) info.textContent = `Показано ${from}–${to} из ${bondsTotal}`;
+    const pageEl = document.getElementById('bondsPageInfo');
+    if (pageEl) pageEl.textContent = `${bondsPage} / ${totalPages}`;
+    const prev = document.getElementById('bondsPrevPageBtn');
+    const next = document.getElementById('bondsNextPageBtn');
+    if (prev) prev.disabled = bondsPage <= 1;
+    if (next) next.disabled = bondsPage >= totalPages;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const sel = document.getElementById('bondsPerPageSelect');
+    if (sel) {
+        sel.value = String(bondsPerPage);
+        sel.addEventListener('change', () => {
+            bondsPerPage = parseInt(sel.value, 10) || 10;
+            window.bondsPerPage = bondsPerPage;
+            localStorage.setItem('bondsPerPage', String(bondsPerPage));
+            bondsPage = 1;
+            window.bondsPage = 1;
+            renderBondRows();
+        });
+    }
+    const prev = document.getElementById('bondsPrevPageBtn');
+    const next = document.getElementById('bondsNextPageBtn');
+    if (prev) prev.addEventListener('click', () => {
+        if (bondsPage > 1) {
+            bondsPage--;
+            window.bondsPage = bondsPage;
+            renderBondRows();
+        }
+    });
+    if (next) next.addEventListener('click', () => {
+        const totalPages = Math.max(1, Math.ceil(bondsTotal / bondsPerPage));
+        if (bondsPage < totalPages) {
+            bondsPage++;
+            window.bondsPage = bondsPage;
+            renderBondRows();
+        }
+    });
+});
 
 // ── Bond row helpers ──────────────────────────────────────────────────────────
 function _renderBondRow(bond, esc, isSubRow) {
@@ -206,13 +356,28 @@ function _renderBondRow(bond, esc, isSubRow) {
     const subStyle = isSubRow ? ' style="background:var(--surface-0);font-size:.88rem"' : '';
     const namePrefix = isSubRow ? `<span style="color:var(--text-tertiary);margin-right:.3rem">•</span>` : '';
     const dateSuffix = isSubRow ? ` <small style="color:var(--text-tertiary)">${esc(bond.purchase_date || '')}</small>` : '';
+    
+    const buyPricePct = bond.buy_price || 0;
+    const buyPriceRub = bond.buy_price_rub_calc || (buyPricePct / 100 * (bond.facevalue || 1000));
+
+    let badges = '';
+    if (bond.is_substitute) {
+        badges += ` <span class="badge" style="background:#eab308;color:#000;font-size:0.65rem">ЗО (${bond.facevalue} ${bond.currency})</span>`;
+    }
+    if (bond.is_floater) {
+        badges += ` <span class="badge" style="background:#06b6d4;color:#fff;font-size:0.65rem">ПК</span>`;
+    }
+
     return `
         <tr data-name="${esc(bond.name)}" data-isin="${esc(bond.isin)}"${subStyle}>
-            <td data-label="Название">${namePrefix}<b>${esc(bond.name)}</b>${dateSuffix}</td>
+            <td data-label="Название">${namePrefix}<b>${esc(bond.name)}</b>${badges}${dateSuffix}</td>
             <td data-label="ISIN"><b class="isin-link" onclick="openBondChart(this.dataset.isin)"
                     data-isin="${esc(bond.isin)}">${esc(bond.isin)}</b></td>
             <td data-label="Кол-во">${bond.amount} шт.</td>
-            <td data-label="Цена покупки">${bond.buy_price.toFixed(2)} ₽</td>
+            <td data-label="Цена покупки">
+                ${buyPricePct.toFixed(2)} %<br>
+                <small style="color:var(--text-tertiary)">${buyPriceRub.toFixed(2)} ₽</small>
+            </td>
             <td data-label="НКД" class="text-primary"><b>${(bond.nkd || 0).toFixed(2)} ₽</b></td>
             <td data-label="YTM" class="text-info"><b>${(bond.ytm || 0).toFixed(2)} %</b></td>
             <td data-label="P&L" class="${pnlClass}" title="Нереализованная прибыль/убыток">
@@ -220,6 +385,7 @@ function _renderBondRow(bond, esc, isSubRow) {
                 <small>${sign}${pnlPct.toFixed(2)}%</small>
             </td>
             <td style="white-space:nowrap">
+                ${bond.is_tinvest ? `<span class="badge bg-secondary">Синхронизировано</span>` : `
                 <button
                     onclick="sellTrigger(parseInt(this.dataset.id), this.dataset.name, parseFloat(this.dataset.price), parseFloat(this.dataset.buyPrice), parseInt(this.dataset.amount))"
                     data-id="${bond.id}"
@@ -233,27 +399,40 @@ function _renderBondRow(bond, esc, isSubRow) {
                     title="${esc(noteTip)}"
                     onclick="openNotesModal(${bond.id}, ${JSON.stringify(bond.notes || '')})"
                     class="btn btn-sm btn-outline-secondary ms-1${noteClass}"
-                    aria-label="Заметка">📝</button>
+                    aria-label="Заметка">📝</button>`}
             </td>
         </tr>`;
 }
 
 function _renderMergedGroup(bonds, esc) {
     const totalAmount = bonds.reduce((s, b) => s + b.amount, 0);
-    const totalCost   = bonds.reduce((s, b) => s + b.buy_price * b.amount, 0);
-    const avgBuyPrice = totalCost / totalAmount;
+    const totalCostRub = bonds.reduce((s, b) => s + (b.buy_price_rub_calc || (b.buy_price / 100 * (b.facevalue || 1000))) * b.amount, 0);
+    const avgBuyRub = totalAmount > 0 ? totalCostRub / totalAmount : 0;
+    
+    // Average % = weighted average of buy_price percentages
+    const totalCostPct = bonds.reduce((s, b) => s + (b.buy_price || 0) * b.amount, 0);
+    const avgBuyPct = totalAmount > 0 ? totalCostPct / totalAmount : 0;
+
     const totalPnl    = bonds.reduce((s, b) => s + (b.pnl || 0), 0);
-    const avgPnlPct   = avgBuyPrice > 0 ? (totalPnl / (avgBuyPrice * totalAmount)) * 100 : 0;
+    const avgPnlPct   = totalCostRub > 0 ? (totalPnl / totalCostRub) * 100 : 0;
     const first = bonds[0];
     const gid   = 'bg_' + first.isin.replace(/[^A-Z0-9]/gi, '');
     const pnlClass = totalPnl >= 0 ? 'text-success' : 'text-danger';
     const sign = totalPnl >= 0 ? '+' : '';
 
+    let badges = '';
+    if (first.is_substitute) {
+        badges += ` <span class="badge" style="background:#eab308;color:#000;font-size:0.65rem">ЗО (${first.facevalue} ${first.currency})</span>`;
+    }
+    if (first.is_floater) {
+        badges += ` <span class="badge" style="background:#06b6d4;color:#fff;font-size:0.65rem">ПК</span>`;
+    }
+
     const subRows = bonds.map(b => _renderBondRow(b, esc, true)).join('');
 
     return `
         <tr class="bond-group-merged" data-name="${esc(first.name)}" data-isin="${esc(first.isin)}">
-            <td data-label="Название"><b>${esc(first.name)}</b></td>
+            <td data-label="Название"><b>${esc(first.name)}</b>${badges}</td>
             <td data-label="ISIN">
                 <b class="isin-link" onclick="openBondChart(this.dataset.isin)"
                         data-isin="${esc(first.isin)}">${esc(first.isin)}</b>
@@ -266,7 +445,8 @@ function _renderMergedGroup(bonds, esc) {
                         title="${bonds.length} лота — нажмите для раскрытия">${bonds.length} лота ▾</button>
             </td>
             <td data-label="Цена покупки">
-                ${avgBuyPrice.toFixed(2)} ₽ <small style="color:var(--text-tertiary)">ср.</small>
+                ${avgBuyPct.toFixed(2)} % <small style="color:var(--text-tertiary)">ср.</small><br>
+                <small style="color:var(--text-tertiary)">${avgBuyRub.toFixed(2)} ₽</small>
             </td>
             <td data-label="НКД" class="text-primary"><b>${(first.nkd || 0).toFixed(2)} ₽</b></td>
             <td data-label="YTM" class="text-info"><b>${(first.ytm || 0).toFixed(2)} %</b></td>
@@ -305,10 +485,18 @@ function renderBondRows() {
             <div class="fw-semibold mt-2 mb-1">Портфель пуст</div>
             <small class="text-secondary">Найдите облигацию по ISIN или названию и добавьте первую позицию.</small>
         </td></tr>`;
+        
+        // Hide pagination if empty
+        const wrap = document.getElementById('bondsPagination');
+        if (wrap) wrap.style.setProperty('display', 'none', 'important');
+        
+        const countEl = document.getElementById('portfolio-count');
+        if (countEl) countEl.textContent = '0';
+        
         return;
     }
 
-    // Group active bonds by ISIN
+    // 1. Group active bonds by ISIN globally
     const grouped = {};
     bondsData.forEach(bond => {
         if (!grouped[bond.isin]) {
@@ -317,6 +505,8 @@ function renderBondRows() {
                 name: bond.name,
                 currency: bond.currency || 'RUB',
                 facevalue: bond.facevalue || 1000,
+                is_substitute: bond.is_substitute || false,
+                is_floater: bond.is_floater || false,
                 lots: [],
                 total_amount: 0,
                 total_cost: 0,
@@ -329,14 +519,29 @@ function renderBondRows() {
         const g = grouped[bond.isin];
         g.lots.push(bond);
         g.total_amount += bond.amount;
-        g.total_cost += bond.buy_price * bond.amount;
+        g.total_cost += (bond.buy_price_rub_calc || bond.buy_price) * bond.amount;
         g.total_pnl += bond.pnl || 0;
     });
 
-    // Apply sorting on grouped items
-    let sorted = Object.values(grouped);
+    let groupedList = Object.values(grouped);
+
+    // Update total unique portfolio count (unfiltered)
+    const countEl = document.getElementById('portfolio-count');
+    if (countEl) countEl.textContent = groupedList.length;
+
+    // 2. Apply search filter globally
+    const searchInput = document.getElementById('bondSearchFilter');
+    const searchVal = (searchInput?.value || '').toLowerCase().trim();
+    if (searchVal) {
+        groupedList = groupedList.filter(g => 
+            g.name.toLowerCase().includes(searchVal) || 
+            g.isin.toLowerCase().includes(searchVal)
+        );
+    }
+
+    // 3. Apply sorting on grouped items globally
     if (sortKey) {
-        sorted.sort((a, b) => {
+        groupedList.sort((a, b) => {
             let key = sortKey;
             let va = a[key];
             let vb = b[key];
@@ -358,6 +563,19 @@ function renderBondRows() {
         });
     }
 
+    // 4. Update pagination variables
+    bondsTotal = groupedList.length;
+    window.bondsTotal = bondsTotal;
+    const totalPages = Math.max(1, Math.ceil(bondsTotal / bondsPerPage));
+    if (bondsPage > totalPages) {
+        bondsPage = totalPages;
+        window.bondsPage = bondsPage;
+    }
+
+    // 5. Slice to get the current page of unique grouped bonds
+    const paginated = groupedList.slice((bondsPage - 1) * bondsPerPage, bondsPage * bondsPerPage);
+
+    // 6. Render the paginated unique bonds
     const esc = window.Common.escapeHtml;
 
     function getLotLabel(count) {
@@ -370,104 +588,121 @@ function renderBondRows() {
         }
     }
 
-    sorted.forEach(g => {
-        const avgBuyPrice = g.total_amount ? (g.total_cost / g.total_amount) : 0;
-        const fv = g.facevalue || 1000;
-        const avgBuyPct = (avgBuyPrice / fv * 100).toFixed(2);
-        const lastPct   = (g.last_price / fv * 100).toFixed(2);
-        const pnlPct = g.total_cost ? (g.total_pnl / g.total_cost * 100) : 0;
-        const pnlClass = g.total_pnl >= 0 ? 'text-success' : 'text-danger';
-        const sign = g.total_pnl >= 0 ? '+' : '';
-        const sym = getCurrencySymbol(g.currency || 'RUB');
+    if (!paginated.length) {
+        tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-5">
+            <div class="fw-semibold">Ничего не найдено</div>
+            <small class="text-secondary">Попробуйте изменить запрос поиска.</small>
+        </td></tr>`;
+    } else {
+        paginated.forEach(g => {
+            const avgBuyPrice = g.total_amount ? (g.total_cost / g.total_amount) : 0;
+            const fv = g.facevalue || 1000;
+            const avgBuyPct = (avgBuyPrice / fv * 100).toFixed(2);
+            const lastPct   = g.last_price.toFixed(2);
+            const lastPriceRub = (g.last_price / 100 * fv).toFixed(2);
+            const pnlPct = g.total_cost ? (g.total_pnl / g.total_cost * 100) : 0;
+            const pnlClass = g.total_pnl >= 0 ? 'text-success' : 'text-danger';
+            const sign = g.total_pnl >= 0 ? '+' : '';
+            const sym = getCurrencySymbol(g.currency || 'RUB');
+            
+            const badge = g.is_substitute ? `<span class="badge bg-warning text-dark ms-1" title="Замещающая облигация. Номинал: ${fv} ${g.currency}">ЗО</span>` : '';
+            const ytmDisplay = g.is_floater ? `<span class="badge bg-secondary">Флоатер</span>` : `<b>${g.ytm.toFixed(2)} %</b>`;
 
-        tbody.innerHTML += `
-            <tr class="summary-row" data-name="${esc(g.name)}" data-isin="${esc(g.isin)}">
-                <td data-label="Название"><b>${esc(g.name)}</b></td>
-                <td data-label="ISIN">
-                    <b class="isin-link" onclick="openBondChart(this.dataset.isin)" data-isin="${esc(g.isin)}">${esc(g.isin)}</b>
-                </td>
-                <td data-label="Кол-во">${g.total_amount} шт.</td>
-                <td data-label="Цена покупки">
-                    ${avgBuyPct} %
-                    <br><small style="color:var(--text-tertiary)">${avgBuyPrice.toFixed(2)} ${sym}</small>
-                </td>
-                <td data-label="Текущая цена">
-                    ${lastPct} %
-                    <br><small style="color:var(--text-tertiary)">${g.last_price.toFixed(2)} ${sym}</small>
-                </td>
-                <td data-label="НКД" class="text-primary"><b>${g.nkd.toFixed(2)} ${sym}</b></td>
-                <td data-label="YTM" class="text-info"><b>${g.ytm.toFixed(2)} %</b></td>
-                <td data-label="P&L" class="${pnlClass}">
-                    <b>${sign}${g.total_pnl.toFixed(2)} ₽</b><br>
-                    <small>${sign}${pnlPct.toFixed(2)}%</small>
-                </td>
-                <td>
-                    <button class="btn btn-xs btn-outline-info toggle-lots-btn" data-isin="${esc(g.isin)}" onclick="toggleLots('${esc(g.isin)}')">
-                        ${getLotLabel(g.lots.length)} ▾
-                    </button>
-                </td>
-            </tr>
-            <tr class="lots-row d-none" id="lots-${esc(g.isin)}">
-                <td colspan="9" class="p-3 bg-light-subtle">
-                    <div class="card card-body shadow-sm py-2 px-3 border border-subtle">
-                        <table class="table table-sm table-borderless mb-0 align-middle" style="font-size: 0.8rem;">
-                            <thead>
-                                <tr class="text-secondary border-bottom border-subtle" style="font-size: 0.72rem;">
-                                    <th>Дата покупки</th>
-                                    <th>Кол-во</th>
-                                    <th>Цена покупки</th>
-                                    <th>Текущая цена</th>
-                                    <th>P&L</th>
-                                    <th>Заметка</th>
-                                    <th class="text-end">Действия</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${g.lots.map(lot => {
-                                    const lotPnl = lot.pnl ?? 0;
-                                    const lotPnlPct = lot.pnl_pct ?? 0;
-                                    const lotPnlClass = lotPnl >= 0 ? 'text-success' : 'text-danger';
-                                    const lotSign = lotPnl >= 0 ? '+' : '';
-                                    const lotSym = getCurrencySymbol(lot.currency || 'RUB');
-                                    const lotFv = lot.facevalue || fv;
-                                    const lotBuyPct  = (lot.buy_price / lotFv * 100).toFixed(2);
-                                    const lotLastPct = ((lot.last_price || lot.buy_price) / lotFv * 100).toFixed(2);
-                                    return `
-                                        <tr style="border-bottom: 1px solid rgba(var(--accent-rgb), 0.05);">
-                                            <td>${esc(lot.purchase_date || '—')}</td>
-                                            <td>${lot.amount} шт.</td>
-                                            <td>
-                                                ${lotBuyPct} %
-                                                <br><small style="color:var(--text-tertiary)">${lot.buy_price.toFixed(2)} ${lotSym}</small>
-                                            </td>
-                                            <td>
-                                                ${lotLastPct} %
-                                                <br><small style="color:var(--text-tertiary)">${(lot.last_price || lot.buy_price).toFixed(2)} ${lotSym}</small>
-                                            </td>
-                                            <td class="${lotPnlClass}">
-                                                <b>${lotSign}${lotPnl.toFixed(2)} ₽</b> (${lotSign}${lotPnlPct.toFixed(2)}%)
-                                            </td>
-                                            <td>
-                                                <span class="text-truncate d-inline-block" style="max-width: 120px;" title="${esc(lot.notes || '')}">
-                                                    ${esc(lot.notes || '—')}
-                                                </span>
-                                            </td>
-                                            <td class="text-end">
-                                                <button onclick="sellTrigger(${lot.id}, '${esc(lot.name)}', ${lot.last_price || lot.buy_price}, ${lot.buy_price}, ${lot.amount})" class="btn btn-xs btn-outline-success py-0 px-2">Продать</button>
-                                                <button data-note-btn="${lot.id}" data-notes="${esc(lot.notes || '')}" title="${esc(lot.notes || 'Добавить заметку')}" onclick="openNotesModal(${lot.id}, this.dataset.notes)" class="btn btn-xs btn-outline-secondary ms-1 py-0 px-2 ${lot.notes ? 'note-filled' : ''}">📝</button>
-                                                <button onclick="deletePosition(${lot.id}, '${esc(lot.isin)}')" class="btn btn-xs btn-outline-danger ms-1 py-0 px-2" title="Удалить позицию">✕</button>
-                                            </td>
-                                        </tr>
-                                    `;
-                                }).join('')}
-                            </tbody>
-                        </table>
-                    </div>
-                </td>
-            </tr>
-        `;
-    });
+            tbody.innerHTML += `
+                <tr class="summary-row" data-name="${esc(g.name)}" data-isin="${esc(g.isin)}">
+                    <td data-label="Название"><b>${esc(g.name)}</b>${badge}</td>
+                    <td data-label="ISIN">
+                        <b class="isin-link" onclick="openBondChart(this.dataset.isin)" data-isin="${esc(g.isin)}">${esc(g.isin)}</b>
+                    </td>
+                    <td data-label="Кол-во">${g.total_amount} шт.</td>
+                    <td data-label="Цена покупки">
+                        ${avgBuyPct} %
+                        <br><small style="color:var(--text-tertiary)">${avgBuyPrice.toFixed(2)} ${sym}</small>
+                    </td>
+                    <td data-label="Текущая цена">
+                        ${lastPct} %
+                        <br><small style="color:var(--text-tertiary)">${lastPriceRub} ${sym}</small>
+                    </td>
+                    <td data-label="НКД" class="text-primary"><b>${g.nkd.toFixed(2)} ${sym}</b></td>
+                    <td data-label="YTM" class="text-info">${ytmDisplay}</td>
+                    <td data-label="P&L" class="${pnlClass}">
+                        <b>${sign}${g.total_pnl.toFixed(2)} ₽</b><br>
+                        <small>${sign}${pnlPct.toFixed(2)}%</small>
+                    </td>
+                    <td>
+                        <button class="btn btn-xs btn-outline-info toggle-lots-btn" data-isin="${esc(g.isin)}" onclick="toggleLots('${esc(g.isin)}')">
+                            ${getLotLabel(g.lots.length)} ▾
+                        </button>
+                    </td>
+                </tr>
+                <tr class="lots-row d-none" id="lots-${esc(g.isin)}">
+                    <td colspan="9" class="p-3 bg-light-subtle">
+                        <div class="card card-body shadow-sm py-2 px-3 border border-subtle">
+                            <table class="table table-sm table-borderless mb-0 align-middle" style="font-size: 0.8rem;">
+                                <thead>
+                                    <tr class="text-secondary border-bottom border-subtle" style="font-size: 0.72rem;">
+                                        <th>Дата покупки</th>
+                                        <th>Кол-во</th>
+                                        <th>Цена покупки</th>
+                                        <th>Текущая цена</th>
+                                        <th>P&L</th>
+                                        <th>Заметка</th>
+                                        <th class="text-end">Действия</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${g.lots.map(lot => {
+                                        const lotPnl = lot.pnl ?? 0;
+                                        const lotPnlPct = lot.pnl_pct ?? 0;
+                                        const lotPnlClass = lotPnl >= 0 ? 'text-success' : 'text-danger';
+                                        const lotSign = lotPnl >= 0 ? '+' : '';
+                                        const lotSym = getCurrencySymbol(lot.currency || 'RUB');
+                                        const lotFv = lot.facevalue || fv;
+                                        const lotBuyPct  = lot.buy_price.toFixed(2);
+                                        const lotLastPct = (lot.last_price || lot.buy_price).toFixed(2);
+                                        const lotBuyRub  = lot.buy_price_rub_calc || (lot.buy_price / 100 * lotFv);
+                                        const lotLastRub = ((lot.last_price || lot.buy_price) / 100 * lotFv);
+                                        return `
+                                            <tr style="border-bottom: 1px solid rgba(var(--accent-rgb), 0.05);">
+                                                <td>${esc(lot.purchase_date || '—')}</td>
+                                                <td>${lot.amount} шт.</td>
+                                                <td>
+                                                    ${lotBuyPct} %
+                                                    <br><small style="color:var(--text-tertiary)">${lotBuyRub.toFixed(2)} ${lotSym}</small>
+                                                </td>
+                                                <td>
+                                                    ${lotLastPct} %
+                                                    <br><small style="color:var(--text-tertiary)">${lotLastRub.toFixed(2)} ${lotSym}</small>
+                                                </td>
+                                                <td class="${lotPnlClass}">
+                                                    <b>${lotSign}${lotPnl.toFixed(2)} ₽</b> (${lotSign}${lotPnlPct.toFixed(2)}%)
+                                                </td>
+                                                <td>
+                                                    <span class="text-truncate d-inline-block" style="max-width: 120px;" title="${esc(lot.notes || '')}">
+                                                        ${esc(lot.notes || '—')}
+                                                    </span>
+                                                </td>
+                                                <td class="text-end">
+                                                    <button onclick="sellTrigger(${lot.id}, '${esc(lot.name)}', ${lotLastRub}, ${lotBuyRub}, ${lot.amount})" class="btn btn-xs btn-outline-success py-0 px-2">Продать</button>
+                                                    <button data-note-btn="${lot.id}" data-notes="${esc(lot.notes || '')}" title="${esc(lot.notes || 'Добавить заметку')}" onclick="openNotesModal(${lot.id}, this.dataset.notes)" class="btn btn-xs btn-outline-secondary ms-1 py-0 px-2 ${lot.notes ? 'note-filled' : ''}">📝</button>
+                                                    <button onclick="deletePosition(${lot.id}, '${esc(lot.isin)}')" class="btn btn-xs btn-outline-danger ms-1 py-0 px-2" title="Удалить позицию">✕</button>
+                                                </td>
+                                            </tr>
+                                        `;
+                                    }).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        });
+    }
+
+    renderBondsPagination();
 }
+
+window.renderBondRows = renderBondRows;
 
 window.toggleLots = function(isin) {
     const row = document.getElementById(`lots-${isin}`);
@@ -584,7 +819,6 @@ async function fetchTradeHistory(dateFrom = '', dateTo = '') {
             }
             tbody.innerHTML += `
                 <tr>
-                    <td>${typeBadge}</td>
                     <td><b>${esc(t.name)}</b></td>
                     <td><small class="text-muted">${esc(t.isin)}</small></td>
                     <td>${typeBadge}</td>
@@ -765,14 +999,14 @@ async function fetchChartAnalytics() {
     isinInput.addEventListener('input', () => {
         clearTimeout(debounceTimer);
         const q = isinInput.value.trim();
-        if (q.length < 2) { dropdown.style.display = 'none'; return; }
+        if (q.length < 3) { dropdown.style.display = 'none'; return; }
         debounceTimer = setTimeout(async () => {
             try {
                 const res = await fetch(`/api/search_bond?q=${encodeURIComponent(q)}`);
                 if (!res.ok) return;
                 renderDropdown(await res.json());
             } catch (_) {}
-        }, 300);
+        }, 350);
     });
 
     function renderDropdown(results) {
@@ -825,14 +1059,14 @@ async function fetchChartAnalytics() {
     isinInput.addEventListener('input', () => {
         clearTimeout(debounceTimer);
         const q = isinInput.value.trim();
-        if (q.length < 2) { dropdown.style.display = 'none'; return; }
+        if (q.length < 3) { dropdown.style.display = 'none'; return; }
         debounceTimer = setTimeout(async () => {
             try {
                 const res = await fetch(`/api/search_bond?q=${encodeURIComponent(q)}`);
                 if (!res.ok) return;
                 renderDropdown(await res.json());
             } catch (_) {}
-        }, 300);
+        }, 350);
     });
 
     function renderDropdown(results) {
@@ -1057,170 +1291,55 @@ window.resetPortfolio = async function() {
     }
 };
 
-// ── Watchlist ─────────────────────────────────────────────────────────────────
-let watchlistLoaded = false;
-
-function loadWatchlistIfNeeded() {
-    if (!watchlistLoaded) fetchWatchlist();
-}
-
-async function fetchWatchlist() {
-    const tbody = document.getElementById('watchlist-table-body');
-    tbody.innerHTML = _skeletonRows(7, 3);
-    const res = await window.Common.csrfFetch('/api/watchlist');
-    if (!res.ok) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-3">Ошибка загрузки</td></tr>';
-        return;
-    }
-    const items = await res.json();
-    watchlistLoaded = true;
-    const esc = window.Common.escapeHtml;
-    if (!items.length) {
-        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-4">
-            ⭐ Список пуст. Добавьте облигации через кнопку «+ Добавить».
-        </td></tr>`;
-        return;
-    }
-    tbody.innerHTML = items.map(item => {
-        const price = item.price != null ? item.price.toFixed(2) + ' ₽' : '—';
-        const ytm   = item.ytm  != null ? item.ytm.toFixed(2)  + ' %' : '—';
-        const nkd   = item.nkd  != null ? item.nkd.toFixed(2)  + ' ₽' : '—';
-        return `<tr>
-            <td>${esc(item.name)}</td>
-            <td><span class="isin-link" onclick="openBondChart('${esc(item.isin)}')">${esc(item.isin)}</span></td>
-            <td>${price}</td>
-            <td>${ytm}</td>
-            <td>${nkd}</td>
-            <td class="text-muted small">${esc(item.added_at)}</td>
-            <td>
-                <button class="btn btn-sm btn-outline-danger" onclick="removeFromWatchlist('${esc(item.isin)}')">✕</button>
-            </td>
-        </tr>`;
-    }).join('');
-}
-
-async function addWatchlistDirect() {
-    const inputEl = document.getElementById('watchlistIsinInput');
-    const isin = inputEl ? inputEl.value : null;
-    if (!isin) return;
-    const res = await window.Common.csrfFetch('/api/watchlist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isin: isin.trim().toUpperCase() }),
+// ── Lazy-loaded: watchlist + screener (portfolio-extras.min.js) ──────────────
+// Грузим один раз при первом клике по любой соответствующей кнопке.
+let _extrasPromise = null;
+function _loadExtras() {
+    if (window.__portfolioExtrasLoaded) return Promise.resolve();
+    if (_extrasPromise) return _extrasPromise;
+    _extrasPromise = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = '/static/js/pages/portfolio-extras.min.js';
+        s.onload = () => resolve();
+        s.onerror = (e) => { _extrasPromise = null; reject(e); };
+        document.head.appendChild(s);
     });
-    const data = await res.json();
-    if (res.ok) {
-        window.Common.showToast(data.message);
-        if (inputEl) inputEl.value = '';
-        watchlistLoaded = false;
-        fetchWatchlist();
-    } else {
-        window.Common.showSystemMessage(data.message, true);
-    }
+    return _extrasPromise;
 }
 
-async function removeFromWatchlist(isin) {
-    window.Common.askConfirmation(`Удалить ${isin} из избранного?`, async () => {
-        const res = await window.Common.csrfFetch(`/api/watchlist/${isin}`, { method: 'DELETE' });
-        const data = await res.json();
-        window.Common.showToast(data.message, !res.ok);
-        watchlistLoaded = false;
-        fetchWatchlist();
-    });
-}
-
-// ── Screener ──────────────────────────────────────────────────────────────────
-async function runScreener() {
-    const tbody   = document.getElementById('screener-table-body');
-    const loading = document.getElementById('screener-loading');
-    loading.style.display = 'block';
-    tbody.innerHTML = '';
-
-    const params = new URLSearchParams();
-    const minYtm  = document.getElementById('screenerMinYtm')?.value;
-    const maxYtm  = document.getElementById('screenerMaxYtm')?.value;
-    const matFrom = document.getElementById('screenerMatFrom')?.value;
-    const matTo   = document.getElementById('screenerMatTo')?.value;
-    const issType = document.getElementById('screenerIssuerType')?.value;
-    const minDur  = document.getElementById('screenerMinDuration')?.value;
-    const maxDur  = document.getElementById('screenerMaxDuration')?.value;
-    if (minYtm)  params.set('min_ytm', minYtm);
-    if (maxYtm)  params.set('max_ytm', maxYtm);
-    if (matFrom) params.set('maturity_from', matFrom);
-    if (matTo)   params.set('maturity_to', matTo);
-    if (issType) params.set('issuer_type', issType);
-    if (minDur)  params.set('min_duration', minDur);
-    if (maxDur)  params.set('max_duration', maxDur);
-
-    const res = await window.Common.csrfFetch('/api/screener?' + params.toString());
-    loading.style.display = 'none';
-    if (!res.ok) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-danger text-center py-3">Ошибка загрузки</td></tr>';
-        return;
-    }
-    const results = await res.json();
-    const esc = window.Common.escapeHtml;
-    if (!results.length) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Ничего не найдено по заданным фильтрам.</td></tr>';
-        return;
-    }
-    tbody.innerHTML = results.map(b => {
-        const ytm    = b.ytm    != null ? b.ytm.toFixed(2) + ' %' : '—';
-        const coupon = b.coupon != null ? b.coupon + ' ₽' : '—';
-        const mat    = b.matdate || '—';
-        return `<tr>
-            <td>${esc(b.name || b.secid)}</td>
-            <td><span class="isin-link" onclick="openBondChart('${esc(b.isin)}')">${esc(b.isin)}</span></td>
-            <td>${ytm}</td>
-            <td>${esc(mat)}</td>
-            <td>${coupon}</td>
-            <td>
-                <button class="btn btn-sm btn-outline-success" title="Добавить в избранное"
-                    onclick="addScreenerToWatchlist('${esc(b.isin)}')">⭐</button>
-            </td>
-        </tr>`;
-    }).join('');
-}
-
-function clearScreener() {
-    ['screenerMinYtm','screenerMaxYtm','screenerMatFrom','screenerMatTo',
-     'screenerIssuerType','screenerMinDuration','screenerMaxDuration'].forEach(id => {
-        if (window.fpClear && (id === 'screenerMatFrom' || id === 'screenerMatTo')) { window.fpClear(id); return; }
-        const el = document.getElementById(id);
-        if (el) el.value = '';
-    });
-    const tbody = document.getElementById('screener-table-body');
-    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Задайте фильтры и нажмите «Найти».</td></tr>';
-}
-
-async function addScreenerToWatchlist(isin) {
-    const res = await window.Common.csrfFetch('/api/watchlist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isin }),
-    });
-    const data = await res.json();
-    window.Common.showToast(data.message, !res.ok && res.status !== 409);
-    if (res.ok) { watchlistLoaded = false; }
-}
+// Создаём ленивые заглушки. После загрузки extras-модуля реальные функции
+// перезапишут эти заглушки на window. Заглушка хранит ссылку на саму себя,
+// чтобы корректно определить — функция уже заменена реальной или нет.
+['loadWatchlistIfNeeded','addWatchlistDirect','removeFromWatchlist',
+ 'runScreener','clearScreener','addScreenerToWatchlist'].forEach(fnName => {
+    const stub = function (...args) {
+        return _loadExtras().then(() => {
+            const real = window[fnName];
+            if (typeof real === 'function' && real !== stub) {
+                return real(...args);
+            }
+        }).catch(err => console.error('Extras load failed:', err));
+    };
+    window[fnName] = stub;
+});
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 loadDashboard();
 
 // ── Tinkoff Sync ──────────────────────────────────────────────────────────────
-async function syncTinkoff() {
+window.syncTinkoff = async function() {
     const btn = document.getElementById('tinkoffSyncBtn');
     if (btn) {
         btn.disabled = true;
         btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Синхр...`;
     }
+    let syncOk = false;
     try {
-        const res = await window.Common.csrfFetch('/api/portfolio/tinkoff_sync', { method: 'POST' });
+        const res = await window.Common.csrfFetch('/api/tinvest/sync', { method: 'POST' });
         const data = await res.json();
         if (res.ok) {
             window.Common.showToast(data.message || 'Синхронизация завершена');
-            historyLoaded = false;
-            await loadDashboard();
+            syncOk = true;
         } else {
             window.Common.showSystemMessage(data.message || 'Ошибка синхронизации', true);
         }
@@ -1232,4 +1351,8 @@ async function syncTinkoff() {
             btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="margin-right:.3rem"><path d="M21 12a9 9 0 11-9-9c2.52 0 4.93 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /></svg>Синхр.`;
         }
     }
-}
+    if (syncOk) {
+        historyLoaded = false;
+        try { await loadDashboard(); } catch (_) {}
+    }
+};

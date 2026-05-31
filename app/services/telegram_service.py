@@ -157,6 +157,75 @@ def get_bot_deep_link(token: str) -> str:
     return f"https://t.me/{bot_username}?start={token}"
 
 
+# ── Webhook helpers (вынесены из blueprints/telegram_bot.py) ─────────────────
+
+
+def refresh_username_by_chat(chat_id: str, tg_username: str) -> bool:
+    """Обновляет @username по chat_id, если изменился. Возвращает True при изменении."""
+    from app.extensions import db
+    from app.models import User
+
+    user = User.query.filter_by(telegram_chat_id=chat_id).first()
+    if user and user.telegram_username != tg_username:
+        user.telegram_username = tg_username
+        db.session.commit()
+        logger.info(
+            "Telegram username updated: user_id=%s chat_id=%s username=%s",
+            user.id, chat_id, tg_username,
+        )
+        return True
+    return False
+
+
+def link_chat_to_user(chat_id: str, link_token: str, tg_username: Optional[str] = None) -> str:
+    """Привязывает chat_id к пользователю по одноразовому link-токену.
+
+    Возвращает код результата: 'ok' | 'bad_token' | 'no_user' | 'chat_taken'.
+    """
+    from app.extensions import db
+    from app.models import User
+
+    user_id = verify_link_token(link_token)
+    if user_id is None:
+        return "bad_token"
+
+    user = db.session.get(User, user_id)
+    if user is None:
+        return "no_user"
+
+    existing = User.query.filter_by(telegram_chat_id=chat_id).first()
+    if existing and existing.id != user_id:
+        return "chat_taken"
+
+    user.telegram_chat_id = chat_id
+    user.telegram_notifications = True
+    if tg_username:
+        user.telegram_username = tg_username
+    db.session.commit()
+    logger.info(
+        "Telegram linked: user_id=%s chat_id=%s username=%s",
+        user_id, chat_id, tg_username,
+    )
+    return "ok"
+
+
+def unlink_chat(chat_id: str) -> Optional[str]:
+    """Отвязывает chat_id. Возвращает username пользователя или None если не найден."""
+    from app.extensions import db
+    from app.models import User
+
+    user = User.query.filter_by(telegram_chat_id=chat_id).first()
+    if not user:
+        return None
+    username = user.username
+    user.telegram_chat_id = None
+    user.telegram_notifications = False
+    user.telegram_username = None
+    db.session.commit()
+    logger.info("Telegram unlinked: user_id=%s chat_id=%s", user.id, chat_id)
+    return username
+
+
 def get_telegram_username(chat_id: str) -> Optional[str]:
     """Запрашивает актуальный @username через Telegram getChat API.
 

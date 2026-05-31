@@ -1,0 +1,21 @@
+meta {
+  name: Alerts — Delete
+  type: http
+  seq: 42
+}
+
+delete {
+  url: {{baseUrl}}/api/alerts/1
+  auth: none
+}
+
+headers {
+  X-CSRFToken: {{csrfToken}}
+}
+
+docs {
+  ## Удалить ценовой алёрт
+
+  Возвращает 404 если алёрт не принадлежит пользователю.
+  Сервис: `alerts_service.delete_alert` → `NotFoundError` → 404.
+}

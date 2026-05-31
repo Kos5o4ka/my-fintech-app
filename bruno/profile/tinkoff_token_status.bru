@@ -1,0 +1,17 @@
+meta {
+  name: T-Invest Token — Status
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{baseUrl}}/api/profile/tinkoff_token
+  auth: none
+}
+
+docs {
+  ## T-Invest: статус привязки
+
+  Возвращает признак привязки токена, время последней синхронизации
+  и выбранный `account_id`. Сам токен наружу не выдаётся.
+}

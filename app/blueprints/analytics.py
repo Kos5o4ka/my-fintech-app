@@ -199,7 +199,10 @@ def portfolio_benchmark():
         from_date=from_date, to_date=date.today().strftime("%Y-%m-%d")
     )
     result = {"range": range_param, "rgbi": rgbi}
-    cache.set(cache_key, result, timeout=BENCHMARK_TTL)
+    # Не кэшируем пустой результат — повторная попытка через несколько минут
+    # может вернуть данные (MOEX иногда залипает).
+    if rgbi.get("labels"):
+        cache.set(cache_key, result, timeout=BENCHMARK_TTL)
     return jsonify(result)
 
 

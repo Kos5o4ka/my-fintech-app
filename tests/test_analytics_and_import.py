@@ -86,10 +86,10 @@ class AnalyticsAndImportTests(BaseTest):
     @patch("app.blueprints.analytics.get_rgbi_history")
     def test_portfolio_benchmark_success(self, mock_rgbi):
         """GET /api/portfolio/benchmark returns mocked RGBI data."""
-        mock_rgbi.return_value = [
-            {"date": "2026-05-01", "close": 120.5},
-            {"date": "2026-05-02", "close": 121.2},
-        ]
+        mock_rgbi.return_value = {
+            "labels": ["2026-05-01", "2026-05-02"],
+            "data": [120.5, 121.2],
+        }
         uid = self._make_user()
         self._set_logged_in(uid)
 
@@ -97,8 +97,8 @@ class AnalyticsAndImportTests(BaseTest):
         self.assertEqual(r.status_code, 200)
         data = r.get_json()
         self.assertEqual(data["range"], "month")
-        self.assertEqual(len(data["rgbi"]), 2)
-        self.assertEqual(data["rgbi"][0]["close"], 120.5)
+        self.assertEqual(len(data["rgbi"]["labels"]), 2)
+        self.assertEqual(data["rgbi"]["data"][0], 120.5)
 
     def test_portfolio_sharpe_insufficient_data(self):
         """GET /api/portfolio/sharpe returns reason when closed trades count is < 3."""

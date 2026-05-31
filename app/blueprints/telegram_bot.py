@@ -1,15 +1,20 @@
-"""Blueprint Telegram-бота — webhook для обработки команд от бота."""
+"""Blueprint Telegram-бота — webhook для входящих обновлений.
+
+Слой: HTTP-парсинг → telegram_service. Никаких прямых обращений к БД.
+"""
 
 import logging
 
-from flask import Blueprint, request, jsonify, current_app, abort
+from flask import Blueprint, abort, current_app, jsonify, request
 
-from app.extensions import db
-from app.models import User
-from app.services.telegram_service import verify_link_token, send_message
+from app.services.telegram_service import (
+    link_chat_to_user,
+    refresh_username_by_chat,
+    send_message,
+    unlink_chat,
+)
 
 logger = logging.getLogger(__name__)
-
 telegram_bp = Blueprint("telegram", __name__)
 
 
@@ -18,14 +23,12 @@ telegram_bp = Blueprint("telegram", __name__)
 def webhook(secret=None):
     """Обрабатывает входящие обновления от Telegram.
 
-    Эндпоинт освобождён от CSRF — Telegram не отправляет CSRF-токен.
-    Безопасность обеспечивается секретным токеном в URL.
+    Освобождён от CSRF — Telegram не отправляет CSRF-токен. Безопасность
+    обеспечивается секретным токеном в URL (``TELEGRAM_WEBHOOK_SECRET``).
     """
-    # Проверяем, что токен в конфиге задан
     if not current_app.config.get("TELEGRAM_BOT_TOKEN"):
         return jsonify({"ok": False}), 503
 
-    # Проверка секретного ключа вебхука для защиты от спуфинга
     expected_secret = current_app.config.get("TELEGRAM_WEBHOOK_SECRET")
     if expected_secret and secret != expected_secret:
         abort(403)
@@ -37,22 +40,18 @@ def webhook(secret=None):
 
     chat_id = str(message.get("chat", {}).get("id", ""))
     text = (message.get("text") or "").strip()
-    tg_username = message.get("from", {}).get("username")  # может быть None
+    tg_username = message.get("from", {}).get("username")
 
     if not chat_id or not text:
         return jsonify({"ok": True})
 
-    # Обновляем сохранённый @username при любом входящем сообщении
-    # (пользователь мог сменить логин в Telegram)
     if tg_username:
-        _refresh_username(chat_id, tg_username)
+        refresh_username_by_chat(chat_id, tg_username)
 
-    # /start <token> — привязка аккаунта
     if text.startswith("/start"):
         parts = text.split(maxsplit=1)
         if len(parts) == 2:
-            token = parts[1].strip()
-            _handle_link(chat_id, token, tg_username)
+            _reply_link(chat_id, parts[1].strip(), tg_username)
         else:
             send_message(
                 chat_id,
@@ -60,12 +59,8 @@ def webhook(secret=None):
                 "Чтобы привязать аккаунт, откройте профиль в InvestTrack → "
                 "Уведомления → Telegram и нажмите «Привязать».",
             )
-
-    # /stop — отвязка аккаунта
     elif text.startswith("/stop"):
-        _handle_unlink(chat_id)
-
-    # /help
+        _reply_unlink(chat_id)
     elif text.startswith("/help"):
         send_message(
             chat_id,
@@ -74,7 +69,6 @@ def webhook(secret=None):
             "/stop — отвязать аккаунт\n"
             "/help — это сообщение",
         )
-
     else:
         send_message(
             chat_id,
@@ -85,83 +79,45 @@ def webhook(secret=None):
     return jsonify({"ok": True})
 
 
-def _refresh_username(chat_id: str, tg_username: str) -> None:
-    """Обновляет telegram_username у пользователя если он изменился."""
-    user = User.query.filter_by(telegram_chat_id=chat_id).first()
-    if user and user.telegram_username != tg_username:
-        user.telegram_username = tg_username
-        db.session.commit()
-        logger.info(
-            "Telegram username updated: user_id=%s chat_id=%s username=%s",
-            user.id,
-            chat_id,
-            tg_username,
-        )
-
-
-def _handle_link(chat_id: str, token: str, tg_username: str | None = None) -> None:
-    """Привязывает Telegram chat_id к пользователю по токену."""
-    user_id = verify_link_token(token)
-    if user_id is None:
+def _reply_link(chat_id: str, link_token: str, tg_username: str | None) -> None:
+    result = link_chat_to_user(chat_id, link_token, tg_username)
+    if result == "bad_token":
         send_message(
             chat_id,
             "❌ Ссылка устарела или недействительна.\n"
             "Получите новую ссылку в профиле InvestTrack.",
         )
-        return
-
-    user = db.session.get(User, user_id)
-    if user is None:
+    elif result == "no_user":
         send_message(chat_id, "❌ Пользователь не найден.")
-        return
-
-    # Проверяем, не занят ли chat_id другим аккаунтом
-    existing = User.query.filter_by(telegram_chat_id=chat_id).first()
-    if existing and existing.id != user_id:
+    elif result == "chat_taken":
         send_message(
             chat_id,
             "⚠️ Этот Telegram-аккаунт уже привязан к другому профилю.\n"
             "Сначала отвяжите его командой /stop.",
         )
-        return
-
-    user.telegram_chat_id = chat_id
-    user.telegram_notifications = True
-    if tg_username:
-        user.telegram_username = tg_username
-    db.session.commit()
-
-    send_message(
-        chat_id,
-        f"✅ Аккаунт <b>{user.username}</b> успешно привязан!\n\n"
-        f"Теперь вы будете получать:\n"
-        f"• Уведомления о купонных выплатах\n"
-        f"• Коды подтверждения при входе (2FA)\n\n"
-        f"Управление уведомлениями — в профиле InvestTrack.",
-    )
-    logger.info(
-        "Telegram linked: user_id=%s chat_id=%s username=%s",
-        user_id,
-        chat_id,
-        tg_username,
-    )
+    else:
+        # Чтобы вывести имя — повторно достанем пользователя; экономим запрос:
+        # link_chat_to_user уже привязал, безопасно прочитать чистым SELECT.
+        from app.models import User
+        user = User.query.filter_by(telegram_chat_id=chat_id).first()
+        name = user.username if user else "—"
+        send_message(
+            chat_id,
+            f"✅ Аккаунт <b>{name}</b> успешно привязан!\n\n"
+            f"Теперь вы будете получать:\n"
+            f"• Уведомления о купонных выплатах\n"
+            f"• Коды подтверждения при входе (2FA)\n\n"
+            f"Управление уведомлениями — в профиле InvestTrack.",
+        )
 
 
-def _handle_unlink(chat_id: str) -> None:
-    """Отвязывает Telegram от аккаунта по chat_id."""
-    user = User.query.filter_by(telegram_chat_id=chat_id).first()
-    if not user:
+def _reply_unlink(chat_id: str) -> None:
+    username = unlink_chat(chat_id)
+    if username is None:
         send_message(chat_id, "Этот аккаунт не привязан к InvestTrack.")
-        return
-
-    user.telegram_chat_id = None
-    user.telegram_notifications = False
-    user.telegram_username = None
-    db.session.commit()
-
-    send_message(
-        chat_id,
-        f"✅ Аккаунт <b>{user.username}</b> успешно отвязан от бота.\n"
-        f"Уведомления в Telegram отключены.",
-    )
-    logger.info("Telegram unlinked: user_id=%s chat_id=%s", user.id, chat_id)
+    else:
+        send_message(
+            chat_id,
+            f"✅ Аккаунт <b>{username}</b> успешно отвязан от бота.\n"
+            f"Уведомления в Telegram отключены.",
+        )

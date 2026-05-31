@@ -127,11 +127,17 @@ def get_moex_bond(isin_code: str) -> Optional[dict]:
         sec_data = search_res["securities"]["data"][0]
         secid = sec_data[sec_cols.index("secid")]
 
-        board = (
-            "TQOB"
-            if (isin_code.startswith("SU") or isin_code.startswith("RU000A0"))
-            else "TQCB"
-        )
+        board = "TQCB"
+        if "primary_boardid" in sec_cols:
+            pb = sec_data[sec_cols.index("primary_boardid")]
+            if pb:
+                board = pb
+        
+        # Fallback heuristic if primary_boardid was empty
+        if not board or board == "TQCB":
+            if isin_code.startswith("SU") or isin_code.startswith("RU000A0"):
+                board = "TQOB"
+
         res = None
         try:
             board_url = f"https://iss.moex.com/iss/engines/stock/markets/bonds/boards/{board}/securities/{secid}.json"
@@ -152,16 +158,27 @@ def get_moex_bond(isin_code: str) -> Optional[dict]:
         sec_cols = res["securities"]["columns"]
         sec_data = res["securities"]["data"][0]
         mkt_cols = res["marketdata"]["columns"] if "marketdata" in res else []
-        mkt_data = (
-            res["marketdata"]["data"][0]
-            if ("marketdata" in res and res["marketdata"]["data"])
-            else []
-        )
-
+        
         def get_val(data, cols, name):
             if not data or name not in cols:
                 return None
             return data[cols.index(name)]
+            
+        mkt_data = []
+        if "marketdata" in res and res["marketdata"]["data"]:
+            # Try to find a row that actually has a LAST price
+            for row in res["marketdata"]["data"]:
+                if get_val(row, mkt_cols, "LAST") is not None:
+                    mkt_data = row
+                    break
+            # If none has LAST price, just fallback to the first row or primary board row
+            if not mkt_data:
+                for row in res["marketdata"]["data"]:
+                    if get_val(row, mkt_cols, "BOARDID") == board:
+                        mkt_data = row
+                        break
+            if not mkt_data:
+                mkt_data = res["marketdata"]["data"][0]
 
         faceunit = (
             get_val(sec_data, sec_cols, "FACEUNIT")
@@ -207,11 +224,17 @@ def get_moex_bond(isin_code: str) -> Optional[dict]:
         except (TypeError, ValueError):
             ytm = 0.0
 
+        if currency != "RUB" and facevalue <= 100:
+            facevalue = 1000.0
+            price_rub = (last_pct / 100) * facevalue
+
         return {
             "secid": secid,
             "name": get_val(sec_data, sec_cols, "SHORTNAME"),
             "price": round(price_rub, 2),
+            "price_pct": float(last_pct),
             "facevalue": facevalue,
+            "initialfacevalue": float(get_val(sec_data, sec_cols, "INITIALFACEVALUE") or facevalue),
             "nkd": round(get_val(sec_data, sec_cols, "ACCRUEDINT") or 0, 2),
             "ytm": round(ytm, 2),
             "currency": currency,
@@ -290,7 +313,8 @@ def get_coupon_calendar(secid: str, include_past: bool = False) -> list[dict]:
             return calendar
         today_str = date.today().isoformat()
         future = [c for c in calendar if c.get("date") and c["date"] >= today_str]
-        return future[:12]
+        # ~ 4-12 купонов/год × 5 лет: 60 событий хватает для любого горизонта.
+        return future[:60]
     except Exception as e:
         logger.warning("MOEX coupon calendar error for %s: %s", secid, e)
         return []
@@ -342,28 +366,68 @@ def get_bond_details(secid: str) -> dict:
 def get_rgbi_history(
     from_date: Optional[str] = None, to_date: Optional[str] = None
 ) -> dict:
-    """Fetch RGBI index price history from MOEX ISS."""
+    """Fetch RGBI index price history from MOEX ISS.
+
+    MOEX ISS отдаёт по 100 точек на страницу. Тянем все нужные через
+    пагинацию start=. Если фильтр from/till вернул пусто — фолбек:
+    тянем без from/till, фильтруем на клиенте.
+    """
+
+    def _fetch_paginated(use_filter: bool) -> tuple[list, list]:
+        labels: list = []
+        prices: list = []
+        start = 0
+        while start < 1000:  # cap для безопасности
+            url = (
+                "https://iss.moex.com/iss/history/engines/stock/markets/index"
+                "/securities/RGBI.json"
+                "?history.columns=TRADEDATE,CLOSE&iss.meta=off"
+                f"&start={start}"
+            )
+            if use_filter and from_date:
+                url += f"&from={from_date}"
+            if use_filter and to_date:
+                url += f"&till={to_date}"
+            res = _fetch_json(url)
+            hist = res.get("history") or {}
+            data = hist.get("data") or []
+            if not data:
+                break
+            cols = hist.get("columns") or []
+            try:
+                date_idx = cols.index("TRADEDATE")
+                close_idx = cols.index("CLOSE")
+            except ValueError:
+                break
+            for row in data:
+                if row[close_idx] is not None:
+                    labels.append(row[date_idx])
+                    prices.append(round(float(row[close_idx]), 2))
+            if len(data) < 100:
+                break
+            start += 100
+        return labels, prices
+
     try:
-        url = (
-            "https://iss.moex.com/iss/history/engines/stock/markets/index"
-            "/securities/RGBI.json"
-            "?history.columns=TRADEDATE,CLOSE&limit=300"
-        )
-        if from_date:
-            url += f"&from={from_date}"
-        if to_date:
-            url += f"&till={to_date}"
-        res = _fetch_json(url)
-        if not res.get("history") or not res["history"].get("data"):
-            return {"labels": [], "data": []}
-        cols = res["history"]["columns"]
-        date_idx = cols.index("TRADEDATE")
-        close_idx = cols.index("CLOSE")
-        labels, prices = [], []
-        for row in res["history"]["data"]:
-            if row[close_idx] is not None:
-                labels.append(row[date_idx])
-                prices.append(round(float(row[close_idx]), 2))
+        labels, prices = _fetch_paginated(use_filter=True)
+        # Fallback: фильтр MOEX иногда возвращает пусто (несоответствие формата дат,
+        # выходные и т.п.) — берём всю историю и режем на клиенте.
+        if not labels:
+            logger.info(
+                "RGBI history empty with filter (from=%s till=%s) — fallback to full",
+                from_date,
+                to_date,
+            )
+            all_labels, all_prices = _fetch_paginated(use_filter=False)
+            if from_date or to_date:
+                lo = from_date or ""
+                hi = to_date or "9999-12-31"
+                for d, p in zip(all_labels, all_prices):
+                    if lo <= d <= hi:
+                        labels.append(d)
+                        prices.append(p)
+            else:
+                labels, prices = all_labels, all_prices
         return {"labels": labels, "data": prices}
     except Exception as e:
         logger.error("RGBI history fetch error: %s", e)

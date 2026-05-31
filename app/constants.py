@@ -23,9 +23,8 @@ SHARPE_TTL: int = 3600  # 1 час — коэффициент Шарпа
 TAX_TTL: int = 3600  # 1 час — налоговый отчёт
 
 # ── Пагинация ─────────────────────────────────────────────────────────────────
-DEFAULT_PAGE_SIZE: int = 50
-MAX_PAGE_SIZE: int = 100
-
+DEFAULT_PAGE_SIZE: int = 10
+MAX_PAGE_SIZE: int = 1000
 # ── Файлы и загрузки ──────────────────────────────────────────────────────────
 MAX_AVATAR_BYTES: int = 5 * 1024 * 1024
 ALLOWED_IMAGE_EXTS: FrozenSet[str] = frozenset({"png", "jpg", "jpeg", "gif", "webp"})
